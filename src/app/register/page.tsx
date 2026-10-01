@@ -1,0 +1,258 @@
+'use client';
+
+import React, { useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { UserPlus, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { PublicHeader } from '@/components/layout/PublicHeader';
+import { PublicFooter } from '@/components/layout/PublicFooter';
+import { useCga } from '@/context/CgaContext';
+
+export default function RegisterPage() {
+  const router = useRouter();
+  const { registerStudent } = useCga();
+
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [guardianName, setGuardianName] = useState('');
+  const [qualification, setQualification] = useState('B.A. / B.Sc. + B.Ed.');
+  const [targetExam, setTargetExam] = useState('Tripura TET / STGT');
+  const [address, setAddress] = useState('Udaipur, Gomati District, Tripura 799114');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (!name.trim() || name.trim().length < 3) {
+      setError('Please enter your full name (minimum 3 characters).');
+      return;
+    }
+    if (!email.trim() || !email.includes('@')) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+    if (!phone.trim() || phone.trim().length < 10) {
+      setError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+    if (!password || password.length < 6) {
+      setError('Password must be at least 6 characters long.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    const res = registerStudent({
+      name,
+      email,
+      phone,
+      password,
+      guardianName,
+      address,
+      qualification,
+      targetExam,
+    });
+
+    if (!res.success) {
+      setError(res.error || 'Could not register account.');
+      return;
+    }
+
+    router.push('/student/dashboard');
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col bg-slate-50">
+      <PublicHeader />
+
+      <main className="flex-1 py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-3xl mx-auto bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
+          <div className="cga-gradient-hero text-white p-8 flex items-center justify-between gap-4">
+            <div>
+              <span className="inline-block px-2.5 py-0.5 rounded bg-white/15 text-amber-300 text-xs font-bold uppercase tracking-wider">
+                Student Registration 2026–27
+              </span>
+              <h1 className="text-2xl sm:text-3xl font-extrabold mt-1">
+                Create Your C.G.A Student Account
+              </h1>
+              <p className="text-xs sm:text-sm text-blue-100 mt-1">
+                Register to enrol in batches, download study books, and attempt timed mock tests.
+              </p>
+            </div>
+            <img
+              src="/cga-logo.png"
+              alt="C.G.A Logo"
+              className="w-16 h-16 rounded-full bg-white p-1 object-contain shrink-0 hidden sm:block"
+            />
+          </div>
+
+          <form onSubmit={handleSubmit} className="p-8 space-y-5" noValidate>
+            {error && (
+              <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 flex items-center gap-2.5 text-xs font-semibold text-[#dc2626]">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Student Full Name <span className="text-[#dc2626]">*</span>
+                </label>
+                <input
+                  id="reg-name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g., Subhamoy Debnath"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Email Address <span className="text-[#dc2626]">*</span>
+                </label>
+                <input
+                  id="reg-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="student@example.com"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Mobile Number (WhatsApp) <span className="text-[#dc2626]">*</span>
+                </label>
+                <input
+                  id="reg-phone"
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+91 9436X XXXXX"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Guardian / Parent Name
+                </label>
+                <input
+                  id="reg-guardian"
+                  type="text"
+                  value={guardianName}
+                  onChange={(e) => setGuardianName(e.target.value)}
+                  placeholder="Father / Mother / Guardian Name"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Current Qualification / Class
+                </label>
+                <input
+                  id="reg-qualification"
+                  type="text"
+                  value={qualification}
+                  onChange={(e) => setQualification(e.target.value)}
+                  placeholder="e.g., B.A. B.Ed. or Class X (TBSE)"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Target Exam / Course Wing
+                </label>
+                <select
+                  id="reg-target-exam"
+                  value={targetExam}
+                  onChange={(e) => setTargetExam(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                >
+                  <option value="Tripura TET / STGT / STPGT">Tripura TET / STGT / STPGT</option>
+                  <option value="TPSC Combined / JRBT">TPSC Combined / JRBT</option>
+                  <option value="Banking (IBPS/SBI), SSC & Railway">Banking (IBPS/SBI), SSC & Railway</option>
+                  <option value="School Coaching (Class VII–X TBSE)">School Coaching (Class VII–X TBSE)</option>
+                  <option value="School Coaching (Class VII–X CBSE)">School Coaching (Class VII–X CBSE)</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Residential Address
+              </label>
+              <input
+                id="reg-address"
+                type="text"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Create Password <span className="text-[#dc2626]">*</span>
+                </label>
+                <input
+                  id="reg-password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Min. 6 characters"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Confirm Password <span className="text-[#dc2626]">*</span>
+                </label>
+                <input
+                  id="reg-confirm-password"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Re-enter password"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                />
+              </div>
+            </div>
+
+            <button
+              id="reg-submit-btn"
+              type="submit"
+              className="w-full py-3.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white font-bold text-sm shadow-md inline-flex items-center justify-center gap-2 transition-all cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4" />
+              Complete Registration & Enter Student Portal
+            </button>
+
+            <p className="text-center text-xs text-slate-600 pt-2">
+              Already have a C.G.A account?{' '}
+              <Link href="/login" className="font-extrabold text-[#0056b3] hover:underline">
+                Sign In Here
+              </Link>
+            </p>
+          </form>
+        </div>
+      </main>
+
+      <PublicFooter />
+    </div>
+  );
+}
