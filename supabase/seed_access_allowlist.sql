@@ -10,13 +10,10 @@
 -- ============================================================================
 
 insert into public.access_allowlist (identifier, role, note) values
-  -- ---------- ADMINS ----------
-  ('owner@example.com',  'admin',   'Replace with real admin email'),
-  ('+91 90000 00000',    'admin',   'Replace with real admin phone'),
-
-  -- ---------- PRE-APPROVED FACULTY ----------
-  ('teacher1@example.com', 'faculty', 'Replace with real faculty email'),
-  ('+91 90000 00001',      'faculty', 'Replace with real faculty phone')
+  -- ---------- OFFICIAL C.G.A ACADEMY ADMINS ----------
+  ('admissions@cgaudaipur.in', 'admin', 'Career Guidance Academy Admissions Admin'),
+  ('+91 94361 82490',         'admin', 'C.G.A Udaipur Primary Office Contact'),
+  ('+91 87875 41120',         'admin', 'C.G.A Udaipur Secondary Office Contact')
 on conflict (identifier) do nothing;
 
 -- ---------------------------------------------------------------------------
