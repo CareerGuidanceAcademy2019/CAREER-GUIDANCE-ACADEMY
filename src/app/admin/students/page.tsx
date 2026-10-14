@@ -335,10 +335,86 @@ export default function AdminStudentsPage() {
               </button>
             </div>
 
+            {/* Full Candidate Profile Grid */}
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 space-y-3">
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#0056b3]">
+                Candidate Profile Details
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+                <div className="bg-white p-3 rounded-xl border border-slate-100">
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase">
+                    Parent&apos;s / Guardian&apos;s Name
+                  </span>
+                  <span className="font-bold text-slate-800">
+                    {inspectingStudent.guardianName || '—'}
+                  </span>
+                </div>
+                <div className="bg-white p-3 rounded-xl border border-slate-100">
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase">
+                    Phone (WhatsApp)
+                  </span>
+                  <span className="font-bold text-slate-800">
+                    {inspectingStudent.phone || '—'}
+                  </span>
+                </div>
+                <div className="bg-white p-3 rounded-xl border border-slate-100">
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase">
+                    Registered Email
+                  </span>
+                  <span className="font-bold text-slate-800 truncate block">
+                    {inspectingStudent.email}
+                  </span>
+                </div>
+                <div className="bg-white p-3 rounded-xl border border-slate-100">
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase">
+                    Current Qualification
+                  </span>
+                  <span className="font-semibold text-slate-800">
+                    {inspectingStudent.qualification || '—'}
+                  </span>
+                </div>
+                <div className="bg-white p-3 rounded-xl border border-slate-100">
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase">
+                    Target Exam / Wing
+                  </span>
+                  <span className="font-bold text-[#ea580c]">
+                    {inspectingStudent.targetExam || '—'}
+                  </span>
+                </div>
+                <div className="bg-white p-3 rounded-xl border border-slate-100">
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase">
+                    Admission Date
+                  </span>
+                  <span className="font-semibold text-slate-800">
+                    {inspectingStudent.joinedDate}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
+                <div className="bg-white p-3 rounded-xl border border-slate-100">
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase">
+                    Present Residential Address
+                  </span>
+                  <p className="font-medium text-slate-700 mt-0.5 leading-relaxed">
+                    {inspectingStudent.address || '—'}
+                  </p>
+                </div>
+                <div className="bg-white p-3 rounded-xl border border-slate-100">
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase">
+                    Permanent Address
+                  </span>
+                  <p className="font-medium text-slate-700 mt-0.5 leading-relaxed">
+                    {inspectingStudent.permanentAddress || inspectingStudent.address || '—'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {/* Enrolled Courses & Fee Status */}
             <div>
               <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">
-                Enrolled Courses & Fee Breakdown
+                Enrolled Courses &amp; Fee Breakdown
               </h3>
               {inspectingStudent.enrollments.length === 0 ? (
                 <p className="text-xs text-slate-500">No courses enrolled.</p>
@@ -515,6 +591,29 @@ export default function AdminStudentsPage() {
                   onChange={(e) =>
                     setEditingStudent({ ...editingStudent, targetExam: e.target.value })
                   }
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                />
+              </div>
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Present Address</label>
+                <input
+                  type="text"
+                  value={editingStudent.address}
+                  onChange={(e) =>
+                    setEditingStudent({ ...editingStudent, address: e.target.value })
+                  }
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="font-bold text-slate-700 block mb-1">Permanent Address</label>
+                <input
+                  type="text"
+                  value={editingStudent.permanentAddress || ''}
+                  onChange={(e) =>
+                    setEditingStudent({ ...editingStudent, permanentAddress: e.target.value })
+                  }
+                  placeholder="Leave empty if same as present"
                   className="w-full px-3 py-2 rounded-xl border border-slate-200"
                 />
               </div>

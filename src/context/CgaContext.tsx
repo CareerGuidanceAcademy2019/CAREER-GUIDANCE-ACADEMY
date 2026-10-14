@@ -23,6 +23,8 @@ import {
   AuthSession,
   EMPTY_DATABASE,
   RegisterPayload,
+  FacultyRegisterPayload,
+  AdminRegisterPayload,
   ServiceResult,
 } from '@/services/cgaService';
 
@@ -44,10 +46,16 @@ interface CgaContextType {
   refresh: () => Promise<void>;
 
   // Auth actions
-  login: (email: string, password: string) => Promise<{ success: boolean; session?: AuthSession; error?: string }>;
+  login: (identifier: string, password: string) => Promise<{ success: boolean; session?: AuthSession; error?: string }>;
   registerStudent: (
     payload: RegisterPayload
   ) => Promise<{ success: boolean; error?: string; needsEmailConfirmation?: boolean }>;
+  registerFaculty: (
+    payload: FacultyRegisterPayload
+  ) => Promise<{ success: boolean; error?: string; needsEmailConfirmation?: boolean; session?: AuthSession }>;
+  registerAdmin: (
+    payload: AdminRegisterPayload
+  ) => Promise<{ success: boolean; error?: string; needsEmailConfirmation?: boolean; session?: AuthSession }>;
   logout: () => Promise<void>;
 
   // Public actions
@@ -199,15 +207,13 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
 
   // ---------------- Auth ----------------
   const login = useCallback(
-    async (email: string, password: string) => {
-      const res = await cgaService.login(email, password);
+    async (identifier: string, password: string) => {
+      const res = await cgaService.login(identifier, password);
       if (res.success && res.session) {
         await applySession(res.session);
-        showToast(
-          `Welcome back, ${res.session.name}!`,
-          `Logged into ${res.session.role === 'ADMIN' ? 'Admin Portal' : 'Student Portal'}.`,
-          'success'
-        );
+        const portal =
+          res.session.role === 'ADMIN' ? 'Admin Portal' : res.session.role === 'FACULTY' ? 'Faculty Portal' : 'Student Portal';
+        showToast(`Welcome back, ${res.session.name}!`, `Logged into ${portal}.`, 'success');
       }
       return { success: !!res.success, session: res.session, error: res.error };
     },
@@ -222,6 +228,40 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         showToast('Registration Successful!', `Welcome to Career Guidance Academy, ${payload.name}.`, 'success');
       }
       return { success: !!res.success, error: res.error, needsEmailConfirmation: res.needsEmailConfirmation };
+    },
+    [applySession, showToast]
+  );
+
+  const registerFaculty = useCallback(
+    async (payload: FacultyRegisterPayload) => {
+      const res = await cgaService.registerFaculty(payload);
+      if (res.success && res.session) {
+        await applySession(res.session);
+        showToast('Faculty Account Ready', `Welcome to the C.G.A faculty team, ${payload.name}.`, 'success');
+      }
+      return {
+        success: !!res.success,
+        error: res.error,
+        needsEmailConfirmation: res.needsEmailConfirmation,
+        session: res.session,
+      };
+    },
+    [applySession, showToast]
+  );
+
+  const registerAdmin = useCallback(
+    async (payload: AdminRegisterPayload) => {
+      const res = await cgaService.registerAdmin(payload);
+      if (res.success && res.session) {
+        await applySession(res.session);
+        showToast('Admin Access Activated', `Welcome, ${payload.name}.`, 'success');
+      }
+      return {
+        success: !!res.success,
+        error: res.error,
+        needsEmailConfirmation: res.needsEmailConfirmation,
+        session: res.session,
+      };
     },
     [applySession, showToast]
   );
@@ -778,6 +818,8 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         refresh,
         login,
         registerStudent,
+        registerFaculty,
+        registerAdmin,
         logout,
         submitEnquiry,
         updateStudentProfile,

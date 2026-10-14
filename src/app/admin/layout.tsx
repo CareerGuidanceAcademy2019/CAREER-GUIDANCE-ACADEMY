@@ -20,6 +20,7 @@ import {
   ChevronRight,
   Globe,
   ShieldAlert,
+  ShieldCheck,
   RotateCcw,
 } from 'lucide-react';
 import { CGALogo } from '@/components/ui/CGALogo';
@@ -28,6 +29,7 @@ import { useCga } from '@/context/CgaContext';
 
 const ADMIN_NAV = [
   { href: '/admin/dashboard', label: 'Admin Dashboard', icon: LayoutDashboard },
+  { href: '/admin/access', label: 'Admin & Faculty Access', icon: ShieldCheck },
   { href: '/admin/students', label: 'Student Management', icon: Users },
   { href: '/admin/courses', label: 'Courses & Batch Control', icon: BookOpen },
   { href: '/admin/faculty', label: 'Faculty Management', icon: GraduationCap },

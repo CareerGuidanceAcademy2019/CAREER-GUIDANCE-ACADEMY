@@ -23,9 +23,12 @@ import {
   SeriesAttempt,
 } from '@/data/initialSeedData';
 import { getSupabase } from '@/lib/supabase/client';
+import { parseIdentifier } from '@/lib/names';
+
+export type PortalRole = 'STUDENT' | 'FACULTY' | 'ADMIN';
 
 export interface AuthSession {
-  role: 'STUDENT' | 'ADMIN';
+  role: PortalRole;
   userId: string;
   name: string;
   email: string;
@@ -38,9 +41,60 @@ export interface RegisterPayload {
   password: string;
   guardianName: string;
   address: string;
+  permanentAddress?: string;
   qualification: string;
   targetExam: string;
 }
+
+export interface FacultyRegisterPayload {
+  name: string;
+  designation: string;
+  qualification: string;
+  experience: string;
+  achievements: string;
+  workAbility: boolean;
+  email: string;
+  phone: string;
+  password: string;
+}
+
+export interface AdminRegisterPayload {
+  name: string;
+  email: string;
+  phone: string;
+  password: string;
+}
+
+export interface AllowlistEntry {
+  id: string;
+  identifier: string;
+  role: 'admin' | 'faculty';
+  note: string;
+  createdAt: string;
+}
+
+export interface FacultyAccount {
+  profileId: string;
+  facultyId: string | null;
+  name: string;
+  email: string;
+  phone: string;
+  designation: string;
+  qualification: string;
+  experience: string;
+  achievements: string;
+  workAbility: string;
+  status: 'Active' | 'Inactive' | 'Pending';
+  approvalStatus: 'Pending' | 'Approved' | 'Rejected';
+  createdAt: string;
+}
+
+const ROLE_MAP: Record<string, PortalRole> = { admin: 'ADMIN', faculty: 'FACULTY', student: 'STUDENT' };
+export const PORTAL_HOME: Record<PortalRole, string> = {
+  ADMIN: '/admin/dashboard',
+  FACULTY: '/faculty-portal',
+  STUDENT: '/student/dashboard',
+};
 
 export type ServiceResult<T = unknown> = {
   success: boolean;
@@ -110,6 +164,8 @@ const toFaculty = (r: Row): FacultyMember => ({
   photo: r.photo ?? '',
   bio: r.bio ?? '',
   specializationTags: r.specialization_tags ?? [],
+  achievements: r.achievements ?? '',
+  workAbility: r.work_ability ?? '',
 });
 
 const toCourse = (r: Row, facultyName: string, materialIds: string[]): Course => ({
@@ -310,23 +366,47 @@ export const cgaService = {
       return null;
     }
     return {
-      role: p.role === 'admin' ? 'ADMIN' : 'STUDENT',
+      role: ROLE_MAP[p.role] ?? 'STUDENT',
       userId: p.id,
       name: p.name,
       email: p.email,
     };
   },
 
-  async login(email: string, password: string): Promise<ServiceResult<{ session: AuthSession }>> {
+  /** Sign in with an email OR a phone number plus password. */
+  async login(identifier: string, password: string): Promise<ServiceResult<{ session: AuthSession }>> {
     const sb = this.client();
-    const { error } = await sb.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+    const parsed = parseIdentifier(identifier);
+    if (!parsed) return { success: false, error: 'Enter a valid email address or 10-digit mobile number.' };
+
+    let email = parsed.value;
+    if (parsed.kind === 'phone') {
+      const { data, error } = await sb.rpc('resolve_login_email', {
+        p_identifier: parsed.value,
+        p_password: password,
+      });
+      if (error || !data) return { success: false, error: 'Invalid phone number or password.' };
+      email = data as string;
+    }
+
+    const { error } = await sb.auth.signInWithPassword({ email, password });
     if (error) {
       return {
         success: false,
         error:
           error.message === 'Email not confirmed'
             ? 'Please confirm your email address using the link we sent you, then sign in.'
-            : 'Invalid email or password.',
+            : `Invalid ${parsed.kind === 'phone' ? 'phone number' : 'email'} or password.`,
+      };
+    }
+
+    const { data: state } = await sb.rpc('my_account_state');
+    const row = (Array.isArray(state) ? state[0] : state) as { role?: string; status?: string } | null;
+    if (row?.status === 'Pending') {
+      await sb.auth.signOut();
+      return {
+        success: false,
+        error: 'Your faculty registration is awaiting approval from the C.G.A administrator. You can sign in once it is approved.',
       };
     }
     const session = await this.getSession();
@@ -334,39 +414,181 @@ export const cgaService = {
       return {
         success: false,
         error:
-          'Your account has been deactivated by the Administrator. Please contact the C.G.A office.',
+          row?.role === 'faculty'
+            ? 'Your faculty access has not been approved. Please contact the C.G.A office.'
+            : 'Your account has been deactivated by the Administrator. Please contact the C.G.A office.',
       };
     }
     return { success: true, session };
   },
 
-  async registerStudent(
-    payload: RegisterPayload
+  async isPhoneAvailable(phone: string): Promise<boolean> {
+    const { data, error } = await this.client().rpc('phone_available', { p_phone: phone });
+    // If the check itself fails (e.g. migration not yet applied) let the signup proceed.
+    return error ? true : data !== false;
+  },
+
+  async signUpWithMeta(
+    email: string,
+    password: string,
+    meta: Record<string, string>
   ): Promise<ServiceResult<{ session: AuthSession; needsEmailConfirmation: boolean }>> {
     const sb = this.client();
     const { data, error } = await sb.auth.signUp({
-      email: payload.email.trim().toLowerCase(),
-      password: payload.password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/login`,
-        data: {
-          name: payload.name.trim(),
-          phone: payload.phone.trim(),
-          guardian_name: payload.guardianName.trim(),
-          address: payload.address.trim(),
-          qualification: payload.qualification.trim(),
-          target_exam: payload.targetExam.trim(),
-        },
-      },
+      email: email.trim().toLowerCase(),
+      password,
+      options: { emailRedirectTo: `${window.location.origin}/login`, data: meta },
     });
-    if (error) return { success: false, error: error.message };
+    if (error) {
+      const dbError = /database error/i.test(error.message);
+      return {
+        success: false,
+        error: dbError
+          ? meta.account_type === 'admin'
+            ? 'This email / phone number is not on the C.G.A administrator access list. Ask an existing admin to add you first.'
+            : 'Could not create the account. This phone number may already be registered.'
+          : error.message,
+      };
+    }
     // Supabase returns an obfuscated user with no identities when the email already exists.
     if (data.user && data.user.identities?.length === 0) {
-      return { success: false, error: 'An account with this email address already exists.' };
+      return { success: false, error: 'An account with this email address already exists. Please sign in.' };
     }
     if (!data.session) return { success: true, needsEmailConfirmation: true };
     const session = await this.getSession();
     return { success: true, session: session ?? undefined, needsEmailConfirmation: false };
+  },
+
+  async registerStudent(
+    payload: RegisterPayload
+  ): Promise<ServiceResult<{ session: AuthSession; needsEmailConfirmation: boolean }>> {
+    if (!(await this.isPhoneAvailable(payload.phone))) {
+      return { success: false, error: 'An account with this phone number already exists. Please sign in.' };
+    }
+    return this.signUpWithMeta(payload.email, payload.password, {
+      account_type: 'student',
+      name: payload.name.trim(),
+      phone: payload.phone.trim(),
+      guardian_name: payload.guardianName.trim(),
+      address: payload.address.trim(),
+      permanent_address: (payload.permanentAddress ?? '').trim(),
+      qualification: payload.qualification.trim(),
+      target_exam: payload.targetExam.trim(),
+    });
+  },
+
+  async registerFaculty(
+    payload: FacultyRegisterPayload
+  ): Promise<ServiceResult<{ session: AuthSession; needsEmailConfirmation: boolean }>> {
+    if (!payload.workAbility) {
+      return { success: false, error: 'Faculty must be able to work both Online and Offline.' };
+    }
+    if (!(await this.isPhoneAvailable(payload.phone))) {
+      return { success: false, error: 'An account with this phone number already exists. Please sign in.' };
+    }
+    const res = await this.signUpWithMeta(payload.email, payload.password, {
+      account_type: 'faculty',
+      name: payload.name.trim(),
+      phone: payload.phone.trim(),
+      designation: payload.designation.trim(),
+      qualification: payload.qualification.trim(),
+      experience: payload.experience.trim(),
+      achievements: payload.achievements.trim(),
+      work_ability: 'Online & Offline',
+    });
+    // Pending faculty get a Supabase session but must not stay signed in.
+    if (res.success && !res.session) await this.client().auth.signOut();
+    return res;
+  },
+
+  async registerAdmin(
+    payload: AdminRegisterPayload
+  ): Promise<ServiceResult<{ session: AuthSession; needsEmailConfirmation: boolean }>> {
+    if (!(await this.isPhoneAvailable(payload.phone))) {
+      return { success: false, error: 'An account with this phone number already exists. Please sign in instead.' };
+    }
+    return this.signUpWithMeta(payload.email, payload.password, {
+      account_type: 'admin',
+      name: payload.name.trim(),
+      phone: payload.phone.trim(),
+    });
+  },
+
+  // ============ ADMIN: ACCESS LIST & FACULTY APPROVAL ============
+  async listAllowlist(): Promise<AllowlistEntry[]> {
+    const { data } = await this.client()
+      .from('access_allowlist')
+      .select('*')
+      .order('role')
+      .order('created_at');
+    return ((data as Row[]) ?? []).map((r) => ({
+      id: r.id,
+      identifier: r.identifier,
+      role: r.role,
+      note: r.note ?? '',
+      createdAt: formatStamp(r.created_at),
+    }));
+  },
+
+  async addAllowlist(identifier: string, role: 'admin' | 'faculty', note: string): Promise<ServiceResult> {
+    const parsed = parseIdentifier(identifier);
+    if (!parsed) return { success: false, error: 'Enter a valid email or 10-digit mobile number.' };
+    const sb = this.client();
+    const { data: u } = await sb.auth.getUser();
+    const { error } = await sb
+      .from('access_allowlist')
+      .insert({ identifier: parsed.value, role, note: note.trim(), added_by: u.user?.id ?? null });
+    if (error) {
+      return {
+        success: false,
+        error: error.code === '23505' ? 'This email / phone is already on the access list.' : msg(error, 'Could not add entry.'),
+      };
+    }
+    return { success: true };
+  },
+
+  async removeAllowlist(id: string): Promise<ServiceResult> {
+    const { error } = await this.client().from('access_allowlist').delete().eq('id', id);
+    return error ? { success: false, error: msg(error, 'Could not remove entry.') } : { success: true };
+  },
+
+  async listFacultyAccounts(): Promise<FacultyAccount[]> {
+    const { data } = await this.client().rpc('list_faculty_accounts');
+    return ((data as Row[]) ?? []).map((r) => ({
+      profileId: r.profile_id,
+      facultyId: r.faculty_id ?? null,
+      name: r.name,
+      email: r.email,
+      phone: r.phone ?? '',
+      designation: r.designation ?? '',
+      qualification: r.qualification ?? '',
+      experience: r.experience ?? '',
+      achievements: r.achievements ?? '',
+      workAbility: r.work_ability ?? '',
+      status: r.status,
+      approvalStatus: r.approval_status ?? 'Pending',
+      createdAt: formatStamp(r.created_at),
+    }));
+  },
+
+  async setFacultyApproval(profileId: string, approve: boolean): Promise<ServiceResult> {
+    const { error } = await this.client().rpc('set_faculty_approval', {
+      p_profile_id: profileId,
+      p_approve: approve,
+    });
+    return error ? { success: false, error: msg(error, 'Could not update faculty.') } : { success: true };
+  },
+
+  /** The signed-in faculty member's own profile + public card. */
+  async getMyFacultyProfile(): Promise<{ profile: Row | null; faculty: Row | null }> {
+    const sb = this.client();
+    const { data: u } = await sb.auth.getUser();
+    if (!u.user) return { profile: null, faculty: null };
+    const [{ data: profile }, { data: faculty }] = await Promise.all([
+      sb.from('profiles').select('*').eq('id', u.user.id).maybeSingle(),
+      sb.from('faculty').select('*').eq('profile_id', u.user.id).maybeSingle(),
+    ]);
+    return { profile: profile as Row | null, faculty: faculty as Row | null };
   },
 
   async requestPasswordReset(email: string): Promise<ServiceResult> {
@@ -482,6 +704,7 @@ export const cgaService = {
         photo: p.photo ?? '',
         guardianName: p.guardian_name ?? '',
         address: p.address ?? '',
+        permanentAddress: p.permanent_address ?? '',
         qualification: p.qualification ?? '',
         targetExam: p.target_exam ?? '',
         joinedDate: p.joined_date,
@@ -801,6 +1024,7 @@ export const cgaService = {
         photo: s.photo,
         guardian_name: s.guardianName,
         address: s.address,
+        permanent_address: s.permanentAddress || s.address,
         qualification: s.qualification,
         target_exam: s.targetExam,
         status: s.status,
@@ -823,6 +1047,7 @@ export const cgaService = {
         phone: s.phone,
         guardianName: s.guardianName,
         address: s.address,
+        permanentAddress: s.permanentAddress || s.address,
         qualification: s.qualification,
         targetExam: s.targetExam,
       }),

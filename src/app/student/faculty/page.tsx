@@ -3,6 +3,7 @@
 import React from 'react';
 import { Users, Briefcase } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
+import { formatFacultyName } from '@/lib/names';
 
 export default function StudentFacultyPage() {
   const { db } = useCga();
@@ -35,8 +36,8 @@ export default function StudentFacultyPage() {
             >
               <div className="flex items-center gap-4">
                 <img
-                  src={member.photo}
-                  alt={member.name}
+                  src={member.photo || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80'}
+                  alt={formatFacultyName(member.name)}
                   className="w-16 h-16 rounded-2xl object-cover border border-slate-200 shrink-0"
                 />
                 <div>
@@ -50,7 +51,7 @@ export default function StudentFacultyPage() {
                       <Briefcase className="w-3 h-3" /> {member.experience}
                     </span>
                   </div>
-                  <h2 className="text-base font-extrabold text-[#0a0e2a] mt-1">{member.name}</h2>
+                  <h2 className="text-base font-extrabold text-[#0a0e2a] mt-1">{formatFacultyName(member.name)}</h2>
                   <p className="text-xs font-bold text-[#ea580c]">{member.subject}</p>
                 </div>
               </div>

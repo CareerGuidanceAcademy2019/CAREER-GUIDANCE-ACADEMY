@@ -27,6 +27,7 @@ export async function POST(request: Request) {
       phone: str(body?.phone, 20),
       guardian_name: str(body?.guardianName, 120),
       address: str(body?.address, 300),
+      permanent_address: str(body?.permanentAddress || body?.address, 300),
       qualification: str(body?.qualification, 120),
       target_exam: str(body?.targetExam, 120),
     },

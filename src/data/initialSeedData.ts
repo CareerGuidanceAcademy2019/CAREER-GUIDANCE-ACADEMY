@@ -72,6 +72,8 @@ export interface FacultyMember {
   photo: string;
   bio: string;
   specializationTags: string[];
+  achievements?: string;
+  workAbility?: string;
 }
 
 export interface Achievement {
@@ -180,6 +182,7 @@ export interface StudentProfile {
   photo: string;
   guardianName: string;
   address: string;
+  permanentAddress?: string;
   qualification: string;
   targetExam: string;
   joinedDate: string;

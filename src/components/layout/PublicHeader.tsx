@@ -12,10 +12,11 @@ import {
   UserPlus,
   LayoutDashboard,
   ShieldCheck,
-  RotateCcw,
+  Presentation,
 } from 'lucide-react';
 import { CGALogo } from '@/components/ui/CGALogo';
 import { useCga } from '@/context/CgaContext';
+import { PORTAL_HOME } from '@/services/cgaService';
 
 const NAV_LINKS = [
   { href: '/', label: 'Home' },
@@ -90,15 +91,21 @@ export function PublicHeader() {
           {session ? (
             <>
               <Link
-                href={session.role === 'ADMIN' ? '/admin/dashboard' : '/student/dashboard'}
+                href={PORTAL_HOME[session.role] ?? '/student/dashboard'}
                 className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold bg-[#0056b3] text-white hover:bg-[#1e3a8a] shadow-sm transition-all"
               >
                 {session.role === 'ADMIN' ? (
                   <ShieldCheck className="w-4 h-4 text-amber-300" />
+                ) : session.role === 'FACULTY' ? (
+                  <Presentation className="w-4 h-4 text-amber-300" />
                 ) : (
                   <LayoutDashboard className="w-4 h-4" />
                 )}
-                {session.role === 'ADMIN' ? 'Admin Portal' : 'Student Portal'}
+                {session.role === 'ADMIN'
+                  ? 'Admin Portal'
+                  : session.role === 'FACULTY'
+                  ? 'Faculty Portal'
+                  : 'Student Portal'}
               </Link>
               <button
                 type="button"
@@ -168,11 +175,16 @@ export function PublicHeader() {
           <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">
             {session ? (
               <Link
-                href={session.role === 'ADMIN' ? '/admin/dashboard' : '/student/dashboard'}
+                href={PORTAL_HOME[session.role] ?? '/student/dashboard'}
                 onClick={() => setMobileOpen(false)}
                 className="w-full py-3 rounded-xl text-center text-sm font-bold bg-[#0056b3] text-white"
               >
-                Go to {session.role === 'ADMIN' ? 'Admin Portal' : 'Student Portal'}
+                Go to{' '}
+                {session.role === 'ADMIN'
+                  ? 'Admin Portal'
+                  : session.role === 'FACULTY'
+                  ? 'Faculty Portal'
+                  : 'Student Portal'}
               </Link>
             ) : (
               <div className="grid grid-cols-2 gap-2.5">

@@ -7,6 +7,7 @@ import { UserPlus, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { PublicHeader } from '@/components/layout/PublicHeader';
 import { PublicFooter } from '@/components/layout/PublicFooter';
 import { useCga } from '@/context/CgaContext';
+import { isEmail, normalizePhone } from '@/lib/names';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -16,9 +17,11 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [guardianName, setGuardianName] = useState('');
-  const [qualification, setQualification] = useState('B.A. / B.Sc. + B.Ed.');
-  const [targetExam, setTargetExam] = useState('Tripura TET / STGT');
-  const [address, setAddress] = useState('Udaipur, Gomati District, Tripura 799114');
+  const [qualification, setQualification] = useState('');
+  const [targetExam, setTargetExam] = useState('Tripura TET / STGT / STPGT');
+  const [address, setAddress] = useState('');
+  const [permanentAddress, setPermanentAddress] = useState('');
+  const [sameAddress, setSameAddress] = useState(false);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
@@ -28,17 +31,30 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    const permanent = sameAddress ? address : permanentAddress;
 
     if (!name.trim() || name.trim().length < 3) {
       setError('Please enter your full name (minimum 3 characters).');
       return;
     }
-    if (!email.trim() || !email.includes('@')) {
+    if (!isEmail(email)) {
       setError('Please enter a valid email address.');
       return;
     }
-    if (!phone.trim() || phone.trim().length < 10) {
+    if (!/^[6-9]\d{9}$/.test(normalizePhone(phone))) {
       setError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+    if (guardianName.trim().length < 3) {
+      setError("Please enter your parent's / guardian's name.");
+      return;
+    }
+    if (address.trim().length < 5) {
+      setError('Please enter your present address.');
+      return;
+    }
+    if (permanent.trim().length < 5) {
+      setError('Please enter your permanent address.');
       return;
     }
     if (!password || password.length < 8) {
@@ -54,10 +70,11 @@ export default function RegisterPage() {
     const res = await registerStudent({
       name,
       email,
-      phone,
+      phone: normalizePhone(phone),
       password,
       guardianName,
       address,
+      permanentAddress: permanent,
       qualification,
       targetExam,
     });
@@ -178,7 +195,7 @@ export default function RegisterPage() {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Guardian / Parent Name
+                  Parent&apos;s / Guardian&apos;s Name <span className="text-[#dc2626]">*</span>
                 </label>
                 <input
                   id="reg-guardian"
@@ -192,7 +209,7 @@ export default function RegisterPage() {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Current Qualification / Class
+                  Current Qualification / Class <span className="text-slate-400 font-medium">(optional)</span>
                 </label>
                 <input
                   id="reg-qualification"
@@ -224,15 +241,43 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Residential Address
+              <label htmlFor="reg-address" className="block text-xs font-bold text-slate-700 mb-1.5">
+                Present Address <span className="text-[#dc2626]">*</span>
               </label>
-              <input
+              <textarea
                 id="reg-address"
-                type="text"
+                rows={2}
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                placeholder="House / Village, Post Office, District, PIN"
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3] resize-none"
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1.5 gap-3">
+                <label htmlFor="reg-permanent-address" className="block text-xs font-bold text-slate-700">
+                  Permanent Address <span className="text-[#dc2626]">*</span>
+                </label>
+                <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#0056b3] cursor-pointer">
+                  <input
+                    id="reg-same-address"
+                    type="checkbox"
+                    checked={sameAddress}
+                    onChange={(e) => setSameAddress(e.target.checked)}
+                    className="accent-[#0056b3]"
+                  />
+                  Same as present address
+                </label>
+              </div>
+              <textarea
+                id="reg-permanent-address"
+                rows={2}
+                value={sameAddress ? address : permanentAddress}
+                disabled={sameAddress}
+                onChange={(e) => setPermanentAddress(e.target.value)}
+                placeholder="House / Village, Post Office, District, PIN"
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3] resize-none disabled:bg-slate-50 disabled:text-slate-500"
               />
             </div>
 
@@ -246,7 +291,7 @@ export default function RegisterPage() {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Min. 6 characters"
+                  placeholder="Min. 8 characters"
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
                 />
               </div>
@@ -269,10 +314,11 @@ export default function RegisterPage() {
             <button
               id="reg-submit-btn"
               type="submit"
-              className="w-full py-3.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white font-bold text-sm shadow-md inline-flex items-center justify-center gap-2 transition-all cursor-pointer"
+              disabled={busy}
+              className="w-full py-3.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] disabled:opacity-60 text-white font-bold text-sm shadow-md inline-flex items-center justify-center gap-2 transition-all cursor-pointer"
             >
               <UserPlus className="w-4 h-4" />
-              Complete Registration & Enter Student Portal
+              {busy ? 'Creating your account…' : 'Complete Registration & Enter Student Portal'}
             </button>
 
             <p className="text-center text-xs text-slate-600 pt-2">

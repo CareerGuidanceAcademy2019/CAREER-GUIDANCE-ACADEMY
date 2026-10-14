@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Course } from '@/data/initialSeedData';
 import { CustomWaitlistSvg } from '@/components/ui/CustomIcons';
+import { formatFacultyName } from '@/lib/names';
 
 interface CourseCardProps {
   course: Course;
@@ -118,7 +119,9 @@ export function CourseCard({
             <GraduationCap className="w-4 h-4 text-[#0056b3] shrink-0 mt-0.5" />
             <div className="min-w-0">
               <span className="text-slate-400 block text-[11px]">Faculty</span>
-              <span className="font-semibold text-slate-800 truncate block">{course.facultyName}</span>
+              <span className="font-semibold text-slate-800 truncate block">
+                {formatFacultyName(course.facultyName)}
+              </span>
             </div>
           </div>
 
