@@ -26,7 +26,7 @@ export default function AdminAnnouncementsPage() {
       targetLabel: courseObj ? `${courseObj.batchName} (${courseObj.subCategory})` : 'All Batches',
       priority,
       date: new Date().toISOString().split('T')[0],
-      author: 'Dr. Subrata Majumder (Director, C.G.A)',
+      author: 'Director, C.G.A',
     };
     saveAnnouncement(newAnn, true);
     setTitle('');

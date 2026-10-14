@@ -16,31 +16,25 @@ import {
 import { PublicHeader } from '@/components/layout/PublicHeader';
 import { PublicFooter } from '@/components/layout/PublicFooter';
 import { useCga } from '@/context/CgaContext';
-import { DEMO_CREDENTIALS } from '@/data/initialSeedData';
-import { CustomAcademicEmblemSvg, CustomArrowRightSvg } from '@/components/ui/CustomIcons';
+import { cgaService } from '@/services/cgaService';
+import { CustomArrowRightSvg } from '@/components/ui/CustomIcons';
 
 export default function LoginPage() {
   const router = useRouter();
   const { login } = useCga();
 
-  const [email, setEmail] = useState(DEMO_CREDENTIALS.student.email);
-  const [password, setPassword] = useState(DEMO_CREDENTIALS.student.password);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
   const [activeTab, setActiveTab] = useState<'STUDENT' | 'ADMIN'>('STUDENT');
 
   const handleTabSwitch = (role: 'STUDENT' | 'ADMIN') => {
     setActiveTab(role);
     setError('');
-    if (role === 'STUDENT') {
-      setEmail(DEMO_CREDENTIALS.student.email);
-      setPassword(DEMO_CREDENTIALS.student.password);
-    } else {
-      setEmail(DEMO_CREDENTIALS.admin.email);
-      setPassword(DEMO_CREDENTIALS.admin.password);
-    }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -48,30 +42,32 @@ export default function LoginPage() {
       setError('Please enter a valid registered email address.');
       return;
     }
-    if (!password || password.length < 4) {
+    if (!password) {
       setError('Please enter your password.');
       return;
     }
 
-    const res = login(email, password);
+    setBusy(true);
+    const res = await login(email, password);
     if (!res.success || !res.session) {
+      setBusy(false);
       setError(res.error || 'Authentication failed.');
       return;
     }
 
-    if (res.session.role === 'ADMIN') {
-      router.push('/admin/dashboard');
-    } else {
-      router.push('/student/dashboard');
+    // Keep the selected tab honest: students cannot use the admin tab and vice-versa.
+    if (activeTab === 'ADMIN' && res.session.role !== 'ADMIN') {
+      await cgaService.logout();
+      setBusy(false);
+      setError('This account is not an administrator account.');
+      return;
     }
-  };
 
-  const handleInstantDemoLogin = (role: 'STUDENT' | 'ADMIN') => {
-    const creds = role === 'ADMIN' ? DEMO_CREDENTIALS.admin : DEMO_CREDENTIALS.student;
-    const res = login(creds.email, creds.password);
-    if (res.success && res.session) {
-      router.push(res.session.role === 'ADMIN' ? '/admin/dashboard' : '/student/dashboard');
-    }
+    const next = new URLSearchParams(window.location.search).get('next');
+    const home = res.session.role === 'ADMIN' ? '/admin/dashboard' : '/student/dashboard';
+    const allowed =
+      next && next.startsWith(res.session.role === 'ADMIN' ? '/admin' : '/student') ? next : home;
+    router.push(allowed);
   };
 
   return (
@@ -102,50 +98,9 @@ export default function LoginPage() {
               </p>
             </div>
 
-            {/* One-Click Demo Credentials Box */}
-            <div className="mt-8 bg-white/10 backdrop-blur-xs border border-white/20 rounded-2xl p-4 space-y-3">
-              <div className="flex items-center gap-1.5 text-xs font-extrabold text-amber-300 uppercase tracking-wider">
-                <CustomAcademicEmblemSvg className="w-4 h-4" /> Instant Client Demo Login
-              </div>
-
-              <div className="space-y-2 text-xs">
-                <button
-                  type="button"
-                  id="demo-student-login-btn"
-                  onClick={() => handleInstantDemoLogin('STUDENT')}
-                  className="w-full py-2.5 px-3 rounded-xl bg-white text-[#0a0e2a] hover:bg-blue-50 font-bold flex items-center justify-between shadow-sm transition-all cursor-pointer"
-                >
-                  <span className="flex items-center gap-2">
-                    <GraduationCap className="w-4 h-4 text-[#0056b3]" />
-                    One-Click Student Portal
-                  </span>
-                  <ArrowRight className="w-3.5 h-3.5 text-[#0056b3]" />
-                </button>
-
-                <button
-                  type="button"
-                  id="demo-admin-login-btn"
-                  onClick={() => handleInstantDemoLogin('ADMIN')}
-                  className="w-full py-2.5 px-3 rounded-xl bg-[#ea580c] text-white hover:bg-orange-600 font-bold flex items-center justify-between shadow-sm transition-all cursor-pointer"
-                >
-                  <span className="flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4" />
-                    One-Click Admin Portal
-                  </span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              <div className="pt-2 border-t border-white/15 text-[11px] text-blue-100 space-y-1">
-                <p>
-                  <strong>Student:</strong> {DEMO_CREDENTIALS.student.email} /{' '}
-                  <code>{DEMO_CREDENTIALS.student.password}</code>
-                </p>
-                <p>
-                  <strong>Admin:</strong> {DEMO_CREDENTIALS.admin.email} /{' '}
-                  <code>{DEMO_CREDENTIALS.admin.password}</code>
-                </p>
-              </div>
+            <div className="mt-8 bg-white/10 border border-white/20 rounded-2xl p-4 text-[11px] text-blue-100 leading-relaxed">
+              <strong className="text-amber-300">Secure sign-in.</strong> Your session is protected by
+              encrypted authentication. Never share your password. Forgotten it? Use the reset link.
             </div>
           </div>
 
@@ -184,7 +139,7 @@ export default function LoginPage() {
             </h2>
             <p className="text-xs sm:text-sm text-slate-500 mt-1 mb-6">
               {activeTab === 'STUDENT'
-                ? 'Demo credentials are pre-filled below for immediate evaluation.'
+                ? 'Use the email address you registered with.'
                 : 'Restricted to authorized Career Guidance Academy (C.G.A) administrators.'}
             </p>
 
@@ -239,10 +194,11 @@ export default function LoginPage() {
               <button
                 id="login-submit-btn"
                 type="submit"
-                className="w-full py-3.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white font-bold text-sm shadow-md inline-flex items-center justify-center gap-2 transition-all cursor-pointer mt-2"
+                disabled={busy}
+                className="w-full py-3.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] disabled:opacity-60 text-white font-bold text-sm shadow-md inline-flex items-center justify-center gap-2 transition-all cursor-pointer mt-2"
               >
                 <LogIn className="w-4 h-4" />
-                Sign In as {activeTab === 'ADMIN' ? 'Administrator' : 'Student'}
+                {busy ? 'Signing in…' : `Sign In as ${activeTab === 'ADMIN' ? 'Administrator' : 'Student'}`}
               </button>
             </form>
 

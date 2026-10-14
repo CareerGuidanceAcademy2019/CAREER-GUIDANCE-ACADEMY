@@ -1,0 +1,196 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Student {
+  id            String       @id @default(uuid())
+  studentCode   String       @unique
+  name          String
+  email         String       @unique
+  phone         String
+  password      String       // In production, this must be hashed (e.g., using bcrypt)
+  photo         String?
+  guardianName  String?
+  address       String?
+  qualification String?
+  targetExam    String?
+  joinedDate    DateTime     @default(now())
+  status        String       @default("Active") // 'Active' or 'Inactive'
+  
+  enrollments   Enrollment[]
+  testAttempts  TestAttempt[]
+  payments      FeePayment[]
+}
+
+model Faculty {
+  id                 String   @id @default(uuid())
+  name               String
+  subject            String
+  qualification      String
+  experience         String
+  photo              String?
+  bio                String?
+  specializationTags String[]
+  
+  courses            Course[] // One faculty can teach many courses
+}
+
+model Course {
+  id                  String   @id @default(uuid())
+  name                String
+  category            String
+  subCategory         String
+  board               String?
+  classLevel          String?
+  description         String
+  syllabusHighlights  String[]
+  price               Float
+  instalmentAvailable Boolean
+  firstInstalment     Float
+  
+  facultyId           String
+  faculty             Faculty  @relation(fields: [facultyId], references: [id])
+  
+  batchName           String
+  batchSize           Int
+  seatsAvailable      Int
+  waitingListCount    Int
+  duration            String
+  startDate           DateTime
+  schedule            String
+  status              String   // 'Open for Admission' | 'Batch Closed'
+  featured            Boolean  @default(false)
+  
+  enrollments         Enrollment[]
+  studyMaterials      StudyMaterial[]
+  mockTests           MockTest[]
+}
+
+model Enrollment {
+  id            String   @id @default(uuid())
+  studentId     String
+  student       Student  @relation(fields: [studentId], references: [id])
+  courseId      String
+  course        Course   @relation(fields: [courseId], references: [id])
+  
+  enrolledDate  DateTime @default(now())
+  progress      Int      @default(0)
+  totalFee      Float
+  paidAmount    Float    @default(0)
+  dueAmount     Float
+  nextDueDate   DateTime?
+
+  @@unique([studentId, courseId])
+}
+
+model StudyMaterial {
+  id              String   @id @default(uuid())
+  title           String
+  type            String   // 'Book PDF' | 'Paid Notes'
+  author          String
+  pages           Int
+  fileSize        String
+  uploadedDate    DateTime @default(now())
+  description     String
+  previewSections Json     // Store sections as a JSON array of {heading, body}
+  
+  courseId        String
+  course          Course   @relation(fields: [courseId], references: [id])
+}
+
+model MockTest {
+  id               String   @id @default(uuid())
+  title            String
+  durationMinutes  Int
+  totalMarks       Float
+  marksPerQuestion Float
+  negativeMarking  Float
+  scheduledDate    DateTime
+  status           String   // 'Published' | 'Draft'
+  
+  courseId         String
+  course           Course   @relation(fields: [courseId], references: [id])
+  
+  questions        Question[]
+  attempts         TestAttempt[]
+}
+
+model Question {
+  id                 String   @id @default(uuid())
+  question           String
+  options            String[] // Array of exactly 4 strings
+  correctOptionIndex Int
+  explanation        String?
+  
+  mockTestId         String
+  mockTest           MockTest @relation(fields: [mockTestId], references: [id], onDelete: Cascade)
+}
+
+model TestAttempt {
+  id               String   @id @default(uuid())
+  score            Float
+  totalMarks       Float
+  correctCount     Int
+  wrongCount       Int
+  unattemptedCount Int
+  accuracy         Float
+  timeTakenMinutes Int
+  submittedAt      DateTime @default(now())
+  answers          Json     // Record<questionId, selectedOptionIndex>
+  
+  studentId        String
+  student          Student  @relation(fields: [studentId], references: [id])
+  mockTestId       String
+  mockTest         MockTest @relation(fields: [mockTestId], references: [id])
+}
+
+model FeePayment {
+  id            String   @id @default(uuid())
+  receiptNo     String   @unique
+  amount        Float
+  paymentMode   String   // 'UPI' | 'Debit/Credit Card' | 'Net Banking' | 'Cash at Counter'
+  paymentType   String   // 'Full Payment' | 'Instalment 1' | 'Instalment 2' | 'Balance Clearance'
+  date          DateTime @default(now())
+  remarks       String?
+  
+  studentId     String
+  student       Student  @relation(fields: [studentId], references: [id])
+  courseId      String
+}
+
+model Achievement {
+  id       String @id @default(uuid())
+  name     String
+  exam     String
+  rank     String
+  year     String
+  photo    String
+  quote    String
+  category String
+}
+
+model Announcement {
+  id          String   @id @default(uuid())
+  title       String
+  content     String
+  targetBatch String   // 'All Batches' or courseId
+  targetLabel String
+  priority    String   // 'Normal' | 'Important' | 'Urgent'
+  date        DateTime @default(now())
+  author      String
+}
+
+model Enquiry {
+  id             String   @id @default(uuid())
+  name           String
+  phone          String
+  email          String
+  courseInterest String
+  message        String
+  createdAt      DateTime @default(now())
+}

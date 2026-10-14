@@ -2,47 +2,32 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { KeyRound, CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react';
+import { CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react';
 import { PublicHeader } from '@/components/layout/PublicHeader';
 import { PublicFooter } from '@/components/layout/PublicFooter';
 import { cgaService } from '@/services/cgaService';
-import { DEMO_CREDENTIALS } from '@/data/initialSeedData';
 
 export default function ForgotPasswordPage() {
-  const [step, setStep] = useState<'EMAIL' | 'OTP' | 'SUCCESS'>('EMAIL');
-  const [email, setEmail] = useState(DEMO_CREDENTIALS.student.email);
-  const [otp, setOtp] = useState('240826');
-  const [newPassword, setNewPassword] = useState('');
+  const [email, setEmail] = useState('');
+  const [sent, setSent] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  const handleRequestOtp = (e: React.FormEvent) => {
+  const handleRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     if (!email.trim() || !email.includes('@')) {
       setError('Please enter a valid registered email address.');
       return;
     }
-    setStep('OTP');
-  };
-
-  const handleResetPassword = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    if (otp.trim() !== '240826') {
-      setError('Invalid verification code. Use demo OTP: 240826');
-      return;
-    }
-    if (!newPassword || newPassword.length < 6) {
-      setError('New password must be at least 6 characters.');
-      return;
-    }
-
-    const res = cgaService.resetPassword(email, newPassword);
+    setBusy(true);
+    const res = await cgaService.requestPasswordReset(email);
+    setBusy(false);
     if (!res.success) {
-      setError(res.error || 'Could not reset password.');
+      setError(res.error || 'Could not send reset email.');
       return;
     }
-    setStep('SUCCESS');
+    setSent(true);
   };
 
   return (
@@ -70,17 +55,18 @@ export default function ForgotPasswordPage() {
             </div>
           )}
 
-          {step === 'EMAIL' && (
-            <form onSubmit={handleRequestOtp} className="space-y-4" noValidate>
+          {!sent ? (
+            <form onSubmit={handleRequest} className="space-y-4" noValidate>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Enter your registered student email address to receive a simulated 6-digit
-                verification OTP.
+                Enter your registered email address. We will email you a secure link to set a new
+                password.
               </p>
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   Registered Email Address
                 </label>
                 <input
+                  id="forgot-email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -89,65 +75,20 @@ export default function ForgotPasswordPage() {
               </div>
               <button
                 type="submit"
-                className="w-full py-3 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white font-bold text-sm cursor-pointer"
+                disabled={busy}
+                className="w-full py-3 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] disabled:opacity-60 text-white font-bold text-sm cursor-pointer"
               >
-                Send Verification OTP
+                {busy ? 'Sending…' : 'Send Reset Link'}
               </button>
             </form>
-          )}
-
-          {step === 'OTP' && (
-            <form onSubmit={handleResetPassword} className="space-y-4" noValidate>
-              <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-xs text-[#0056b3]">
-                <strong>Simulated Demo OTP Sent:</strong> Use verification code{' '}
-                <code className="font-extrabold underline">240826</code> for{' '}
-                <strong>{email}</strong>.
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  6-Digit Verification Code
-                </label>
-                <input
-                  type="text"
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  New Password
-                </label>
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Enter new password (min 6 chars)"
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
-                />
-              </div>
-              <button
-                type="submit"
-                className="w-full py-3 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white font-bold text-sm cursor-pointer"
-              >
-                Update Password
-              </button>
-            </form>
-          )}
-
-          {step === 'SUCCESS' && (
+          ) : (
             <div className="text-center space-y-4 py-2">
               <CheckCircle2 className="w-12 h-12 text-emerald-600 mx-auto" />
-              <h2 className="text-lg font-extrabold text-slate-900">Password Reset Successful!</h2>
+              <h2 className="text-lg font-extrabold text-slate-900">Check your inbox</h2>
               <p className="text-xs text-slate-600">
-                Your password has been updated in this browser session. You can now sign in.
+                If an account exists for <strong>{email}</strong>, a password reset link has been
+                sent. The link expires shortly, so please use it soon.
               </p>
-              <Link
-                href="/login"
-                className="inline-block w-full py-3 rounded-xl bg-[#0056b3] text-white font-bold text-sm"
-              >
-                Return to Login
-              </Link>
             </div>
           )}
 

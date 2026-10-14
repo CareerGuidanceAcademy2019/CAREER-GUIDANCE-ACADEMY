@@ -16,8 +16,9 @@ const CATEGORIES: ('All' | CourseCategory)[] = [
 ];
 
 export default function StudentCourseCataloguePage() {
-  const { db, currentStudent, enrolInCourse, joinWaitingList } = useCga();
+  const { db, currentStudent, enrolInCourse, joinWaitingList, showToast } = useCga();
   const [category, setCategory] = useState<'All' | CourseCategory>('All');
+  const [modeFilter, setModeFilter] = useState<'All' | 'Offline' | 'Online'>('All');
   const [search, setSearch] = useState('');
 
   // Enrolment Modal state
@@ -32,19 +33,20 @@ export default function StudentCourseCataloguePage() {
 
   const filteredCourses = db.courses.filter((c) => {
     const matchCat = category === 'All' || c.category === category;
+    const matchMode = modeFilter === 'All' || c.mode === modeFilter;
     const q = search.trim().toLowerCase();
     const matchSearch =
       !q ||
       c.name.toLowerCase().includes(q) ||
       c.subCategory.toLowerCase().includes(q) ||
       c.facultyName.toLowerCase().includes(q);
-    return matchCat && matchSearch;
+    return matchCat && matchMode && matchSearch;
   });
 
-  const handleConfirmPayment = (e: React.FormEvent) => {
+  const handleConfirmPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCourse) return;
-    const res = enrolInCourse({
+    const res = await enrolInCourse({
       studentId: currentStudent.id,
       courseId: selectedCourse.id,
       paymentType: paymentPlan,
@@ -53,6 +55,8 @@ export default function StudentCourseCataloguePage() {
     if (res.success && res.receipt) {
       setSelectedCourse(null);
       setGeneratedReceipt(res.receipt);
+    } else if (res.error) {
+      showToast('Enrolment failed', res.error, 'error');
     }
   };
 
@@ -63,29 +67,53 @@ export default function StudentCourseCataloguePage() {
           Course Catalogue & Online Enrolment
         </h1>
         <p className="text-xs sm:text-sm text-slate-600 mt-1">
-          Enrol in any open C.G.A batch using full payment or 2-instalment facility. Study materials
-          and mock tests unlock automatically upon enrolment.
+          Enrol in offline classroom batches (at Udaipur center) or online interactive batches. Offline enrolments receive printed notes at the academy. Digital softcopies are strictly view-only.
         </p>
       </div>
 
       {/* Filter Bar */}
       <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3 shadow-2xs">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-1.5">
-            {CATEGORIES.map((cat) => (
+        {/* Mode Selector */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              Mode:
+            </span>
+            <div className="inline-flex p-1 rounded-xl bg-slate-100 gap-1">
               <button
-                key={cat}
                 type="button"
-                onClick={() => setCategory(cat)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
-                  category === cat
+                onClick={() => setModeFilter('All')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  modeFilter === 'All'
                     ? 'bg-[#0056b3] text-white'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                {cat}
+                All Modes
               </button>
-            ))}
+              <button
+                type="button"
+                onClick={() => setModeFilter('Offline')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  modeFilter === 'Offline'
+                    ? 'bg-[#0056b3] text-white'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                🏫 Offline Batches
+              </button>
+              <button
+                type="button"
+                onClick={() => setModeFilter('Online')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  modeFilter === 'Online'
+                    ? 'bg-[#0056b3] text-white'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                💻 Online Batches
+              </button>
+            </div>
           </div>
 
           <div className="relative w-full sm:w-64">
@@ -98,6 +126,23 @@ export default function StudentCourseCataloguePage() {
               className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
             />
           </div>
+        </div>
+
+        <div className="flex flex-wrap gap-1.5 pt-1">
+          {CATEGORIES.map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => setCategory(cat)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                category === cat
+                  ? 'bg-[#0056b3] text-white'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
         </div>
       </div>
 

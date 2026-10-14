@@ -24,7 +24,6 @@ import {
 import { CGALogo } from '@/components/ui/CGALogo';
 import { CustomAcademicEmblemSvg, CustomArrowRightSvg } from '@/components/ui/CustomIcons';
 import { useCga } from '@/context/CgaContext';
-import { DEMO_CREDENTIALS } from '@/data/initialSeedData';
 
 const STUDENT_NAV = [
   { href: '/student/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -41,7 +40,7 @@ const STUDENT_NAV = [
 export default function StudentPortalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { isHydrated, session, currentStudent, login, logout, resetDemoData } = useCga();
+  const { isHydrated, session, currentStudent, logout } = useCga();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const currentPageLabel =
@@ -78,19 +77,9 @@ export default function StudentPortalLayout({ children }: { children: React.Reac
           </h1>
           <p className="text-xs text-slate-600 leading-relaxed">
             This area is reserved for enrolled students of Career Guidance Academy (C.G.A), Udaipur.
-            Click below for instant demo student login.
+            Please sign in with your student account.
           </p>
           <div className="flex flex-col gap-2.5 pt-2">
-            <button
-              type="button"
-              onClick={() => {
-                login(DEMO_CREDENTIALS.student.email, DEMO_CREDENTIALS.student.password);
-              }}
-              className="w-full py-3 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white font-bold text-xs inline-flex items-center justify-center gap-2 shadow-sm cursor-pointer"
-            >
-              <CustomAcademicEmblemSvg className="w-4 h-4 shrink-0" />
-              Instant Demo Login as Student ({DEMO_CREDENTIALS.student.name})
-            </button>
             {session?.role === 'ADMIN' && (
               <Link
                 href="/admin/dashboard"
@@ -205,22 +194,9 @@ export default function StudentPortalLayout({ children }: { children: React.Reac
           </div>
 
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={resetDemoData}
-              className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer whitespace-nowrap shrink-0"
-            >
-              <RotateCcw className="w-3 h-3" /> Reset Demo Data
-            </button>
-            <Link
-              href="/login"
-              onClick={() => {
-                login(DEMO_CREDENTIALS.admin.email, DEMO_CREDENTIALS.admin.password);
-              }}
-              className="px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-[#ea580c] border border-amber-200 text-xs font-bold inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
-            >
-              Switch to Admin View <CustomArrowRightSvg className="w-3.5 h-3.5" />
-            </Link>
+            {currentStudent && (
+              <span className="text-xs font-bold text-slate-600">{currentStudent.name}</span>
+            )}
           </div>
         </header>
 

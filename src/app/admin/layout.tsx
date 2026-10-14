@@ -25,7 +25,6 @@ import {
 import { CGALogo } from '@/components/ui/CGALogo';
 import { CustomAcademicEmblemSvg, CustomArrowRightSvg } from '@/components/ui/CustomIcons';
 import { useCga } from '@/context/CgaContext';
-import { DEMO_CREDENTIALS } from '@/data/initialSeedData';
 
 const ADMIN_NAV = [
   { href: '/admin/dashboard', label: 'Admin Dashboard', icon: LayoutDashboard },
@@ -43,7 +42,7 @@ const ADMIN_NAV = [
 export default function AdminPortalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { isHydrated, session, login, logout, resetDemoData } = useCga();
+  const { isHydrated, session, logout } = useCga();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const currentPageLabel =
@@ -78,19 +77,16 @@ export default function AdminPortalLayout({ children }: { children: React.ReactN
           </h1>
           <p className="text-xs text-slate-600 leading-relaxed">
             This management console is restricted to Career Guidance Academy (C.G.A) administrators.
-            For client evaluation, you can switch to the Demo Admin session below.
           </p>
           <div className="flex flex-col gap-2.5 pt-2">
-            <button
-              type="button"
-              onClick={() => {
-                login(DEMO_CREDENTIALS.admin.email, DEMO_CREDENTIALS.admin.password);
-              }}
-              className="w-full py-3 rounded-xl bg-[#ea580c] hover:bg-orange-600 text-white font-bold text-xs inline-flex items-center justify-center gap-2 shadow-sm cursor-pointer"
-            >
-              <CustomAcademicEmblemSvg className="w-4 h-4 shrink-0" />
-              Instant Demo Login as Administrator
-            </button>
+            {!session && (
+              <Link
+                href="/login"
+                className="w-full py-3 rounded-xl bg-[#ea580c] hover:bg-orange-600 text-white font-bold text-xs"
+              >
+                Sign In as Administrator
+              </Link>
+            )}
             {session?.role === 'STUDENT' && (
               <Link
                 href="/student/dashboard"
@@ -190,22 +186,7 @@ export default function AdminPortalLayout({ children }: { children: React.ReactN
           </div>
 
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={resetDemoData}
-              className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer whitespace-nowrap shrink-0"
-            >
-              <RotateCcw className="w-3 h-3" /> Reset Demo Data
-            </button>
-            <Link
-              href="/student/dashboard"
-              onClick={() => {
-                login(DEMO_CREDENTIALS.student.email, DEMO_CREDENTIALS.student.password);
-              }}
-              className="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#0056b3] border border-blue-200 text-xs font-bold inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
-            >
-              Switch to Student View <CustomArrowRightSvg className="w-3.5 h-3.5" />
-            </Link>
+            <span className="text-xs font-bold text-slate-600">{session.name}</span>
           </div>
         </header>
 

@@ -1,18 +1,40 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Upload, FileText, Trash2, Edit3, X } from 'lucide-react';
+import { Upload, FileText, Trash2, Edit3, X, Download } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
 import { StudyMaterial } from '@/data/initialSeedData';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 export default function AdminStudyMaterialsPage() {
-  const { db, saveMaterial, deleteMaterial } = useCga();
+  const { db, saveMaterial, deleteMaterial, showToast } = useCga();
   const [editing, setEditing] = useState<StudyMaterial | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<StudyMaterial | null>(null);
   const [sectionHeading, setSectionHeading] = useState('');
   const [sectionBody, setSectionBody] = useState('');
+
+  const handleAdminDownload = (mat: StudyMaterial) => {
+    const content = `MASTER ARCHIVE — CAREER GUIDANCE ACADEMY (C.G.A), UDAIPUR
+Downloaded by: Administrator
+Document: ${mat.title}
+Course: ${mat.courseName}
+Pages: ${mat.pages}
+Author: ${mat.author}
+======================================================================
+${mat.previewSections.map((s) => `\n--- ${s.heading} ---\n${s.body}\n`).join('\n')}
+======================================================================
+Confidential Master Copy. Distribution restricted.`;
+
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${mat.title.slice(0, 30).replace(/[^a-zA-Z0-9]/g, '_')}_Master.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Master File Downloaded', `Downloaded "${mat.title}" for administrator use.`, 'success');
+  };
 
   const openUploadModal = () => {
     const firstCourse = db.courses[0];
@@ -24,8 +46,8 @@ export default function AdminStudyMaterialsPage() {
     setEditing({
       id: `mat-${Date.now()}`,
       title: '',
-      courseId: firstCourse?.id || 'crs-tet-1',
-      courseName: firstCourse?.name || 'Tripura TET Integrated Batch',
+      courseId: firstCourse?.id || '',
+      courseName: firstCourse?.name || '',
       type: 'Paid Notes',
       author: 'C.G.A Academic Wing, Udaipur',
       pages: 95,
@@ -99,11 +121,20 @@ export default function AdminStudyMaterialsPage() {
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
+                  onClick={() => handleAdminDownload(mat)}
+                  className="p-2 rounded-xl bg-blue-50 text-[#0056b3] hover:bg-blue-100 cursor-pointer"
+                  title="Download Master Copy (Admin Only)"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
                   onClick={() => {
                     setIsNew(false);
                     setEditing({ ...mat });
                   }}
                   className="p-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer"
+                  title="Edit Material"
                 >
                   <Edit3 className="w-3.5 h-3.5" />
                 </button>
@@ -111,6 +142,7 @@ export default function AdminStudyMaterialsPage() {
                   type="button"
                   onClick={() => setDeleteTarget(mat)}
                   className="p-2 rounded-xl bg-red-50 text-[#dc2626] hover:bg-red-100 cursor-pointer"
+                  title="Delete Material"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>

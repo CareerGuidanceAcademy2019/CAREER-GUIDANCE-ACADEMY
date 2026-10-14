@@ -7,17 +7,18 @@ import {
   Lock,
   Unlock,
   Eye,
-  Download,
   BookOpen,
   ShieldAlert,
+  ShieldCheck,
   X,
   ArrowRight,
+  Printer,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
 import { StudyMaterial } from '@/data/initialSeedData';
 
 export default function StudentStudyMaterialsPage() {
-  const { db, currentStudent, showToast } = useCga();
+  const { db, currentStudent } = useCga();
   const [filterType, setFilterType] = useState<'All' | 'Unlocked' | 'Locked'>('All');
   const [viewingMaterial, setViewingMaterial] = useState<StudyMaterial | null>(null);
 
@@ -36,40 +37,6 @@ export default function StudentStudyMaterialsPage() {
     return true;
   });
 
-  const handleDownloadWatermarked = (mat: StudyMaterial) => {
-    const watermarkLine = `WATERMARK: Licensed Exclusively to ${currentStudent.name} (${currentStudent.studentCode}) — Career Guidance Academy (C.G.A), Udaipur`;
-    const bodyText = mat.previewSections
-      .map((s) => `\n--- ${s.heading} ---\n${s.body}\n`)
-      .join('\n');
-
-    const content = `======================================================================
-${watermarkLine}
-======================================================================
-TITLE   : ${mat.title}
-TYPE    : ${mat.type} (${mat.pages} Pages)
-COURSE  : ${mat.courseName}
-AUTHOR  : ${mat.author}
-======================================================================
-${bodyText}
-======================================================================
-${watermarkLine}
-Unauthorized redistribution is strictly prohibited by C.G.A Udaipur.
-`;
-
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${mat.title.slice(0, 38).replace(/[^a-zA-Z0-9]/g, '_')}_Watermarked.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast(
-      'Watermarked Study Material Downloaded',
-      `Downloaded with ${currentStudent.name} (${currentStudent.studentCode}) digital watermark.`,
-      'success'
-    );
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -78,8 +45,7 @@ Unauthorized redistribution is strictly prohibited by C.G.A Udaipur.
             Digital Study Materials & Paid Notes Library
           </h1>
           <p className="text-xs sm:text-sm text-slate-600 mt-1">
-            Soft-copy PDFs of books and classroom paid notes are unlocked automatically for courses
-            you have purchased. All documents are protected with your personal student watermark.
+            Access chapter notes and study materials for your enrolled batches. Softcopies are provided in protected View-Only mode.
           </p>
         </div>
 
@@ -99,6 +65,25 @@ Unauthorized redistribution is strictly prohibited by C.G.A Udaipur.
               {tab}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Strict Policy Banner */}
+      <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-amber-50 border border-blue-200 rounded-2xl p-4.5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="p-2 rounded-xl bg-[#0056b3] text-white shrink-0 mt-0.5">
+            <ShieldCheck className="w-5 h-5" />
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-[#0a0e2a] uppercase tracking-wider">
+              Study Material Delivery & Usage Policy
+            </h4>
+            <p className="text-xs text-slate-700 mt-0.5 leading-relaxed">
+              <strong className="text-[#0056b3]">🏫 Offline Batches:</strong> Students receive physical printed notes & booklet handouts at the Udaipur center.{' '}
+              <span className="mx-1">•</span>
+              <strong className="text-slate-900">💻 Digital Softcopies:</strong> Available in secure <em>View-Only Reader</em> mode in the browser. Downloading, copying, or exporting softcopies is strictly restricted to Academy Administrators.
+            </p>
+          </div>
         </div>
       </div>
 
@@ -157,7 +142,7 @@ Unauthorized redistribution is strictly prohibited by C.G.A Udaipur.
                 <div className="pt-2 flex items-center justify-between text-[11px] font-semibold text-slate-400 border-t border-slate-100">
                   <span>By {mat.author}</span>
                   <span>
-                    {mat.pages} Pages • {mat.fileSize}
+                    {mat.pages} Pages • View-Only
                   </span>
                 </div>
               </div>
@@ -170,17 +155,9 @@ Unauthorized redistribution is strictly prohibited by C.G.A Udaipur.
                   <button
                     type="button"
                     onClick={() => setViewingMaterial(mat)}
-                    className="flex-1 py-2.5 px-3 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="w-full py-2.5 px-3 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
                   >
-                    <Eye className="w-3.5 h-3.5" /> Read in Browser
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDownloadWatermarked(mat)}
-                    className="py-2.5 px-3 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer"
-                    title="Download Watermarked PDF Copy"
-                  >
-                    <Download className="w-3.5 h-3.5" /> Download
+                    <Eye className="w-3.5 h-3.5" /> Read Online (View-Only)
                   </button>
                 </div>
               ) : (
@@ -201,12 +178,13 @@ Unauthorized redistribution is strictly prohibited by C.G.A Udaipur.
         ))}
       </div>
 
-      {/* ==================== IN-BROWSER WATERMARKED PDF VIEWER MODAL ==================== */}
+      {/* ==================== IN-BROWSER VIEW-ONLY PDF VIEWER MODAL ==================== */}
       {viewingMaterial && (
         <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/75 backdrop-blur-xs p-4"
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/80 backdrop-blur-xs p-4 select-none"
           role="dialog"
           aria-modal="true"
+          onContextMenu={(e) => e.preventDefault()}
         >
           <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
             {/* Viewer Toolbar */}
@@ -227,25 +205,37 @@ Unauthorized redistribution is strictly prohibited by C.G.A Udaipur.
               </div>
 
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleDownloadWatermarked(viewingMaterial)}
-                  className="px-3.5 py-2 rounded-xl bg-[#0056b3] hover:bg-blue-600 text-white text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5" /> Download PDF
-                </button>
+                <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 text-slate-200 text-[11px] font-semibold border border-white/10">
+                  <Lock className="w-3 h-3 text-amber-400" /> View-Only Mode (Downloads Restricted)
+                </span>
                 <button
                   type="button"
                   onClick={() => setViewingMaterial(null)}
-                  className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white cursor-pointer"
+                  className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white cursor-pointer transition-colors"
+                  title="Close Viewer"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
 
+            {/* Offline Notes Guarantee Reminder Bar */}
+            <div className="bg-amber-50 border-b border-amber-200 px-6 py-2.5 flex items-center justify-between text-xs text-amber-900">
+              <span className="flex items-center gap-1.5 font-medium">
+                <Printer className="w-3.5 h-3.5 text-[#ea580c]" />
+                Enrolled in an offline batch? You receive printed physical copies of all syllabus notes at our Udaipur campus.
+              </span>
+              <span className="text-[11px] text-slate-500 font-semibold hidden md:inline">
+                Right-click & copy disabled
+              </span>
+            </div>
+
             {/* Watermarked Document Canvas */}
-            <div className="flex-1 overflow-y-auto bg-slate-200 p-4 sm:p-8 space-y-6">
+            <div
+              className="flex-1 overflow-y-auto bg-slate-200 p-4 sm:p-8 space-y-6 select-none"
+              onCopy={(e) => e.preventDefault()}
+              onCut={(e) => e.preventDefault()}
+            >
               {viewingMaterial.previewSections.map((sec, idx) => (
                 <div
                   key={idx}
@@ -258,7 +248,7 @@ Unauthorized redistribution is strictly prohibited by C.G.A Udaipur.
                         key={wIdx}
                         className="text-lg sm:text-xl font-black uppercase tracking-widest text-[#0056b3] whitespace-nowrap"
                       >
-                        {currentStudent.name} • {currentStudent.studentCode} • C.G.A UDAIPUR
+                        {currentStudent.name} • {currentStudent.studentCode} • C.G.A UDAIPUR • VIEW-ONLY
                       </p>
                     ))}
                   </div>
@@ -285,10 +275,10 @@ Unauthorized redistribution is strictly prohibited by C.G.A Udaipur.
                   {/* Page Footer with Watermark */}
                   <div className="relative z-10 mt-10 pt-4 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
                     <span>
-                      Licensed Copy: <strong>{currentStudent.name}</strong> (
+                      Licensed View-Only Access: <strong>{currentStudent.name}</strong> (
                       {currentStudent.studentCode})
                     </span>
-                    <span>© C.G.A Publications, Udaipur</span>
+                    <span>© C.G.A Publications, Udaipur • Do Not Duplicate</span>
                   </div>
                 </div>
               ))}

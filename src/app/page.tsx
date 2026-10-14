@@ -206,7 +206,10 @@ export default function HomePage() {
                 href="/courses"
                 className="inline-flex items-center gap-1.5 text-sm font-bold text-[#0056b3] hover:underline"
               >
-                View All {courses.length} Active Courses <ArrowRight className="w-4 h-4" />
+                {courses.length > 0
+                  ? `View All ${courses.length} Active Courses`
+                  : 'View All Courses'}{' '}
+                <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
 
@@ -285,9 +288,17 @@ export default function HomePage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {featuredCourses.map((course) => (
-                <CourseCard key={course.id} course={course} />
-              ))}
+              {featuredCourses.length === 0 ? (
+                <div className="col-span-full text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-300">
+                  <p className="text-sm font-semibold text-slate-500">
+                    Upcoming batches and courses will be announced shortly.
+                  </p>
+                </div>
+              ) : (
+                featuredCourses.map((course) => (
+                  <CourseCard key={course.id} course={course} />
+                ))
+              )}
             </div>
           </div>
         </section>
@@ -365,38 +376,56 @@ export default function HomePage() {
                 href="/faculty"
                 className="inline-flex items-center gap-2 text-sm font-bold text-[#0056b3] hover:underline"
               >
-                Meet All {faculty.length} Faculty Members <ArrowRight className="w-4 h-4" />
+                {faculty.length > 0
+                  ? `Meet All ${faculty.length} Faculty Members`
+                  : 'Meet Our Faculty Members'}{' '}
+                <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {topFaculty.map((member) => (
-                <div
-                  key={member.id}
-                  className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs cga-card-hover flex flex-col"
-                >
-                  <div className="flex items-center gap-3.5 mb-4">
-                    <img
-                      src={member.photo}
-                      alt={member.name}
-                      className="w-16 h-16 rounded-2xl object-cover border-2 border-[#0056b3]/20 shrink-0"
-                    />
-                    <div>
-                      <span className="inline-block px-2 py-0.5 rounded bg-blue-50 text-[#0056b3] text-[11px] font-bold">
-                        {member.experience}
-                      </span>
-                      <h3 className="text-base font-extrabold text-[#0a0e2a] mt-1">
-                        {member.name}
-                      </h3>
-                    </div>
-                  </div>
-                  <p className="text-xs font-bold text-[#0056b3] mb-1">{member.subject}</p>
-                  <p className="text-xs text-slate-500 font-medium mb-3">{member.qualification}</p>
-                  <p className="text-xs text-slate-600 leading-relaxed mt-auto line-clamp-3">
-                    {member.bio}
+              {topFaculty.length === 0 ? (
+                <div className="col-span-full text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-300">
+                  <p className="text-sm font-semibold text-slate-500">
+                    Faculty mentor profiles will be announced shortly.
                   </p>
                 </div>
-              ))}
+              ) : (
+                topFaculty.map((member) => (
+                  <div
+                    key={member.id}
+                    className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs cga-card-hover flex flex-col"
+                  >
+                    <div className="flex items-center gap-3.5 mb-4">
+                      <img
+                        src={member.photo}
+                        alt={member.name}
+                        className="w-16 h-16 rounded-2xl object-cover border-2 border-[#0056b3]/20 shrink-0"
+                      />
+                      <div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {member.designation && (
+                            <span className="inline-block px-1.5 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200 text-[10px] font-extrabold uppercase">
+                              {member.designation}
+                            </span>
+                          )}
+                          <span className="inline-block px-2 py-0.5 rounded bg-blue-50 text-[#0056b3] text-[11px] font-bold">
+                            {member.experience}
+                          </span>
+                        </div>
+                        <h3 className="text-base font-extrabold text-[#0a0e2a] mt-1">
+                          {member.name}
+                        </h3>
+                      </div>
+                    </div>
+                    <p className="text-xs font-bold text-[#0056b3] mb-1">{member.subject}</p>
+                    <p className="text-xs text-slate-500 font-medium mb-3">{member.qualification}</p>
+                    <p className="text-xs text-slate-600 leading-relaxed mt-auto line-clamp-3">
+                      {member.bio}
+                    </p>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </section>

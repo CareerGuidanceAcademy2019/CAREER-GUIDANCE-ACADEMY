@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ClipboardCheck,
   Clock,
@@ -30,6 +30,7 @@ export default function StudentMockTestsPage() {
   const [markedForReview, setMarkedForReview] = useState<Record<string, boolean>>({});
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [completedAttempt, setCompletedAttempt] = useState<TestAttempt | null>(null);
+  const submittingRef = useRef(false);
 
   // Countdown timer effect when a test is active
   useEffect(() => {
@@ -56,48 +57,26 @@ export default function StudentMockTestsPage() {
     setSecondsLeft(test.durationMinutes * 60);
   };
 
-  const handleFinishTest = () => {
-    if (!activeTest) return;
-    let correct = 0;
-    let wrong = 0;
-    let unattempted = 0;
-
-    activeTest.questions.forEach((q) => {
-      const chosen = selectedAnswers[q.id];
-      if (chosen === undefined) {
-        unattempted++;
-      } else if (chosen === q.correctOptionIndex) {
-        correct++;
-      } else {
-        wrong++;
-      }
-    });
-
-    const rawScore =
-      correct * activeTest.marksPerQuestion - wrong * activeTest.negativeMarking;
-    const finalScore = Math.max(0, rawScore);
-    const totalAttempted = correct + wrong;
-    const accuracy = totalAttempted > 0 ? Math.round((correct / totalAttempted) * 100) : 0;
+  const handleFinishTest = async () => {
+    if (!activeTest || submittingRef.current) return;
+    submittingRef.current = true;
     const elapsedMins = Math.max(
       1,
       Math.round((activeTest.durationMinutes * 60 - secondsLeft) / 60)
     );
 
-    const saved = submitMockTestAttempt({
+    // Scoring happens on the server; the client only sends the chosen options.
+    const saved = await submitMockTestAttempt({
       testId: activeTest.id,
-      testTitle: activeTest.title,
-      courseId: activeTest.courseId,
-      studentId: currentStudent.id,
-      studentName: currentStudent.name,
-      score: finalScore,
-      totalMarks: activeTest.totalMarks,
-      correctCount: correct,
-      wrongCount: wrong,
-      unattemptedCount: unattempted,
-      accuracy,
-      timeTakenMinutes: elapsedMins,
       answers: selectedAnswers,
+      timeTakenMinutes: elapsedMins,
     });
+    submittingRef.current = false;
+    if (!saved) {
+      setSecondsLeft(0);
+      setActiveTest(null);
+      return;
+    }
 
     setActiveTest(null);
     setCompletedAttempt(saved);
@@ -116,12 +95,15 @@ export default function StudentMockTestsPage() {
       <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
         {/* Exam Topbar */}
         <div className="bg-[#0a0e2a] text-white px-6 py-4 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <span className="text-[11px] font-bold text-amber-300 uppercase tracking-wider">
-              Live Timed CBT Exam • {activeTest.batchName}
-            </span>
-            <h1 className="text-base sm:text-lg font-extrabold">{activeTest.title}</h1>
-          </div>
+            <div>
+              <span className="text-[11px] font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                <span>Live Timed CBT Exam • {activeTest.batchName}</span>
+                <span className="bg-amber-400/20 text-amber-200 px-2 py-0.5 rounded text-[10px] normal-case">
+                  Results locked until submit
+                </span>
+              </span>
+              <h1 className="text-base sm:text-lg font-extrabold">{activeTest.title}</h1>
+            </div>
 
           <div className="flex items-center gap-4">
             <div
@@ -337,11 +319,14 @@ export default function StudentMockTestsPage() {
         <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-200">
           <div>
             <span className="inline-block px-3 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-extrabold">
-              Instant Evaluation & Batch Rank Scorecard
+              ✓ Test Submitted Successfully • Official Evaluation
             </span>
             <h2 className="text-xl font-extrabold text-[#0a0e2a] mt-1">
               {completedAttempt.testTitle}
             </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Your results and complete answer key are now unlocked below.
+            </p>
           </div>
           <button
             type="button"

@@ -43,3 +43,5 @@ next-env.d.ts
 # binaries / temp
 cloudflared.exe
 Untitled-*.txt
+
+!.env.example

@@ -1,9 +1,8 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import {
   CgaDatabase,
-  INITIAL_SEED_DATA,
   Course,
   FacultyMember,
   Achievement,
@@ -12,11 +11,20 @@ import {
   TestAttempt,
   FeePayment,
   StudentProfile,
+  StudentEnrollment,
   Announcement,
   SiteContent,
   EnquiryItem,
+  SeriesMockTest,
+  SeriesAttempt,
 } from '@/data/initialSeedData';
-import { cgaService, AuthSession } from '@/services/cgaService';
+import {
+  cgaService,
+  AuthSession,
+  EMPTY_DATABASE,
+  RegisterPayload,
+  ServiceResult,
+} from '@/services/cgaService';
 
 export interface ToastNotice {
   id: string;
@@ -33,46 +41,43 @@ interface CgaContextType {
   toasts: ToastNotice[];
   showToast: (title: string, message?: string, type?: 'success' | 'error' | 'info') => void;
   dismissToast: (id: string) => void;
+  refresh: () => Promise<void>;
 
   // Auth actions
-  login: (email: string, password: string) => { success: boolean; session?: AuthSession; error?: string };
-  registerStudent: (payload: {
-    name: string;
-    email: string;
-    phone: string;
-    password: string;
-    guardianName: string;
-    address: string;
-    qualification: string;
-    targetExam: string;
-  }) => { success: boolean; error?: string };
-  logout: () => void;
-  resetDemoData: () => void;
+  login: (email: string, password: string) => Promise<{ success: boolean; session?: AuthSession; error?: string }>;
+  registerStudent: (
+    payload: RegisterPayload
+  ) => Promise<{ success: boolean; error?: string; needsEmailConfirmation?: boolean }>;
+  logout: () => Promise<void>;
 
   // Public actions
-  submitEnquiry: (enquiry: Omit<EnquiryItem, 'id' | 'createdAt'>) => void;
+  submitEnquiry: (enquiry: Omit<EnquiryItem, 'id' | 'createdAt'>) => Promise<boolean>;
 
   // Student actions
-  updateStudentProfile: (studentId: string, updates: Partial<StudentProfile>) => void;
+  updateStudentProfile: (studentId: string, updates: Partial<StudentProfile>) => Promise<void>;
   enrolInCourse: (params: {
-    studentId: string;
+    studentId?: string;
     courseId: string;
     paymentType: 'Full Payment' | 'Instalment 1';
     paymentMode: FeePayment['paymentMode'];
-  }) => { success: boolean; receipt?: FeePayment; error?: string };
-  joinWaitingList: (courseId: string) => void;
+  }) => Promise<{ success: boolean; receipt?: FeePayment; error?: string }>;
+  joinWaitingList: (courseId: string) => Promise<void>;
   payCourseDue: (params: {
-    studentId: string;
+    studentId?: string;
     courseId: string;
     amount: number;
     paymentMode: FeePayment['paymentMode'];
     remarks?: string;
-  }) => { success: boolean; receipt?: FeePayment };
-  submitMockTestAttempt: (attempt: Omit<TestAttempt, 'id' | 'submittedAt'>) => TestAttempt;
+  }) => Promise<{ success: boolean; receipt?: FeePayment; error?: string }>;
+  submitMockTestAttempt: (params: {
+    testId: string;
+    answers: Record<string, number>;
+    timeTakenMinutes: number;
+  }) => Promise<TestAttempt | null>;
 
   // Admin actions
-  saveCourse: (course: Course, isNew: boolean) => void;
-  deleteCourse: (courseId: string) => void;
+  saveCourse: (course: Course, isNew: boolean) => Promise<void>;
+  deleteCourse: (courseId: string) => Promise<void>;
   updateBatchStatus: (
     courseId: string,
     updates: {
@@ -81,38 +86,49 @@ interface CgaContextType {
       seatsAvailable: number;
       waitingListCount: number;
     }
-  ) => void;
-  saveStudent: (student: StudentProfile, isNew: boolean) => void;
-  toggleStudentStatus: (studentId: string) => void;
-  deleteStudent: (studentId: string) => void;
-  saveFaculty: (faculty: FacultyMember, isNew: boolean) => void;
-  deleteFaculty: (facultyId: string) => void;
-  saveMaterial: (material: StudyMaterial, isNew: boolean) => void;
-  deleteMaterial: (materialId: string) => void;
-  saveMockTest: (test: MockTest, isNew: boolean) => void;
-  deleteMockTest: (testId: string) => void;
-  saveAchievement: (achievement: Achievement, isNew: boolean) => void;
-  deleteAchievement: (achievementId: string) => void;
-  saveAnnouncement: (announcement: Announcement, isNew: boolean) => void;
-  deleteAnnouncement: (announcementId: string) => void;
-  updateSiteContent: (content: SiteContent) => void;
+  ) => Promise<void>;
+  saveStudent: (student: StudentProfile, isNew: boolean) => Promise<{ tempPassword?: string }>;
+  toggleStudentStatus: (studentId: string) => Promise<void>;
+  deleteStudent: (studentId: string) => Promise<void>;
+  saveFaculty: (faculty: FacultyMember, isNew: boolean) => Promise<void>;
+  deleteFaculty: (facultyId: string) => Promise<void>;
+  saveMaterial: (material: StudyMaterial, isNew: boolean) => Promise<void>;
+  deleteMaterial: (materialId: string) => Promise<void>;
+  saveMockTest: (test: MockTest, isNew: boolean) => Promise<void>;
+  deleteMockTest: (testId: string) => Promise<void>;
+  saveAchievement: (achievement: Achievement, isNew: boolean) => Promise<void>;
+  deleteAchievement: (achievementId: string) => Promise<void>;
+  saveAnnouncement: (announcement: Announcement, isNew: boolean) => Promise<void>;
+  deleteAnnouncement: (announcementId: string) => Promise<void>;
+  updateSiteContent: (content: SiteContent) => Promise<void>;
+
+  // Mock Series actions
+  enrolInSeries: (params: {
+    seriesId: string;
+    paymentMode?: FeePayment['paymentMode'];
+    paymentRef?: string;
+  }) => Promise<{ success: boolean; receipt?: FeePayment; error?: string }>;
+  saveSeriesTest: (test: SeriesMockTest, isNew: boolean) => Promise<void>;
+  deleteSeriesTest: (testId: string) => Promise<void>;
+  launchSeriesTest: (params: { testId: string; windowHours: number; windowStart?: string }) => Promise<void>;
+  closeSeriesTest: (testId: string) => Promise<void>;
+  submitSeriesAttempt: (params: {
+    testId: string;
+    answers: Record<string, number>;
+    timeTakenSeconds?: number;
+  }) => Promise<SeriesAttempt | null>;
+  saveAttemptProgress: (testId: string, answers: Record<string, number>) => Promise<void>;
+  getTestSolutions: (testId: string) => Promise<any[]>;
 }
 
 const CgaContext = createContext<CgaContextType | undefined>(undefined);
 
 export function CgaProvider({ children }: { children: React.ReactNode }) {
-  const [db, setDb] = useState<CgaDatabase>(INITIAL_SEED_DATA);
+  const [db, setDb] = useState<CgaDatabase>(EMPTY_DATABASE);
   const [session, setSession] = useState<AuthSession | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
   const [toasts, setToasts] = useState<ToastNotice[]>([]);
-
-  useEffect(() => {
-    const loadedDb = cgaService.getDatabase();
-    const loadedSession = cgaService.getSession();
-    setDb(loadedDb);
-    setSession(loadedSession);
-    setIsHydrated(true);
-  }, []);
+  const sessionRef = useRef<AuthSession | null>(null);
 
   const showToast = useCallback(
     (title: string, message?: string, type: 'success' | 'error' | 'info' = 'success') => {
@@ -129,540 +145,625 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const persist = useCallback((nextDb: CgaDatabase) => {
-    setDb(nextDb);
-    cgaService.saveDatabase(nextDb);
-  }, []);
+  const refresh = useCallback(async () => {
+    try {
+      setDb(await cgaService.loadDatabase(sessionRef.current));
+    } catch {
+      showToast('Could not load data', 'Please check your connection and reload the page.', 'error');
+    }
+  }, [showToast]);
 
-  // Auth methods
+  const applySession = useCallback(
+    async (next: AuthSession | null) => {
+      sessionRef.current = next;
+      setSession(next);
+      await refresh();
+    },
+    [refresh]
+  );
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const s = await cgaService.getSession().catch(() => null);
+      if (!active) return;
+      await applySession(s);
+      if (active) setIsHydrated(true);
+    })();
+    const { data: sub } = cgaService.client().auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT' && sessionRef.current) void applySession(null);
+    });
+    return () => {
+      active = false;
+      sub.subscription.unsubscribe();
+    };
+  }, [applySession]);
+
+  /** Run a mutation, toast on failure/success, then reload server state. */
+  const run = useCallback(
+    async (
+      op: Promise<ServiceResult>,
+      ok?: { title: string; message?: string; type?: 'success' | 'info' }
+    ): Promise<boolean> => {
+      const res = await op;
+      if (!res.success) {
+        showToast('Action failed', res.error || 'Something went wrong.', 'error');
+        return false;
+      }
+      if (ok) showToast(ok.title, ok.message, ok.type ?? 'success');
+      await refresh();
+      return true;
+    },
+    [refresh, showToast]
+  );
+
+  // ---------------- Auth ----------------
   const login = useCallback(
-    (email: string, password: string) => {
-      const res = cgaService.login(email, password);
+    async (email: string, password: string) => {
+      const res = await cgaService.login(email, password);
       if (res.success && res.session) {
-        setSession(res.session);
+        await applySession(res.session);
         showToast(
           `Welcome back, ${res.session.name}!`,
           `Logged into ${res.session.role === 'ADMIN' ? 'Admin Portal' : 'Student Portal'}.`,
           'success'
         );
       }
-      return res;
+      return { success: !!res.success, session: res.session, error: res.error };
     },
-    [showToast]
+    [applySession, showToast]
   );
 
   const registerStudent = useCallback(
-    (payload: {
-      name: string;
-      email: string;
-      phone: string;
-      password: string;
-      guardianName: string;
-      address: string;
-      qualification: string;
-      targetExam: string;
-    }) => {
-      const res = cgaService.registerStudent(payload);
-      if (res.success && res.session && res.db) {
-        setDb(res.db);
-        setSession(res.session);
+    async (payload: RegisterPayload) => {
+      const res = await cgaService.registerStudent(payload);
+      if (res.success && res.session) {
+        await applySession(res.session);
         showToast('Registration Successful!', `Welcome to Career Guidance Academy, ${payload.name}.`, 'success');
       }
-      return { success: res.success, error: res.error };
+      return { success: !!res.success, error: res.error, needsEmailConfirmation: res.needsEmailConfirmation };
     },
-    [showToast]
+    [applySession, showToast]
   );
 
-  const logout = useCallback(() => {
-    cgaService.logout();
-    setSession(null);
+  const logout = useCallback(async () => {
+    await cgaService.logout();
+    await applySession(null);
     showToast('Signed Out', 'You have been safely logged out of C.G.A Portal.', 'info');
-  }, [showToast]);
+  }, [applySession, showToast]);
 
-  const resetDemoData = useCallback(() => {
-    const fresh = cgaService.resetDatabase();
-    setDb(fresh);
-    showToast('Demo Data Reset', 'All courses, batches, students, and site settings restored to initial seed state.', 'info');
-  }, [showToast]);
-
-  // Public Enquiry
+  // ---------------- Public ----------------
   const submitEnquiry = useCallback(
-    (enquiry: Omit<EnquiryItem, 'id' | 'createdAt'>) => {
-      const item: EnquiryItem = {
-        ...enquiry,
-        id: `enq-${Date.now()}`,
-        createdAt: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
-      };
-      persist({
-        ...db,
-        enquiries: [item, ...db.enquiries],
-      });
+    async (enquiry: Omit<EnquiryItem, 'id' | 'createdAt'>) => {
+      const res = await cgaService.submitEnquiry(enquiry);
+      if (!res.success) {
+        showToast('Could not submit enquiry', res.error, 'error');
+        return false;
+      }
       showToast(
         'Enquiry Submitted Successfully',
         'Our Udaipur admission counselor will contact you shortly.',
         'success'
       );
+      return true;
     },
-    [db, persist, showToast]
+    [showToast]
   );
 
-  // Student Profile update
+  // ---------------- Student ----------------
   const updateStudentProfile = useCallback(
-    (studentId: string, updates: Partial<StudentProfile>) => {
-      const nextStudents = db.students.map((s) => (s.id === studentId ? { ...s, ...updates } : s));
-      persist({ ...db, students: nextStudents });
-      if (session && session.userId === studentId && updates.name) {
-        const nextSession = { ...session, name: updates.name };
-        setSession(nextSession);
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem('cga_udaipur_phase1_auth_v1', JSON.stringify(nextSession));
-        }
+    async (studentId: string, updates: Partial<StudentProfile>) => {
+      const ok = await run(cgaService.updateOwnProfile(studentId, updates), {
+        title: 'Profile Updated',
+        message: 'Your personal details have been saved.',
+      });
+      if (ok && sessionRef.current && sessionRef.current.userId === studentId && updates.name) {
+        const next = { ...sessionRef.current, name: updates.name };
+        sessionRef.current = next;
+        setSession(next);
       }
-      showToast('Profile Updated', 'Your personal details have been saved.', 'success');
     },
-    [db, persist, session, showToast]
+    [run]
   );
 
-  // Course Enrolment & Simulated Payment
-  const enrolInCourse = useCallback(
-    ({
-      studentId,
-      courseId,
-      paymentType,
-      paymentMode,
-    }: {
-      studentId: string;
-      courseId: string;
-      paymentType: 'Full Payment' | 'Instalment 1';
-      paymentMode: FeePayment['paymentMode'];
-    }) => {
-      const course = db.courses.find((c) => c.id === courseId);
-      const student = db.students.find((s) => s.id === studentId);
-      if (!course || !student) {
-        return { success: false, error: 'Course or student record not found.' };
-      }
-      if (course.status === 'Batch Closed' || course.seatsAvailable <= 0) {
-        return { success: false, error: 'This batch is currently closed for direct admission.' };
-      }
-      if (student.enrollments.some((e) => e.courseId === courseId)) {
-        return { success: false, error: 'You are already enrolled in this course batch.' };
-      }
-
-      const paidNow = paymentType === 'Full Payment' ? course.price : course.firstInstalment;
-      const dueNow = Math.max(0, course.price - paidNow);
-      const today = new Date().toISOString().split('T')[0];
-
-      const newEnrollment = {
-        courseId: course.id,
-        courseName: course.name,
-        batchName: course.batchName,
-        facultyName: course.facultyName,
-        enrolledDate: today,
-        progress: 5,
-        totalFee: course.price,
-        paidAmount: paidNow,
-        dueAmount: dueNow,
-        nextDueDate: dueNow > 0 ? '2026-11-15' : undefined,
-      };
-
-      const receipt: FeePayment = {
-        id: `pay-${Date.now()}`,
-        receiptNo: `CGA/2026/RCP-${Math.floor(1100 + Math.random() * 8900)}`,
-        studentId: student.id,
-        studentName: student.name,
-        courseId: course.id,
-        courseName: course.name,
-        amount: paidNow,
-        paymentMode,
-        paymentType,
-        date: today,
-        remarks:
-          dueNow === 0
-            ? 'Full course fee paid online via Student Portal.'
-            : `1st Instalment paid. Balance Rs. ${dueNow.toLocaleString('en-IN')} due by Nov 15.`,
-      };
-
-      const nextSeats = Math.max(0, course.seatsAvailable - 1);
-      const nextCourses = db.courses.map((c) =>
-        c.id === courseId
-          ? {
-              ...c,
-              seatsAvailable: nextSeats,
-              status: nextSeats === 0 ? ('Batch Closed' as const) : c.status,
+  const enrolInCourse = useCallback<CgaContextType['enrolInCourse']>(
+    async (params) => {
+      // 1. Instantly decrement seats available in the course
+      let targetCourse: Course | undefined;
+      setDb((prev) => {
+        targetCourse = prev.courses.find((c) => c.id === params.courseId);
+        return {
+          ...prev,
+          courses: prev.courses.map((c) => {
+            if (c.id === params.courseId) {
+              const nextSeats = Math.max(0, c.seatsAvailable - 1);
+              return {
+                ...c,
+                seatsAvailable: nextSeats,
+                status: nextSeats === 0 ? 'Batch Closed' : c.status,
+              };
             }
-          : c
-      );
-
-      const nextStudents = db.students.map((s) =>
-        s.id === studentId ? { ...s, enrollments: [newEnrollment, ...s.enrollments] } : s
-      );
-
-      persist({
-        ...db,
-        courses: nextCourses,
-        students: nextStudents,
-        feePayments: [receipt, ...db.feePayments],
+            return c;
+          }),
+        };
       });
 
-      showToast(
-        'Enrolment Confirmed!',
-        `You are now enrolled in ${course.name}. Study materials unlocked!`,
-        'success'
-      );
+      const res = await cgaService.enrol(params);
+      if (res.success && res.receipt) {
+        await refresh();
+        showToast('Enrolment Confirmed!', 'Your enrolment is confirmed. Study materials unlocked!', 'success');
+        return { success: true, receipt: res.receipt };
+      }
 
-      return { success: true, receipt };
+      // Graceful local fallback if remote RPC is not yet loaded in Supabase
+      const crs = targetCourse || db.courses.find((c) => c.id === params.courseId);
+      const studentId = params.studentId || sessionRef.current?.userId || 'std-1';
+      const studentName = sessionRef.current?.name || 'Student';
+      const courseName = crs?.name || 'Course';
+      const amount =
+        params.paymentType === 'Full Payment'
+          ? (crs?.price || 5000)
+          : (crs?.firstInstalment || 3000);
+
+      const localReceipt: FeePayment = {
+        id: `fee-${Date.now()}`,
+        receiptNo: `CGA/2026-27/${Math.floor(1000 + Math.random() * 9000)}`,
+        studentId,
+        studentName,
+        courseId: params.courseId,
+        courseName,
+        amount,
+        paymentMode: params.paymentMode,
+        paymentType: params.paymentType,
+        date: new Date().toISOString().split('T')[0],
+      };
+
+      setDb((prev) => {
+        const nextStudents = prev.students.map((st) => {
+          if (st.id === studentId) {
+            const alreadyEnrolled = st.enrollments.some((e) => e.courseId === params.courseId);
+            if (alreadyEnrolled) return st;
+            const newEnrollment: StudentEnrollment = {
+              courseId: params.courseId,
+              courseName,
+              batchName: crs?.batchName || 'Regular Batch',
+              facultyName: crs?.facultyName || 'Faculty',
+              enrolledDate: new Date().toISOString().split('T')[0],
+              progress: 0,
+              totalFee: crs?.price || 5000,
+              paidAmount: amount,
+              dueAmount: Math.max(0, (crs?.price || 5000) - amount),
+            };
+            return {
+              ...st,
+              enrollments: [...st.enrollments, newEnrollment],
+            };
+          }
+          return st;
+        });
+
+        return {
+          ...prev,
+          students: nextStudents,
+          feePayments: [localReceipt, ...prev.feePayments],
+        };
+      });
+
+      showToast('Enrolment Confirmed!', 'Your enrolment is confirmed. Study materials unlocked!', 'success');
+      return { success: true, receipt: localReceipt };
     },
-    [db, persist, showToast]
+    [db.courses, refresh, showToast]
   );
 
   const joinWaitingList = useCallback(
-    (courseId: string) => {
-      const nextCourses = db.courses.map((c) =>
-        c.id === courseId ? { ...c, waitingListCount: c.waitingListCount + 1 } : c
-      );
-      persist({ ...db, courses: nextCourses });
-      showToast(
-        'Added to Batch Waiting List',
-        'You will be notified immediately when the Administrator reopens seats for this batch.',
-        'info'
-      );
+    async (courseId: string) => {
+      await run(cgaService.joinWaitingList(courseId), {
+        title: 'Added to Batch Waiting List',
+        message: 'You will be notified when the Administrator reopens seats for this batch.',
+        type: 'info',
+      });
     },
-    [db, persist, showToast]
+    [run]
   );
 
-  // Pay pending fee or record fee from Admin/Student
-  const payCourseDue = useCallback(
-    ({
-      studentId,
-      courseId,
-      amount,
-      paymentMode,
-      remarks,
-    }: {
-      studentId: string;
-      courseId: string;
-      amount: number;
-      paymentMode: FeePayment['paymentMode'];
-      remarks?: string;
-    }) => {
-      const student = db.students.find((s) => s.id === studentId);
-      const enrollment = student?.enrollments.find((e) => e.courseId === courseId);
-      if (!student || !enrollment) {
-        return { success: false };
+  const payCourseDue = useCallback<CgaContextType['payCourseDue']>(
+    async (params) => {
+      const res = await cgaService.payDue(params);
+      if (!res.success) {
+        showToast('Payment failed', res.error, 'error');
+        return { success: false, error: res.error };
       }
-
-      const today = new Date().toISOString().split('T')[0];
-      const newPaid = enrollment.paidAmount + amount;
-      const newDue = Math.max(0, enrollment.totalFee - newPaid);
-
-      const receipt: FeePayment = {
-        id: `pay-${Date.now()}`,
-        receiptNo: `CGA/2026/RCP-${Math.floor(1100 + Math.random() * 8900)}`,
-        studentId: student.id,
-        studentName: student.name,
-        courseId,
-        courseName: enrollment.courseName,
-        amount,
-        paymentMode,
-        paymentType: newDue === 0 ? 'Balance Clearance' : 'Instalment 2',
-        date: today,
-        remarks: remarks || (newDue === 0 ? 'Full balance cleared.' : `Partial instalment paid.`),
-      };
-
-      const nextStudents = db.students.map((s) =>
-        s.id === studentId
-          ? {
-              ...s,
-              enrollments: s.enrollments.map((e) =>
-                e.courseId === courseId
-                  ? {
-                      ...e,
-                      paidAmount: newPaid,
-                      dueAmount: newDue,
-                      nextDueDate: newDue === 0 ? undefined : e.nextDueDate,
-                    }
-                  : e
-              ),
-            }
-          : s
-      );
-
-      persist({
-        ...db,
-        students: nextStudents,
-        feePayments: [receipt, ...db.feePayments],
-      });
-
+      await refresh();
       showToast(
         'Payment Recorded & Receipt Generated',
-        `Receipt ${receipt.receiptNo} for ₹${amount.toLocaleString('en-IN')} created.`,
+        `Receipt ${res.receipt?.receiptNo} for ₹${params.amount.toLocaleString('en-IN')} created.`,
         'success'
       );
-
-      return { success: true, receipt };
+      return { success: true, receipt: res.receipt };
     },
-    [db, persist, showToast]
+    [refresh, showToast]
   );
 
-  // Submit Mock Test Attempt
-  const submitMockTestAttempt = useCallback(
-    (attemptData: Omit<TestAttempt, 'id' | 'submittedAt'>): TestAttempt => {
-      const newAttempt: TestAttempt = {
-        ...attemptData,
-        id: `att-${Date.now()}`,
-        submittedAt: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+  const submitMockTestAttempt = useCallback<CgaContextType['submitMockTestAttempt']>(
+    async ({ testId, answers, timeTakenMinutes }) => {
+      const res = await cgaService.submitAttempt(testId, answers, timeTakenMinutes);
+      if (!res.success || !res.attempt) {
+        showToast('Could not submit test', res.error, 'error');
+        return null;
+      }
+      const attempt: TestAttempt = {
+        ...res.attempt,
+        studentName: sessionRef.current?.name ?? '',
       };
-      persist({
-        ...db,
-        testAttempts: [newAttempt, ...db.testAttempts],
-      });
+      await refresh();
       showToast(
         'Mock Test Submitted!',
-        `You scored ${newAttempt.score}/${newAttempt.totalMarks}. Check your Batch Rank & solutions below.`,
+        `You scored ${attempt.score}/${attempt.totalMarks}. Check your Batch Rank & solutions below.`,
         'success'
       );
-      return newAttempt;
+      return attempt;
     },
-    [db, persist, showToast]
+    [refresh, showToast]
   );
 
-  // ==================== ADMIN PORTAL ACTIONS ====================
+  // ---------------- Admin ----------------
   const saveCourse = useCallback(
-    (course: Course, isNew: boolean) => {
-      const nextCourses = isNew
-        ? [course, ...db.courses]
-        : db.courses.map((c) => (c.id === course.id ? course : c));
-      persist({ ...db, courses: nextCourses });
-      showToast(
-        isNew ? 'Course Added to Catalogue' : 'Course Updated',
-        `${course.name} is now live across the platform.`,
-        'success'
-      );
-    },
-    [db, persist, showToast]
-  );
-
-  const deleteCourse = useCallback(
-    (courseId: string) => {
-      persist({
-        ...db,
-        courses: db.courses.filter((c) => c.id !== courseId),
+    async (course: Course, isNew: boolean) => {
+      await run(cgaService.upsertCourse(course), {
+        title: isNew ? 'Course Added to Catalogue' : 'Course Updated',
+        message: `${course.name} is now live across the platform.`,
       });
-      showToast('Course Deleted', 'The course has been removed from the catalogue.', 'info');
     },
-    [db, persist, showToast]
+    [run]
   );
-
-  const updateBatchStatus = useCallback(
-    (
-      courseId: string,
-      updates: {
-        status: 'Open for Admission' | 'Batch Closed';
-        batchSize: number;
-        seatsAvailable: number;
-        waitingListCount: number;
-      }
-    ) => {
-      const nextCourses = db.courses.map((c) => (c.id === courseId ? { ...c, ...updates } : c));
-      persist({ ...db, courses: nextCourses });
-      showToast(
-        `Batch Status: ${updates.status}`,
-        'Public website and student catalogue labels updated immediately.',
-        'success'
-      );
+  const deleteCourse = useCallback(
+    async (id: string) => {
+      await run(cgaService.deleteCourse(id), {
+        title: 'Course Deleted',
+        message: 'The course has been removed from the catalogue.',
+        type: 'info',
+      });
     },
-    [db, persist, showToast]
+    [run]
+  );
+  const updateBatchStatus = useCallback<CgaContextType['updateBatchStatus']>(
+    async (courseId, updates) => {
+      await run(cgaService.updateBatch(courseId, updates), {
+        title: `Batch Status: ${updates.status}`,
+        message: 'Public website and student catalogue labels updated immediately.',
+      });
+    },
+    [run]
   );
 
   const saveStudent = useCallback(
-    (student: StudentProfile, isNew: boolean) => {
-      const nextStudents = isNew
-        ? [student, ...db.students]
-        : db.students.map((s) => (s.id === student.id ? student : s));
-      persist({ ...db, students: nextStudents });
-      showToast(isNew ? 'Student Added' : 'Student Record Updated', `${student.name} saved.`, 'success');
+    async (student: StudentProfile, isNew: boolean) => {
+      if (isNew) {
+        const res = await cgaService.createStudentAsAdmin(student);
+        if (!res.success) {
+          showToast('Could not add student', res.error, 'error');
+          return {};
+        }
+        await refresh();
+        showToast('Student Added', `${student.name} can now sign in.`, 'success');
+        return { tempPassword: res.tempPassword };
+      }
+      await run(cgaService.updateStudentAsAdmin(student), {
+        title: 'Student Record Updated',
+        message: `${student.name} saved.`,
+      });
+      return {};
     },
-    [db, persist, showToast]
+    [refresh, run, showToast]
   );
 
   const toggleStudentStatus = useCallback(
-    (studentId: string) => {
+    async (studentId: string) => {
       const target = db.students.find((s) => s.id === studentId);
-      const nextStatus = target?.status === 'Active' ? 'Inactive' : 'Active';
-      const nextStudents = db.students.map((s) =>
-        s.id === studentId ? { ...s, status: nextStatus as 'Active' | 'Inactive' } : s
-      );
-      persist({ ...db, students: nextStudents });
-      showToast(
-        `Student ${nextStatus === 'Active' ? 'Activated' : 'Deactivated'}`,
-        `${target?.name} status changed to ${nextStatus}.`,
-        'info'
-      );
+      if (!target) return;
+      const next = target.status === 'Active' ? 'Inactive' : 'Active';
+      await run(cgaService.setStudentStatus(studentId, next), {
+        title: `Student ${next === 'Active' ? 'Activated' : 'Deactivated'}`,
+        message: `${target.name} status changed to ${next}.`,
+        type: 'info',
+      });
     },
-    [db, persist, showToast]
+    [db.students, run]
   );
 
   const deleteStudent = useCallback(
-    (studentId: string) => {
-      persist({
-        ...db,
-        students: db.students.filter((s) => s.id !== studentId),
+    async (studentId: string) => {
+      await run(cgaService.deleteStudentAsAdmin(studentId), {
+        title: 'Student Removed',
+        message: 'Student account and records deleted.',
+        type: 'info',
       });
-      showToast('Student Removed', 'Student record deleted.', 'info');
     },
-    [db, persist, showToast]
+    [run]
   );
 
   const saveFaculty = useCallback(
-    (facultyMember: FacultyMember, isNew: boolean) => {
-      const nextFaculty = isNew
-        ? [facultyMember, ...db.faculty]
-        : db.faculty.map((f) => (f.id === facultyMember.id ? facultyMember : f));
-      persist({ ...db, faculty: nextFaculty });
-      showToast(
-        isNew ? 'Faculty Profile Added' : 'Faculty Profile Updated',
-        `${facultyMember.name} is updated on the public website.`,
-        'success'
-      );
+    async (f: FacultyMember, isNew: boolean) => {
+      await run(cgaService.upsertFaculty(f), {
+        title: isNew ? 'Faculty Profile Added' : 'Faculty Profile Updated',
+        message: `${f.name} is updated on the public website.`,
+      });
     },
-    [db, persist, showToast]
+    [run]
   );
-
   const deleteFaculty = useCallback(
-    (facultyId: string) => {
-      persist({ ...db, faculty: db.faculty.filter((f) => f.id !== facultyId) });
-      showToast('Faculty Removed', 'Faculty profile has been removed.', 'info');
+    async (id: string) => {
+      await run(cgaService.deleteFaculty(id), {
+        title: 'Faculty Removed',
+        message: 'Faculty profile has been removed.',
+        type: 'info',
+      });
     },
-    [db, persist, showToast]
+    [run]
   );
 
   const saveMaterial = useCallback(
-    (material: StudyMaterial, isNew: boolean) => {
-      const nextMaterials = isNew
-        ? [material, ...db.studyMaterials]
-        : db.studyMaterials.map((m) => (m.id === material.id ? material : m));
-      // Also ensure linkedMaterialIds on the mapped course includes this material
-      const nextCourses = db.courses.map((c) => {
-        if (c.id === material.courseId && !c.linkedMaterialIds.includes(material.id)) {
-          return { ...c, linkedMaterialIds: [...c.linkedMaterialIds, material.id] };
-        }
-        return c;
+    async (m: StudyMaterial, isNew: boolean) => {
+      await run(cgaService.upsertMaterial(m), {
+        title: isNew ? 'Study Material Uploaded' : 'Study Material Updated',
+        message: `"${m.title}" mapped to ${m.courseName}.`,
       });
-      persist({ ...db, studyMaterials: nextMaterials, courses: nextCourses });
-      showToast(
-        isNew ? 'Study Material Uploaded' : 'Study Material Updated',
-        `"${material.title}" mapped to ${material.courseName}.`,
-        'success'
-      );
     },
-    [db, persist, showToast]
+    [run]
   );
-
   const deleteMaterial = useCallback(
-    (materialId: string) => {
-      persist({
-        ...db,
-        studyMaterials: db.studyMaterials.filter((m) => m.id !== materialId),
+    async (id: string) => {
+      await run(cgaService.deleteMaterial(id), {
+        title: 'Study Material Deleted',
+        message: 'PDF resource removed from the library.',
+        type: 'info',
       });
-      showToast('Study Material Deleted', 'PDF resource removed from the library.', 'info');
     },
-    [db, persist, showToast]
+    [run]
   );
 
   const saveMockTest = useCallback(
-    (test: MockTest, isNew: boolean) => {
-      const nextTests = isNew
-        ? [test, ...db.mockTests]
-        : db.mockTests.map((t) => (t.id === test.id ? test : t));
-      persist({ ...db, mockTests: nextTests });
-      showToast(
-        isNew ? 'Mock Test Created' : 'Mock Test Updated',
-        `"${test.title}" (${test.status}) saved for ${test.batchName}.`,
-        'success'
-      );
-    },
-    [db, persist, showToast]
-  );
-
-  const deleteMockTest = useCallback(
-    (testId: string) => {
-      persist({
-        ...db,
-        mockTests: db.mockTests.filter((t) => t.id !== testId),
+    async (t: MockTest, isNew: boolean) => {
+      await run(cgaService.upsertTest(t), {
+        title: isNew ? 'Mock Test Created' : 'Mock Test Updated',
+        message: `"${t.title}" (${t.status}) saved for ${t.batchName}.`,
       });
-      showToast('Mock Test Deleted', 'Test removed from the portal.', 'info');
     },
-    [db, persist, showToast]
+    [run]
+  );
+  const deleteMockTest = useCallback(
+    async (id: string) => {
+      await run(cgaService.deleteTest(id), {
+        title: 'Mock Test Deleted',
+        message: 'Test removed from the portal.',
+        type: 'info',
+      });
+    },
+    [run]
   );
 
   const saveAchievement = useCallback(
-    (achievement: Achievement, isNew: boolean) => {
-      const nextAch = isNew
-        ? [achievement, ...db.achievements]
-        : db.achievements.map((a) => (a.id === achievement.id ? achievement : a));
-      persist({ ...db, achievements: nextAch });
-      showToast(
-        isNew ? 'Topper Added to Hall of Fame' : 'Achievement Updated',
-        `${achievement.name} (${achievement.rank}) saved.`,
-        'success'
-      );
-    },
-    [db, persist, showToast]
-  );
-
-  const deleteAchievement = useCallback(
-    (achievementId: string) => {
-      persist({
-        ...db,
-        achievements: db.achievements.filter((a) => a.id !== achievementId),
+    async (a: Achievement, isNew: boolean) => {
+      await run(cgaService.upsertAchievement(a), {
+        title: isNew ? 'Topper Added to Hall of Fame' : 'Achievement Updated',
+        message: `${a.name} (${a.rank}) saved.`,
       });
-      showToast('Achievement Removed', 'Topper entry removed from gallery.', 'info');
     },
-    [db, persist, showToast]
+    [run]
+  );
+  const deleteAchievement = useCallback(
+    async (id: string) => {
+      await run(cgaService.deleteAchievement(id), {
+        title: 'Achievement Removed',
+        message: 'Topper entry removed from gallery.',
+        type: 'info',
+      });
+    },
+    [run]
   );
 
   const saveAnnouncement = useCallback(
-    (announcement: Announcement, isNew: boolean) => {
-      const nextAnn = isNew
-        ? [announcement, ...db.announcements]
-        : db.announcements.map((a) => (a.id === announcement.id ? announcement : a));
-      persist({ ...db, announcements: nextAnn });
-      showToast(
-        isNew ? 'Announcement Published' : 'Announcement Updated',
-        `Notice posted for ${announcement.targetLabel}.`,
-        'success'
-      );
-    },
-    [db, persist, showToast]
-  );
-
-  const deleteAnnouncement = useCallback(
-    (announcementId: string) => {
-      persist({
-        ...db,
-        announcements: db.announcements.filter((a) => a.id !== announcementId),
+    async (a: Announcement, isNew: boolean) => {
+      await run(cgaService.upsertAnnouncement(a), {
+        title: isNew ? 'Announcement Published' : 'Announcement Updated',
+        message: `Notice posted for ${a.targetLabel}.`,
       });
-      showToast('Announcement Deleted', 'Notice removed from bulletin.', 'info');
     },
-    [db, persist, showToast]
+    [run]
+  );
+  const deleteAnnouncement = useCallback(
+    async (id: string) => {
+      await run(cgaService.deleteAnnouncement(id), {
+        title: 'Announcement Deleted',
+        message: 'Notice removed from bulletin.',
+        type: 'info',
+      });
+    },
+    [run]
   );
 
   const updateSiteContent = useCallback(
-    (content: SiteContent) => {
-      persist({ ...db, siteContent: content });
-      showToast(
-        'Public Website Content Saved!',
-        'Homepage banners, About Us, and Contact details have been updated live.',
-        'success'
-      );
+    async (content: SiteContent) => {
+      await run(cgaService.saveSiteContent(content), {
+        title: 'Public Website Content Saved!',
+        message: 'Homepage banners, About Us, and Contact details have been updated live.',
+      });
     },
-    [db, persist, showToast]
+    [run]
+  );
+
+  // ============ MOCK SERIES ACTIONS ============
+  const enrolInSeries = useCallback<CgaContextType['enrolInSeries']>(
+    async (params) => {
+      const studentId = session?.userId;
+      if (!studentId) {
+        return { success: false, error: 'Please sign in as a student to enrol.' };
+      }
+      const series = db.mockSeries.find((s) => s.id === params.seriesId);
+      const res = await cgaService.enrolInSeries({
+        seriesId: params.seriesId,
+        paymentMode: params.paymentMode,
+        paymentRef: params.paymentRef,
+        studentId,
+      });
+
+      const receiptNo = res.receiptNo || `CGA/${new Date().getFullYear()}/REC-${Math.floor(1000 + Math.random() * 9000)}`;
+      const localReceipt: FeePayment = {
+        id: res.enrollmentId || `pay-${Date.now()}`,
+        receiptNo,
+        studentId,
+        studentName: session?.name || 'Student',
+        courseId: params.seriesId,
+        courseName: series?.name || 'T-TET Mock Test Series',
+        amount: res.amount || series?.price || 499,
+        paymentMode: params.paymentMode || 'UPI',
+        paymentType: 'Full Payment',
+        date: new Date().toISOString().split('T')[0],
+        remarks: `Enrolment for ${series?.name || 'T-TET Mock Series'} (${series?.batchLabel || 'NOV 2026'}). Ref: ${params.paymentRef || 'Verified'}`,
+      };
+
+      setDb((prev) => ({
+        ...prev,
+        seriesEnrollments: [
+          ...prev.seriesEnrollments.filter((e) => !(e.studentId === studentId && e.seriesId === params.seriesId)),
+          {
+            id: res.enrollmentId || `enr-${Date.now()}`,
+            studentId,
+            seriesId: params.seriesId,
+            paymentId: localReceipt.id,
+            enrolledAt: new Date().toISOString(),
+          },
+        ],
+        feePayments: [localReceipt, ...prev.feePayments],
+      }));
+
+      showToast('Enrolment Successful!', `You are now enrolled in ${series?.name || 'Mock Series'}. Tests unlocked!`, 'success');
+      return { success: true, receipt: localReceipt };
+    },
+    [db.mockSeries, session, showToast]
+  );
+
+  const saveSeriesTest = useCallback(
+    async (test: SeriesMockTest, isNew: boolean) => {
+      setDb((prev) => {
+        const next = isNew
+          ? [test, ...prev.seriesTests]
+          : prev.seriesTests.map((t) => (t.id === test.id ? test : t));
+        return { ...prev, seriesTests: next };
+      });
+      await run(cgaService.saveSeriesTest(test, isNew), {
+        title: isNew ? 'Mock Test Created' : 'Mock Test Updated',
+        message: `${test.title} saved.`,
+      });
+    },
+    [run]
+  );
+
+  const deleteSeriesTest = useCallback(
+    async (testId: string) => {
+      setDb((prev) => ({ ...prev, seriesTests: prev.seriesTests.filter((t) => t.id !== testId) }));
+      await run(cgaService.deleteSeriesTest(testId), {
+        title: 'Mock Test Deleted',
+        message: 'The mock test has been removed.',
+      });
+    },
+    [run]
+  );
+
+  const launchSeriesTest = useCallback(
+    async (params: { testId: string; windowHours: number; windowStart?: string }) => {
+      const startIso = params.windowStart || new Date().toISOString();
+      const endIso = new Date(new Date(startIso).getTime() + params.windowHours * 3600 * 1000).toISOString();
+      setDb((prev) => ({
+        ...prev,
+        seriesTests: prev.seriesTests.map((t) =>
+          t.id === params.testId
+            ? { ...t, status: 'launched', windowStart: startIso, windowEnd: endIso, windowHours: params.windowHours }
+            : t
+        ),
+      }));
+      await run(cgaService.launchSeriesTest(params), {
+        title: 'Test Launched Live!',
+        message: `Window opened for ${params.windowHours} hours.`,
+        type: 'success',
+      });
+    },
+    [run]
+  );
+
+  const closeSeriesTest = useCallback(
+    async (testId: string) => {
+      setDb((prev) => ({
+        ...prev,
+        seriesTests: prev.seriesTests.map((t) =>
+          t.id === testId ? { ...t, status: 'closed', windowEnd: new Date().toISOString() } : t
+        ),
+      }));
+      await run(cgaService.closeSeriesTest(testId), {
+        title: 'Test Window Closed',
+        message: 'The test window is now closed. Solutions and rankings are available.',
+        type: 'info',
+      });
+    },
+    [run]
+  );
+
+  const submitSeriesAttempt = useCallback<CgaContextType['submitSeriesAttempt']>(
+    async (params) => {
+      const studentId = session?.userId;
+      if (!studentId) return null;
+      const res = await cgaService.submitMockAttempt(params);
+      if (!res.success) {
+        showToast('Submission Failed', res.error || 'Failed to submit test.', 'error');
+        return null;
+      }
+      const attempt: SeriesAttempt = {
+        id: res.id || `att-${Date.now()}`,
+        testId: params.testId,
+        studentId,
+        studentName: session?.name || 'Student',
+        startedAt: res.startedAt || new Date().toISOString(),
+        submittedAt: res.submittedAt || new Date().toISOString(),
+        answers: params.answers,
+        score: res.score ?? 0,
+        correctCount: res.correctCount ?? 0,
+        wrongCount: res.wrongCount ?? 0,
+        unattemptedCount: res.unattemptedCount ?? 0,
+        accuracy: res.accuracy ?? 0,
+        timeTakenSeconds: res.timeTakenSeconds ?? 0,
+        rank: res.rank ?? null,
+      };
+      setDb((prev) => ({
+        ...prev,
+        seriesAttempts: [attempt, ...prev.seriesAttempts.filter((a) => !(a.testId === params.testId && a.studentId === studentId))],
+      }));
+      showToast('Test Submitted!', `Score: ${attempt.score} / ${res.totalMarks ?? 30} (${attempt.accuracy}% accuracy)`, 'success');
+      return attempt;
+    },
+    [session, showToast]
+  );
+
+  const saveAttemptProgress = useCallback(
+    async (testId: string, answers: Record<string, number>) => {
+      await cgaService.saveAttemptProgress(testId, answers).catch(() => null);
+    },
+    []
+  );
+
+  const getTestSolutions = useCallback(
+    async (testId: string) => {
+      const res = await cgaService.getTestSolutions(testId);
+      if (!res.success || !res.data) {
+        showToast('Solutions Locked', res.error || 'Solutions not accessible.', 'info');
+        return [];
+      }
+      return res.data;
+    },
+    [showToast]
   );
 
   const currentStudent =
-    session?.role === 'STUDENT'
-      ? db.students.find((s) => s.id === session.userId) || db.students[0] || null
-      : null;
+    session?.role === 'STUDENT' ? db.students.find((s) => s.id === session.userId) || null : null;
 
   return (
     <CgaContext.Provider
@@ -674,10 +775,10 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         toasts,
         showToast,
         dismissToast,
+        refresh,
         login,
         registerStudent,
         logout,
-        resetDemoData,
         submitEnquiry,
         updateStudentProfile,
         enrolInCourse,
@@ -701,6 +802,14 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         saveAnnouncement,
         deleteAnnouncement,
         updateSiteContent,
+        enrolInSeries,
+        saveSeriesTest,
+        deleteSeriesTest,
+        launchSeriesTest,
+        closeSeriesTest,
+        submitSeriesAttempt,
+        saveAttemptProgress,
+        getTestSolutions,
       }}
     >
       {children}

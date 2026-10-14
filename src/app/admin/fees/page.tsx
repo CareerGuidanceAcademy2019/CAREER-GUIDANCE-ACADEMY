@@ -47,10 +47,10 @@ export default function AdminFeesPage() {
     return matchCourse && matchDefaulter;
   });
 
-  const handleRecordPayment = (e: React.FormEvent) => {
+  const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!recordTarget || payAmount <= 0) return;
-    const res = payCourseDue({
+    const res = await payCourseDue({
       studentId: recordTarget.studentId,
       courseId: recordTarget.courseId,
       amount: payAmount,

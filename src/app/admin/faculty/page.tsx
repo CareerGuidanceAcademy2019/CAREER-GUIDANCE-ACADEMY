@@ -17,6 +17,7 @@ export default function AdminFacultyPage() {
     setEditing({
       id: `fac-${Date.now()}`,
       name: '',
+      designation: 'Assistant Teacher',
       subject: '',
       qualification: 'M.A. / M.Sc., B.Ed., NET',
       experience: '8 Years Experience',
@@ -53,55 +54,72 @@ export default function AdminFacultyPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {db.faculty.map((member) => (
-          <div
-            key={member.id}
-            className="bg-white rounded-3xl border border-slate-200 p-6 shadow-2xs flex flex-col justify-between space-y-4"
-          >
-            <div className="space-y-3">
-              <div className="flex items-start gap-4">
-                <img
-                  src={member.photo}
-                  alt={member.name}
-                  className="w-16 h-16 rounded-2xl object-cover shrink-0 border border-slate-200"
-                />
-                <div>
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 text-[#0056b3] text-[11px] font-bold">
-                    <Briefcase className="w-3 h-3" /> {member.experience}
-                  </span>
-                  <h2 className="text-base font-extrabold text-[#0a0e2a] mt-1">{member.name}</h2>
-                  <p className="text-xs font-bold text-[#ea580c]">{member.subject}</p>
+      {db.faculty.length === 0 ? (
+        <div className="text-center py-16 bg-white rounded-3xl border border-dashed border-slate-300 p-8">
+          <Briefcase className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+          <h3 className="text-lg font-bold text-slate-700">No Faculty Members Added</h3>
+          <p className="text-sm text-slate-500 mt-1">
+            Click &quot;Add Faculty Member&quot; above to create a profile.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {db.faculty.map((member) => (
+            <div
+              key={member.id}
+              className="bg-white rounded-3xl border border-slate-200 p-6 shadow-2xs flex flex-col justify-between space-y-4"
+            >
+              <div className="space-y-3">
+                <div className="flex items-start gap-4">
+                  <img
+                    src={member.photo}
+                    alt={member.name}
+                    className="w-16 h-16 rounded-2xl object-cover shrink-0 border border-slate-200"
+                  />
+                  <div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {member.designation && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200 text-[10px] font-extrabold uppercase">
+                          {member.designation}
+                        </span>
+                      )}
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 text-[#0056b3] text-[11px] font-bold">
+                        <Briefcase className="w-3 h-3" /> {member.experience}
+                      </span>
+                    </div>
+                    <h2 className="text-base font-extrabold text-[#0a0e2a] mt-1">{member.name}</h2>
+                    <p className="text-xs font-bold text-[#ea580c]">{member.subject}</p>
+                  </div>
                 </div>
+                <p className="text-xs font-semibold text-slate-700 bg-slate-50 p-2.5 rounded-xl">
+                  {member.qualification}
+                </p>
+                <p className="text-xs text-slate-600 leading-relaxed">{member.bio}</p>
               </div>
-              <p className="text-xs font-semibold text-slate-700 bg-slate-50 p-2.5 rounded-xl">
-                {member.qualification}
-              </p>
-              <p className="text-xs text-slate-600 leading-relaxed">{member.bio}</p>
-            </div>
 
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsNew(false);
-                  setEditing({ ...member });
-                }}
-                className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
-              >
-                <Edit3 className="w-3.5 h-3.5" /> Edit
-              </button>
-              <button
-                type="button"
-                onClick={() => setDeleteTarget(member)}
-                className="px-3 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-[#dc2626] text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
-              >
-                <Trash2 className="w-3.5 h-3.5" /> Remove
-              </button>
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsNew(false);
+                    setEditing({ ...member });
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
+                >
+                  <Edit3 className="w-3.5 h-3.5" /> Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeleteTarget(member)}
+                  className="px-3 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-[#dc2626] text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Remove
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {editing && (
         <div
@@ -137,15 +155,27 @@ export default function AdminFacultyPage() {
                   className="w-full px-3.5 py-2 rounded-xl border border-slate-200"
                 />
               </div>
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Subject Specialization *</label>
-                <input
-                  type="text"
-                  required
-                  value={editing.subject}
-                  onChange={(e) => setEditing({ ...editing, subject: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Designation</label>
+                  <input
+                    type="text"
+                    value={editing.designation || ''}
+                    onChange={(e) => setEditing({ ...editing, designation: e.target.value })}
+                    placeholder="e.g. Principal, Assistant Teacher"
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Subject Specialization *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editing.subject}
+                    onChange={(e) => setEditing({ ...editing, subject: e.target.value })}
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200"
+                  />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

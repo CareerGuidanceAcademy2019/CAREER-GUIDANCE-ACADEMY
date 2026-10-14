@@ -21,10 +21,10 @@ export default function StudentFeesPage() {
   const myPayments = db.feePayments.filter((p) => p.studentId === currentStudent.id);
   const activePayEnrollment = currentStudent.enrollments.find((e) => e.courseId === payingCourseId);
 
-  const handlePayBalance = (e: React.FormEvent) => {
+  const handlePayBalance = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activePayEnrollment) return;
-    const res = payCourseDue({
+    const res = await payCourseDue({
       studentId: currentStudent.id,
       courseId: activePayEnrollment.courseId,
       amount: activePayEnrollment.dueAmount,

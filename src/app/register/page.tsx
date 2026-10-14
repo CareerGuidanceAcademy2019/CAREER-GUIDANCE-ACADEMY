@@ -22,8 +22,10 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [confirmEmailSent, setConfirmEmailSent] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -39,8 +41,8 @@ export default function RegisterPage() {
       setError('Please enter a valid 10-digit mobile number.');
       return;
     }
-    if (!password || password.length < 6) {
-      setError('Password must be at least 6 characters long.');
+    if (!password || password.length < 8) {
+      setError('Password must be at least 8 characters long.');
       return;
     }
     if (password !== confirmPassword) {
@@ -48,7 +50,8 @@ export default function RegisterPage() {
       return;
     }
 
-    const res = registerStudent({
+    setBusy(true);
+    const res = await registerStudent({
       name,
       email,
       phone,
@@ -58,14 +61,44 @@ export default function RegisterPage() {
       qualification,
       targetExam,
     });
+    setBusy(false);
 
     if (!res.success) {
       setError(res.error || 'Could not register account.');
       return;
     }
 
+    if (res.needsEmailConfirmation) {
+      setConfirmEmailSent(true);
+      return;
+    }
     router.push('/student/dashboard');
   };
+
+  if (confirmEmailSent) {
+    return (
+      <div className="min-h-screen flex flex-col bg-slate-50">
+        <PublicHeader />
+        <main className="flex-1 flex items-center justify-center py-12 px-4">
+          <div className="max-w-md w-full bg-white rounded-3xl shadow-xl border border-slate-200 p-8 text-center space-y-4">
+            <CheckCircle2 className="w-12 h-12 text-emerald-600 mx-auto" />
+            <h1 className="text-xl font-extrabold text-[#0a0e2a]">Confirm your email</h1>
+            <p className="text-sm text-slate-600">
+              We sent a confirmation link to <strong>{email}</strong>. Open it to activate your
+              account, then sign in.
+            </p>
+            <Link
+              href="/login"
+              className="inline-block w-full py-3 rounded-xl bg-[#0056b3] text-white font-bold text-sm"
+            >
+              Go to Login
+            </Link>
+          </div>
+        </main>
+        <PublicFooter />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">

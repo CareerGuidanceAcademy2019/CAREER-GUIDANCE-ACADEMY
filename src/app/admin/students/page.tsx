@@ -94,7 +94,7 @@ export default function AdminStudentsPage() {
       name: '',
       email: '',
       phone: '+91 ',
-      password: 'password123',
+      password: '',
       photo:
         'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80',
       guardianName: '',
@@ -107,11 +107,17 @@ export default function AdminStudentsPage() {
     });
   };
 
-  const handleSaveStudentForm = (e: React.FormEvent) => {
+  const handleSaveStudentForm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingStudent || !editingStudent.name.trim() || !editingStudent.email.trim()) return;
-    saveStudent(editingStudent, isNewStudent);
+    const result = await saveStudent(editingStudent, isNewStudent);
     setEditingStudent(null);
+    if (result.tempPassword) {
+      window.prompt(
+        `Account created for ${editingStudent.email}.\nShare this ONE-TIME temporary password securely (copy it now; it is not shown again). The student should change it via "Forgot Password".`,
+        result.tempPassword
+      );
+    }
   };
 
   return (
@@ -402,6 +408,24 @@ export default function AdminStudentsPage() {
                     ))}
                 </div>
               )}
+            </div>
+
+            {/* Permanent Candidate Purge Action */}
+            <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+              <span className="text-[11px] text-slate-400 font-semibold">
+                Permanent database removal
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  const target = inspectingStudent;
+                  setInspectingStudent(null);
+                  setDeleteTarget(target);
+                }}
+                className="px-3.5 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-[#dc2626] font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Remove Candidate & All Information
+              </button>
             </div>
           </div>
         </div>

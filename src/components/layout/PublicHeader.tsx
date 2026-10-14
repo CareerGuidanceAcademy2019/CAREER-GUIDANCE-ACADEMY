@@ -28,7 +28,7 @@ const NAV_LINKS = [
 
 export function PublicHeader() {
   const pathname = usePathname();
-  const { db, session, logout, resetDemoData } = useCga();
+  const { db, session, logout } = useCga();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
@@ -56,15 +56,6 @@ export function PublicHeader() {
             <span className="hidden lg:inline-block px-2 py-0.5 rounded bg-[#dc2626] text-[11px] font-bold tracking-wide">
               {db.siteContent.heroBadge}
             </span>
-            <button
-              type="button"
-              onClick={resetDemoData}
-              title="Reset localStorage demo changes back to initial seed data"
-              className="inline-flex items-center gap-1 text-[11px] text-slate-300 hover:text-white bg-white/10 hover:bg-white/20 px-2.5 py-0.5 rounded transition-colors cursor-pointer"
-            >
-              <RotateCcw className="w-3 h-3" />
-              Reset Demo Data
-            </button>
           </div>
         </div>
       </div>

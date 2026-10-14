@@ -54,11 +54,22 @@ export function CourseCard({
       <div className="p-6 flex-1 flex flex-col">
         {/* Category & Status Header */}
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-          <span
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border whitespace-nowrap ${categoryColor}`}
-          >
-            {course.subCategory}
-          </span>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border whitespace-nowrap ${categoryColor}`}
+            >
+              {course.subCategory}
+            </span>
+            <span
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border whitespace-nowrap ${
+                course.mode === 'Online'
+                  ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                  : 'bg-amber-50 text-amber-800 border-amber-200'
+              }`}
+            >
+              {course.mode === 'Online' ? '💻 Online Live' : '🏫 Offline Classroom'}
+            </span>
+          </div>
 
           {isOpen ? (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap shrink-0">
@@ -84,9 +95,22 @@ export function CourseCard({
         </h3>
 
         {/* Description */}
-        <p className="text-sm text-slate-600 leading-relaxed mb-4 line-clamp-2">
+        <p className="text-sm text-slate-600 leading-relaxed mb-3 line-clamp-2">
           {course.description}
         </p>
+
+        {/* Material Delivery Notice */}
+        <div className="mb-3">
+          {course.mode === 'Offline' ? (
+            <div className="text-[11px] font-semibold text-emerald-800 bg-emerald-50/90 px-2.5 py-1.5 rounded-xl border border-emerald-200/80 flex items-center gap-1.5">
+              <span>🖨️ Physical printed booklets at Udaipur center + view-only softcopy</span>
+            </div>
+          ) : (
+            <div className="text-[11px] font-semibold text-blue-800 bg-blue-50/90 px-2.5 py-1.5 rounded-xl border border-blue-200/80 flex items-center gap-1.5">
+              <span>📖 Digital study material in secure View-Only Reader mode</span>
+            </div>
+          )}
+        </div>
 
         {/* Key Metadata Grid */}
         <div className="grid grid-cols-2 gap-2.5 bg-slate-50/90 rounded-xl p-3.5 border border-slate-100 text-xs mb-4 mt-auto">
@@ -168,18 +192,18 @@ export function CourseCard({
       {/* Price & CTA Footer */}
       <div className="px-6 py-4 bg-slate-50 border-t border-slate-200/80 flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <span className="text-[11px] uppercase tracking-wider font-semibold text-slate-400 block">
-            Course Fee
+          <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 block">
+            Admission & Monthly Fee
           </span>
           <div className="flex flex-wrap items-baseline gap-x-1.5">
-            <span className="text-xl font-extrabold text-[#0a0e2a] whitespace-nowrap">
+            <span className="text-lg font-extrabold text-[#0a0e2a] whitespace-nowrap">
               ₹{course.price.toLocaleString('en-IN')}
             </span>
-            {course.instalmentAvailable && (
-              <span className="text-[11px] font-medium text-[#0056b3] whitespace-nowrap">
-                (1st Inst: ₹{course.firstInstalment.toLocaleString('en-IN')})
+            {course.monthlyFee ? (
+              <span className="text-xs font-bold text-[#0056b3] whitespace-nowrap">
+                + ₹{course.monthlyFee.toLocaleString('en-IN')}/mo
               </span>
-            )}
+            ) : null}
           </div>
         </div>
 
