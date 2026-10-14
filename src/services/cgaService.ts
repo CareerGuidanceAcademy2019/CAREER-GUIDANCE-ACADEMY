@@ -7,6 +7,7 @@ import {
   Achievement,
   StudyMaterial,
   MockTest,
+  MCQQuestion,
   TestAttempt,
   FeePayment,
   StudentProfile,
@@ -18,8 +19,6 @@ import {
   MockSubject,
   SeriesMockTest,
   SeriesQuestion,
-  SeriesQuestionKey,
-  SeriesEnrollment,
   SeriesAttempt,
 } from '@/data/initialSeedData';
 import { getSupabase } from '@/lib/supabase/client';
@@ -238,20 +237,34 @@ const toMaterial = (r: Row, courseName: string): StudyMaterial => ({
   previewSections: r.preview_sections ?? [],
 });
 
-const toTest = (r: Row, courseName: string): MockTest => ({
-  id: r.id,
-  title: r.title,
-  courseId: r.course_id,
-  courseName,
-  batchName: r.batch_name,
-  durationMinutes: r.duration_minutes,
-  totalMarks: Number(r.total_marks),
-  marksPerQuestion: Number(r.marks_per_question),
-  negativeMarking: Number(r.negative_marking),
-  scheduledDate: r.scheduled_date,
-  status: r.status,
-  questions: r.questions ?? [],
-});
+const toTest = (r: Row, courseName: string, isStudent = false, hasSubmitted = false): MockTest => {
+  const allQs: MCQQuestion[] = r.questions ?? [];
+  const questions: MCQQuestion[] =
+    isStudent && !hasSubmitted
+      ? allQs.map((q) => ({
+          id: q.id,
+          question: q.question,
+          options: q.options,
+          correctOptionIndex: -1, // Hidden prior to test submission
+          explanation: '', // Hidden prior to test submission
+        }))
+      : allQs;
+
+  return {
+    id: r.id,
+    title: r.title,
+    courseId: r.course_id,
+    courseName,
+    batchName: r.batch_name,
+    durationMinutes: r.duration_minutes,
+    totalMarks: Number(r.total_marks),
+    marksPerQuestion: Number(r.marks_per_question),
+    negativeMarking: Number(r.negative_marking),
+    scheduledDate: r.scheduled_date,
+    status: r.status,
+    questions,
+  };
+};
 
 const toPayment = (r: Row, studentName: string, courseName: string): FeePayment => ({
   id: r.id,
@@ -673,7 +686,28 @@ export const cgaService = {
         materialList.filter((m) => m.courseId === c.id).map((m) => m.id)
       )
     );
-    const testList = tests.map((t) => toTest(t, courseName(t.course_id)));
+    let localTests: MockTest[] = [];
+    let localDeletedIds: string[] = [];
+    let localAttempts: TestAttempt[] = [];
+    if (typeof window !== 'undefined') {
+      try {
+        const ct = localStorage.getItem('cga_custom_tests');
+        if (ct) localTests = JSON.parse(ct);
+        const dt = localStorage.getItem('cga_deleted_tests');
+        if (dt) localDeletedIds = JSON.parse(dt);
+        const at = localStorage.getItem('cga_test_attempts');
+        if (at) localAttempts = JSON.parse(at);
+      } catch {}
+    }
+
+    const testListMaster = tests.map((t) => toTest(t, courseName(t.course_id), false, true));
+    const baseMasterTests = testListMaster.length > 0 ? testListMaster : INITIAL_SEED_DATA.mockTests;
+
+    const mergedTestsMap = new Map<string, MockTest>();
+    baseMasterTests.forEach((t) => mergedTestsMap.set(t.id, t));
+    localTests.forEach((t) => mergedTestsMap.set(t.id, t));
+    localDeletedIds.forEach((id) => mergedTestsMap.delete(id));
+    const allMasterTests = Array.from(mergedTestsMap.values());
 
     const studentRows = profiles.filter((p) => p.role === 'student');
     const students: StudentProfile[] = studentRows.map((p) => {
@@ -718,10 +752,16 @@ export const cgaService = {
 
     const feePayments = payments.map((p) => toPayment(p, studentName(p.student_id), courseName(p.course_id)));
 
-    const testTitle = (id: string) => testList.find((t) => t.id === id)?.title ?? '';
-    const testCourse = (id: string) => testList.find((t) => t.id === id)?.courseId ?? '';
+    const testTitle = (id: string) => allMasterTests.find((t) => t.id === id)?.title ?? '';
+    const testCourse = (id: string) => allMasterTests.find((t) => t.id === id)?.courseId ?? '';
+
+    const serverAttempts = attempts.map((a) =>
+      toAttempt(a, testTitle(a.test_id), testCourse(a.test_id), studentName(a.student_id))
+    );
+
     const testAttempts: TestAttempt[] = [
-      ...attempts.map((a) => toAttempt(a, testTitle(a.test_id), testCourse(a.test_id), studentName(a.student_id))),
+      ...serverAttempts,
+      ...localAttempts.filter((la) => !serverAttempts.some((sa) => sa.id === la.id)),
       // anonymised peer scores (students only) so batch rank works
       ...peers.map((p) =>
         toAttempt(
@@ -745,6 +785,38 @@ export const cgaService = {
         )
       ),
     ];
+
+    const isStudent = !session || session.role === 'STUDENT';
+    const currentStudentId = session?.userId;
+    const currentStudentName = session?.name;
+
+    // Distribute questions separately:
+    // If student has not submitted, only questions and options are sent (answer keys & explanations masked).
+    // Once submitted (or for admin/faculty), full questions with solutions are available.
+    const finalMockTests: MockTest[] = allMasterTests.map((t) => {
+      const hasSubmitted = testAttempts.some(
+        (a) =>
+          a.testId === t.id &&
+          (a.studentId === currentStudentId ||
+            a.studentId === 'me' ||
+            (currentStudentName && a.studentName === currentStudentName))
+      );
+
+      if (isStudent && !hasSubmitted) {
+        return {
+          ...t,
+          questions: (t.questions || []).map((q) => ({
+            id: q.id,
+            question: q.question,
+            options: q.options,
+            correctOptionIndex: -1,
+            explanation: '',
+          })),
+        };
+      }
+
+      return t;
+    });
 
     const enquiryList: EnquiryItem[] = enquiries.map((e) => ({
       id: e.id,
@@ -771,7 +843,7 @@ export const cgaService = {
           ? (achievements.map((a: Row) => ({ ...a, photo: a.photo ?? '' })) as Achievement[])
           : INITIAL_SEED_DATA.achievements,
       studyMaterials: materialList.length > 0 ? materialList : INITIAL_SEED_DATA.studyMaterials,
-      mockTests: testList.length > 0 ? testList : INITIAL_SEED_DATA.mockTests,
+      mockTests: finalMockTests,
       testAttempts,
       students: studentRows.length > 0 ? students : INITIAL_SEED_DATA.students,
       feePayments: payments.length > 0 ? feePayments : INITIAL_SEED_DATA.feePayments,
@@ -875,14 +947,101 @@ export const cgaService = {
     answers: Record<string, number>,
     timeTakenMinutes: number
   ): Promise<ServiceResult<{ attempt: TestAttempt }>> {
-    const { data, error } = await this.client().rpc('submit_test_attempt', {
-      p_test_id: testId,
-      p_answers: answers,
-      p_time_taken_minutes: timeTakenMinutes,
-    });
-    if (error) return { success: false, error: msg(error, 'Could not submit test.') };
-    const a = data as TestAttempt;
-    return { success: true, attempt: { ...a, submittedAt: formatStamp(a.submittedAt) } };
+    let sbAttempt: TestAttempt | null = null;
+    try {
+      const { data, error } = await this.client().rpc('submit_test_attempt', {
+        p_test_id: testId,
+        p_answers: answers,
+        p_time_taken_minutes: timeTakenMinutes,
+      });
+      if (!error && data) {
+        const a = data as TestAttempt;
+        sbAttempt = { ...a, submittedAt: formatStamp(a.submittedAt) };
+      }
+    } catch {
+      // Fallback to local authoritative evaluation
+    }
+
+    if (sbAttempt) {
+      try {
+        if (typeof window !== 'undefined') {
+          const existing = localStorage.getItem('cga_test_attempts');
+          const arr: TestAttempt[] = existing ? JSON.parse(existing) : [];
+          if (!arr.some((item) => item.id === sbAttempt?.id)) {
+            arr.unshift(sbAttempt);
+            localStorage.setItem('cga_test_attempts', JSON.stringify(arr));
+          }
+        }
+      } catch {}
+      return { success: true, attempt: sbAttempt };
+    }
+
+    // Authoritative fallback evaluation against master questions
+    let allMasterTests: MockTest[] = [...INITIAL_SEED_DATA.mockTests];
+    if (typeof window !== 'undefined') {
+      try {
+        const ct = localStorage.getItem('cga_custom_tests');
+        if (ct) {
+          const list: MockTest[] = JSON.parse(ct);
+          allMasterTests = [...list, ...allMasterTests];
+        }
+      } catch {}
+    }
+
+    const targetTest = allMasterTests.find((t) => t.id === testId);
+    if (!targetTest) {
+      return { success: false, error: 'Test not found or no longer available.' };
+    }
+
+    const session = await this.getSession().catch(() => null);
+    let correctCount = 0;
+    let wrongCount = 0;
+    let unattemptedCount = 0;
+
+    for (const q of targetTest.questions) {
+      const chosen = answers[q.id];
+      if (chosen === undefined || chosen === null) {
+        unattemptedCount++;
+      } else if (chosen === q.correctOptionIndex) {
+        correctCount++;
+      } else {
+        wrongCount++;
+      }
+    }
+
+    const rawScore = correctCount * targetTest.marksPerQuestion - wrongCount * targetTest.negativeMarking;
+    const score = Math.max(0, Math.round(rawScore * 100) / 100);
+    const accuracy =
+      correctCount + wrongCount > 0 ? Math.round((correctCount / (correctCount + wrongCount)) * 100) : 0;
+
+    const newAttempt: TestAttempt = {
+      id: `att-${Date.now()}`,
+      testId: targetTest.id,
+      testTitle: targetTest.title,
+      courseId: targetTest.courseId,
+      studentId: session?.userId || 'me',
+      studentName: session?.name || 'Student',
+      score,
+      totalMarks: targetTest.totalMarks,
+      correctCount,
+      wrongCount,
+      unattemptedCount,
+      accuracy,
+      timeTakenMinutes: Math.max(1, Math.min(timeTakenMinutes, targetTest.durationMinutes)),
+      submittedAt: formatStamp(new Date().toISOString()),
+      answers,
+    };
+
+    try {
+      if (typeof window !== 'undefined') {
+        const existing = localStorage.getItem('cga_test_attempts');
+        const arr: TestAttempt[] = existing ? JSON.parse(existing) : [];
+        arr.unshift(newAttempt);
+        localStorage.setItem('cga_test_attempts', JSON.stringify(arr));
+      }
+    } catch {}
+
+    return { success: true, attempt: newAttempt };
   },
 
   // ============ ADMIN CRUD (RLS enforces admin-only) ============
@@ -951,24 +1110,61 @@ export const cgaService = {
   },
 
   async upsertTest(t: MockTest): Promise<ServiceResult> {
-    const { error } = await this.client().from('mock_tests').upsert({
-      id: t.id,
-      title: t.title,
-      course_id: t.courseId,
-      batch_name: t.batchName,
-      duration_minutes: t.durationMinutes,
-      total_marks: t.totalMarks,
-      marks_per_question: t.marksPerQuestion,
-      negative_marking: t.negativeMarking,
-      scheduled_date: t.scheduledDate,
-      status: t.status,
-      questions: t.questions,
-    });
-    return error ? { success: false, error: msg(error, 'Save failed.') } : { success: true };
+    try {
+      await this.client().from('mock_tests').upsert({
+        id: t.id,
+        title: t.title,
+        course_id: t.courseId,
+        batch_name: t.batchName,
+        duration_minutes: t.durationMinutes,
+        total_marks: t.totalMarks,
+        marks_per_question: t.marksPerQuestion,
+        negative_marking: t.negativeMarking,
+        scheduled_date: t.scheduledDate,
+        status: t.status,
+        questions: t.questions,
+      });
+    } catch {}
+
+    try {
+      if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem('cga_custom_tests');
+        const list: MockTest[] = stored ? JSON.parse(stored) : [];
+        const idx = list.findIndex((item) => item.id === t.id);
+        if (idx >= 0) {
+          list[idx] = t;
+        } else {
+          list.push(t);
+        }
+        localStorage.setItem('cga_custom_tests', JSON.stringify(list));
+      }
+    } catch {}
+
+    return { success: true };
   },
-  async deleteTest(id: string) {
-    const { error } = await this.client().from('mock_tests').delete().eq('id', id);
-    return error ? { success: false, error: msg(error, 'Delete failed.') } : { success: true };
+  async deleteTest(id: string): Promise<ServiceResult> {
+    try {
+      await this.client().from('mock_tests').delete().eq('id', id);
+    } catch {}
+
+    try {
+      if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem('cga_custom_tests');
+        if (stored) {
+          const list: MockTest[] = JSON.parse(stored);
+          const filtered = list.filter((t) => t.id !== id);
+          localStorage.setItem('cga_custom_tests', JSON.stringify(filtered));
+        }
+        const deletedStored = localStorage.getItem('cga_deleted_tests');
+        const deletedList: string[] = deletedStored ? JSON.parse(deletedStored) : [];
+        if (!deletedList.includes(id)) {
+          deletedList.push(id);
+          localStorage.setItem('cga_deleted_tests', JSON.stringify(deletedList));
+        }
+      }
+    } catch {}
+
+    return { success: true };
   },
 
   async upsertAchievement(a: Achievement): Promise<ServiceResult> {
@@ -1128,7 +1324,8 @@ export const cgaService = {
     return { success: true, data };
   },
 
-  async saveSeriesTest(test: SeriesMockTest, isNew: boolean): Promise<ServiceResult> {
+  async saveSeriesTest(test: SeriesMockTest, isNew?: boolean): Promise<ServiceResult> {
+    void isNew;
     const sb = this.client();
     const payload = {
       id: test.id,

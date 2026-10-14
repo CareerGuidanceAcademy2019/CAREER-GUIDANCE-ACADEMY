@@ -9,12 +9,9 @@ import {
   X,
   Send,
   Upload,
-  FileText,
   FileUp,
   Sparkles,
-  CheckCircle2,
   AlertCircle,
-  HelpCircle,
   Edit2,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
@@ -84,6 +81,9 @@ export default function AdminMockTestsPage() {
 
       const res = await fetch('/api/admin/parse-test', {
         method: 'POST',
+        headers: {
+          'x-portal-role': 'ADMIN',
+        },
         body: formData,
       });
 

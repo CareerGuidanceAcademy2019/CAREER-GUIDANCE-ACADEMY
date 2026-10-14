@@ -17,6 +17,7 @@ import {
   EnquiryItem,
   SeriesMockTest,
   SeriesAttempt,
+  SeriesQuestion,
 } from '@/data/initialSeedData';
 import {
   cgaService,
@@ -126,7 +127,7 @@ interface CgaContextType {
     timeTakenSeconds?: number;
   }) => Promise<SeriesAttempt | null>;
   saveAttemptProgress: (testId: string, answers: Record<string, number>) => Promise<void>;
-  getTestSolutions: (testId: string) => Promise<any[]>;
+  getTestSolutions: (testId: string) => Promise<SeriesQuestion[]>;
 }
 
 const CgaContext = createContext<CgaContextType | undefined>(undefined);

@@ -19,19 +19,21 @@ export function parseRawQuestionsText(rawText: string): ParsedMCQ[] {
   if (!rawText || !rawText.trim()) return [];
 
   // Normalize line endings and non-breaking spaces
-  let text = rawText
+  const text = rawText
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
     .replace(/\u00A0/g, ' ')
     .trim();
 
   // 1. Check for global Answer Key table/list at the bottom or top of document
-  // e.g. "Answer Key: 1. A, 2. B, 3. C" or "Answers: 1-B 2-C"
+  // e.g. "Answer Key: 1. A, 2. B, 3. C" or "Answers: 1-B 2-C" or "Key: 1(A), 2(C)"
   const globalAnswerMap: Record<number, number> = {};
-  const globalKeyMatch = text.match(/(?:Answer\s*Key|Answers|Solutions?\s*Key)[\s\:\-\n]+([0-9\sA-Da-d\.\,\:\-\(\)]+)/i);
+  const globalKeyMatch = text.match(
+    /(?:Answer\s*Key|Answers|Solutions?\s*Key)[\s\:\-\n]+([\s\S]+?)(?=\n\s*(?:Note|Instructions|Notice|C\.G\.A|Page|$))/i
+  );
   if (globalKeyMatch) {
     const keySection = globalKeyMatch[1];
-    const pairRegex = /(?:Q(?:uestion)?\.?\s*)?(\d+)[\.\:\-\)\s]+(?:\()?([A-Da-d1-4])(?:\))?/g;
+    const pairRegex = /(?:Q(?:uestion)?\.?\s*)?(\d+)[\.\:\-\)\s]+(?:\()?\[?(?:Option\s*)?([A-Da-d1-4])\]?(?:\))?/g;
     let match: RegExpExecArray | null;
     while ((match = pairRegex.exec(keySection)) !== null) {
       const qNum = parseInt(match[1], 10);
@@ -46,8 +48,8 @@ export function parseRawQuestionsText(rawText: string): ParsedMCQ[] {
   }
 
   // 2. Split text into individual questions
-  // Match lines starting with "1. ", "Q1. ", "Question 1:", "Q.1 "
-  const questionPattern = /(?:^|\n+)(?:Q(?:uestion)?\.?\s*(\d+)[\.\:\)\-]?|(\d+)[\.\)\-]\s+)/gi;
+  // Match lines starting with "1. ", "Q1. ", "Question 1:", "Q.1 ", "(1) "
+  const questionPattern = /(?:^|\n+)(?:Q(?:uestion)?\.?\s*(\d+)[\.\:\)\-]?|(?:\()?(\d+)(?:\))?[\.\:\-]?\s+)/gi;
 
   const indices: { start: number; qNum: number }[] = [];
   let m: RegExpExecArray | null;
@@ -81,10 +83,13 @@ export function parseRawQuestionsText(rawText: string): ParsedMCQ[] {
     const { text: chunk, qNum } = rawChunks[i];
 
     // Detect Answer key inside this specific chunk
+    // e.g. Ans: A, Answer: Option B, Ans: [C], Correct: (D), Ans - B
     let correctIdx = globalAnswerMap[qNum] ?? 0;
-    const ansMatch = chunk.match(/(?:Ans(?:wer)?|Correct(?:\s*Option)?|Key)[\s\:\-\.]+([A-D]|[a-d]|[1-4]|\([A-D]\)|\([a-d]\)|\([1-4]\))/i);
+    const ansMatch = chunk.match(
+      /(?:Ans(?:wer)?|Correct(?:\s*Option)?|Key)[\s\:\-\.]+(?:Option\s*)?([A-D]|[a-d]|[1-4]|\([A-D]\)|\([a-d]\)|\([1-4]\)|\[[A-D]\]|\[[a-d]\]|\[[1-4]\])/i
+    );
     if (ansMatch) {
-      const char = ansMatch[1].replace(/[\(\)]/g, '').trim().toUpperCase();
+      const char = ansMatch[1].replace(/[\(\)\[\]]/g, '').trim().toUpperCase();
       if (char === 'A' || char === '1') correctIdx = 0;
       else if (char === 'B' || char === '2') correctIdx = 1;
       else if (char === 'C' || char === '3') correctIdx = 2;
@@ -92,7 +97,7 @@ export function parseRawQuestionsText(rawText: string): ParsedMCQ[] {
     }
 
     // Detect Explanation
-    let explanation = 'Refer to C.G.A classroom notes.';
+    let explanation = 'Refer to C.G.A classroom notes and model solutions.';
     const expMatch = chunk.match(/(?:Explanation|Exp|Solution|Reason)[\s\:\-]+([^\n]+(?:\n[^\n]+)*)/i);
     if (expMatch) {
       explanation = expMatch[1].trim();
@@ -107,11 +112,11 @@ export function parseRawQuestionsText(rawText: string): ParsedMCQ[] {
       body = body.replace(expMatch[0], '');
     }
 
-    // Strip leading question number (e.g. "1. " or "Q1: ")
-    body = body.replace(/^(?:Q(?:uestion)?\.?\s*\d+[\.\:\)\-]?|\d+[\.\)\-]\s+)/i, '').trim();
+    // Strip leading question number (e.g. "1. " or "Q1: " or "(1) ")
+    body = body.replace(/^(?:Q(?:uestion)?\.?\s*\d+[\.\:\)\-]?|(?:\()?(\d+)(?:\))?[\.\:\-]?\s+)/i, '').trim();
 
-    // Find options (A), (B), (C), (D) or A), B), C), D) or A., B., C., D.
-    const optionRegex = /(?:^|\n|\s+)(?:\(?([A-D]|[a-d]|[1-4])\)?[\.\:\-\)]\s*)/g;
+    // Find options (A), (B), (C), (D) or A), B), C), D) or A., B., C., D. or [A], [B], [C], [D]
+    const optionRegex = /(?:^|\n|\s+)(?:\(?\[?([A-D]|[a-d]|[1-4])(?:\)|\]|[\.\:\-\)])\s*)/g;
     const optionMatches = Array.from(body.matchAll(optionRegex));
 
     if (optionMatches.length >= 2) {

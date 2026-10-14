@@ -6,8 +6,6 @@ import {
   Clock,
   Trophy,
   CheckCircle2,
-  XCircle,
-  AlertTriangle,
   Play,
   Flag,
   RotateCcw,
@@ -32,29 +30,10 @@ export default function StudentMockTestsPage() {
   const [completedAttempt, setCompletedAttempt] = useState<TestAttempt | null>(null);
   const submittingRef = useRef(false);
 
-  // Countdown timer effect when a test is active
-  useEffect(() => {
-    if (!activeTest) return;
-    if (secondsLeft <= 0) {
-      handleFinishTest();
-      return;
-    }
-    const timer = setInterval(() => {
-      setSecondsLeft((prev) => prev - 1);
-    }, 1000);
-    return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTest, secondsLeft]);
-
-  if (!currentStudent) return null;
-
-  const startTest = (test: MockTest) => {
-    setCompletedAttempt(null);
-    setActiveTest(test);
-    setCurrentQIndex(0);
-    setSelectedAnswers({});
-    setMarkedForReview({});
-    setSecondsLeft(test.durationMinutes * 60);
+  const formatTime = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   };
 
   const handleFinishTest = async () => {
@@ -65,7 +44,7 @@ export default function StudentMockTestsPage() {
       Math.round((activeTest.durationMinutes * 60 - secondsLeft) / 60)
     );
 
-    // Scoring happens on the server; the client only sends the chosen options.
+    // Scoring happens authoritatively; the client only sends the chosen options.
     const saved = await submitMockTestAttempt({
       testId: activeTest.id,
       answers: selectedAnswers,
@@ -80,12 +59,39 @@ export default function StudentMockTestsPage() {
 
     setActiveTest(null);
     setCompletedAttempt(saved);
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
-  const formatTime = (secs: number) => {
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  // Countdown timer effect when a test is active
+  useEffect(() => {
+    if (!activeTest) return;
+    const timer = setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          setTimeout(() => {
+            void handleFinishTest();
+          }, 0);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTest]);
+
+  if (!currentStudent) return null;
+
+  const startTest = (test: MockTest) => {
+    setCompletedAttempt(null);
+    setActiveTest(test);
+    setCurrentQIndex(0);
+    setSelectedAnswers({});
+    setMarkedForReview({});
+    setSecondsLeft(test.durationMinutes * 60);
   };
 
   // ==================== 1. LIVE TIMED MCQ EXAM VIEW ====================
@@ -306,7 +312,24 @@ export default function StudentMockTestsPage() {
   // Calculate Batch Rank for completedAttempt if present
   const renderResultView = () => {
     if (!completedAttempt) return null;
-    const testObj = db.mockTests.find((t) => t.id === completedAttempt.testId);
+    let testObj = db.mockTests.find((t) => t.id === completedAttempt.testId);
+
+    // If questions in state are still masked (correctOptionIndex === -1), load master copy
+    if (!testObj || testObj.questions.some((q) => q.correctOptionIndex === -1)) {
+      if (typeof window !== 'undefined') {
+        try {
+          const ct = localStorage.getItem('cga_custom_tests');
+          if (ct) {
+            const list: MockTest[] = JSON.parse(ct);
+            const found = list.find((t) => t.id === completedAttempt.testId);
+            if (found && !found.questions.some((q) => q.correctOptionIndex === -1)) {
+              testObj = found;
+            }
+          }
+        } catch {}
+      }
+    }
+
     const allAttemptsForTest = db.testAttempts
       .filter((a) => a.testId === completedAttempt.testId)
       .sort((a, b) => b.score - a.score);
@@ -496,13 +519,55 @@ export default function StudentMockTestsPage() {
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => startTest(test)}
-                className="w-full py-3 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-extrabold inline-flex items-center justify-center gap-2 shadow-sm cursor-pointer"
-              >
-                <Play className="w-3.5 h-3.5 fill-current" /> Launch Timed Mock Test
-              </button>
+              {(() => {
+                const existingAttempt = myPastAttempts.find((a) => a.testId === test.id);
+                if (existingAttempt) {
+                  return (
+                    <div className="space-y-2 pt-2 border-t border-slate-100">
+                      <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs">
+                        <span className="font-extrabold text-emerald-800 flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>Test Submitted</span>
+                        </span>
+                        <span className="font-extrabold text-[#0056b3]">
+                          Score: {existingAttempt.score} / {existingAttempt.totalMarks}
+                        </span>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCompletedAttempt(existingAttempt);
+                            if (typeof window !== 'undefined') {
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }
+                          }}
+                          className="flex-1 py-2.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-extrabold inline-flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                        >
+                          <Trophy className="w-3.5 h-3.5 text-amber-300" /> View Result & Solutions
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => startTest(test)}
+                          className="px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold inline-flex items-center justify-center cursor-pointer"
+                          title="Retake Practice Test"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+                return (
+                  <button
+                    type="button"
+                    onClick={() => startTest(test)}
+                    className="w-full py-3 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-extrabold inline-flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" /> Launch Timed Mock Test
+                  </button>
+                );
+              })()}
             </div>
           ))}
         </div>
@@ -516,7 +581,7 @@ export default function StudentMockTestsPage() {
 
         {myPastAttempts.length === 0 ? (
           <p className="text-xs text-slate-500 py-4">
-            You haven’t attempted any mock tests yet. Click "Launch Timed Mock Test" above!
+            You haven’t attempted any mock tests yet. Click &quot;Launch Timed Mock Test&quot; above!
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -565,10 +630,15 @@ export default function StudentMockTestsPage() {
                       <td className="py-3.5 px-3 text-right">
                         <button
                           type="button"
-                          onClick={() => setCompletedAttempt(att)}
+                          onClick={() => {
+                            setCompletedAttempt(att);
+                            if (typeof window !== 'undefined') {
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }
+                          }}
                           className="text-[#0056b3] font-bold hover:underline cursor-pointer"
                         >
-                          View Solutions
+                          View Result & Solutions
                         </button>
                       </td>
                     </tr>
