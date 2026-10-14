@@ -18,6 +18,7 @@ import {
   SeriesMockTest,
   SeriesAttempt,
   SeriesQuestion,
+  MockSeries,
 } from '@/data/initialSeedData';
 import {
   cgaService,
@@ -110,6 +111,7 @@ interface CgaContextType {
   saveAnnouncement: (announcement: Announcement, isNew: boolean) => Promise<void>;
   deleteAnnouncement: (announcementId: string) => Promise<void>;
   updateSiteContent: (content: SiteContent) => Promise<void>;
+  updateMockSeries: (series: MockSeries) => Promise<void>;
 
   // Mock Series actions
   enrolInSeries: (params: {
@@ -633,6 +635,17 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
     [run]
   );
 
+  const updateMockSeries = useCallback(
+    async (series: MockSeries) => {
+      setDb((prev) => ({
+        ...prev,
+        mockSeries: prev.mockSeries.map((s) => (s.id === series.id ? series : s)),
+      }));
+      showToast('Mock Test Series Updated', `${series.name} details and pricing updated.`, 'success');
+    },
+    [showToast]
+  );
+
   // ============ MOCK SERIES ACTIONS ============
   const enrolInSeries = useCallback<CgaContextType['enrolInSeries']>(
     async (params) => {
@@ -845,6 +858,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         saveAnnouncement,
         deleteAnnouncement,
         updateSiteContent,
+        updateMockSeries,
         enrolInSeries,
         saveSeriesTest,
         deleteSeriesTest,

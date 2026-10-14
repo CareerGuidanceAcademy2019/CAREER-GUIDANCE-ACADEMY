@@ -377,7 +377,7 @@ export default function CoursesCataloguePage() {
                         </span>
                       </div>
                       <Link
-                        href={`/student/mock-tests?pkg=${pkg.id}`}
+                        href={`/student/tests?pkg=${pkg.id}`}
                         className="px-4 py-2 rounded-xl bg-[#0056b3] text-white text-xs font-bold inline-flex items-center gap-1"
                       >
                         Enroll in Series <ArrowRight className="w-3.5 h-3.5" />

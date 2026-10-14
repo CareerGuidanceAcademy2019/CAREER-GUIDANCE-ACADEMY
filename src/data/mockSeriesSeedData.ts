@@ -32,6 +32,8 @@ export interface SeriesMockTest {
   negativeMarking: number;
   durationMinutes: number;
   status: 'draft' | 'ready' | 'launched' | 'closed';
+  scheduledDate?: string;
+  languageMode?: 'english_only' | 'bengali_only' | 'bilingual';
   windowStart?: string | null;
   windowEnd?: string | null;
   windowHours?: number | null;
@@ -94,88 +96,125 @@ export interface MockLaunchLog {
   createdAt: string;
 }
 
-const COMMON_HIGHLIGHTS = [
-  'Real Exam CBT Interface with Live Countdown Timer',
-  'Instant Analysis (Accuracy, Time per Question, Weak-Spot Identification)',
-  '100% Strict TRBT Syllabus & Question Standards',
-  'Bilingual Support (English and Bengali)',
-  'No Negative Marking (Standard 1 Mark per Question)',
-  '30 MCQs / 30 Marks / 30 Mins Sectionals + 2 Full-Length 150-Mark Simulations'
-];
+/**
+ * Determine question language rule for a subject:
+ * - English subject -> English questions only
+ * - Bengali subject -> Bengali questions only
+ * - All other subjects -> Bilingual (English + Bengali)
+ */
+export function getSubjectLanguageMode(subjectName: string): 'english_only' | 'bengali_only' | 'bilingual' {
+  const norm = subjectName.toLowerCase();
+  if (norm.includes('bengali') || norm.includes('বাংলা') || norm.includes('lang2') || norm.includes('language – ii') || norm.includes('language - ii')) {
+    return 'bengali_only';
+  }
+  if (norm.includes('english') || norm.includes('lang1') || /\blanguage\s*[-–]\s*i\b/i.test(norm)) {
+    return 'english_only';
+  }
+  return 'bilingual';
+}
 
 export const MOCK_SERIES_INITIAL: MockSeries[] = [
   {
     id: 'series-ttet-paper1',
     slug: 't-tet-paper-1',
-    name: 'T-TET Paper-I (For Classes I to V – Primary Level)',
+    name: 'Tripura TET: Paper-I 2026 Daily Online Mock Tests Series',
     classRange: 'Classes I to V (Primary Level)',
-    stream: 'Primary Education',
-    price: 499,
-    batchLabel: 'NOV 2026',
-    description: 'Comprehensive online mock test package for Tripura TET Paper-I with 50 topic-wise sectional tests and 2 full-length simulated exam papers following strict TRBT guidelines.',
-    highlights: COMMON_HIGHLIGHTS,
+    stream: 'Primary Education (CDP, English, Bengali, Math & EVS)',
+    price: 399,
+    batchLabel: '2026 Batch',
+    description: 'Daily Online Mock Tests Series for Tripura TET: Paper-I 2026. Weekly 5 Days (Monday to Friday). Features 30+ Sectional Mock Tests (CDP, English, Bengali, Math & EVS) and 02 Full Length Mock Tests with 1200+ MCQs, OMR Sheet for practice, self performance analysis, expert guidance, and doubt clearance through discussion.',
+    highlights: [
+      'Weekly 5 Days (Monday to Friday) Online Practice',
+      '30+ Sectional Mock Tests (CDP, English, Bengali, Math & EVS)',
+      '02 Full Length Mock Tests (Covering Full Syllabus)',
+      '1200+ MCQs with OMR Sheet for Practice',
+      'Self Performance Analysis & Merit Ranking',
+      'Expert\'s Guidance & Doubt Clearance through Discussion',
+      'Bilingual Questions in English & Bengali (except English & Bengali language papers)',
+      'Flexible Admin Scheduled Launch Dates'
+    ],
     status: 'Open',
-    startsOn: '1st Week of November, 2026',
+    startsOn: 'Flexible / Admin Scheduled (Launch on Demand)',
   },
   {
     id: 'series-ttet-paper2-sci',
     slug: 't-tet-paper-2-science',
-    name: 'T-TET Paper-II: Science Stream (For Classes VI to VIII)',
+    name: 'Tripura TET: Paper-II (Science) 2026 Daily Online Mock Tests Series',
     classRange: 'Classes VI to VIII (Upper Primary)',
-    stream: 'Science & Mathematics',
+    stream: 'Science & Mathematics (CDP, English, Bengali, Maths & Science)',
     price: 499,
-    batchLabel: 'NOV 2026',
-    description: 'Targeted preparation for Tripura TET Paper-II Science Stream featuring 50 sectional tests covering Science, Math & Pedagogy, plus 2 complete full-length TRBT pattern mock tests.',
-    highlights: COMMON_HIGHLIGHTS,
+    batchLabel: '2026 Batch',
+    description: 'Daily Online Mock Tests Series for Tripura TET: Paper-II (Science) 2026. Weekly 5 Days (Monday to Friday). Features 40+ Sectional Mock Tests (CDP, English, Bengali, Maths & Science) and 02 Full Length Mock Tests with 1500+ MCQs, OMR Sheet for practice, self performance analysis, expert guidance, and doubt clearance through discussion.',
+    highlights: [
+      'Weekly 5 Days (Monday to Friday) Online Practice',
+      '40+ Sectional Mock Tests (CDP, English, Bengali, Maths & Science)',
+      '02 Full Length Mock Tests (Covering Full Syllabus)',
+      '1500+ MCQs with OMR Sheet for Practice',
+      'Self Performance Analysis & Merit Ranking',
+      'Expert\'s Guidance & Doubt Clearance through Discussion',
+      'Bilingual Questions in English & Bengali (except English & Bengali language papers)',
+      'Flexible Admin Scheduled Launch Dates'
+    ],
     status: 'Open',
-    startsOn: '1st Week of November, 2026',
+    startsOn: 'Flexible / Admin Scheduled (Launch on Demand)',
   },
   {
     id: 'series-ttet-paper2-soc',
     slug: 't-tet-paper-2-social-science',
-    name: 'T-TET Paper-II: Social Science Stream (For Classes VI to VIII)',
+    name: 'Tripura TET: Paper-II (Social Studies) 2026 Daily Online Mock Tests Series',
     classRange: 'Classes VI to VIII (Upper Primary)',
-    stream: 'Social Science & Studies',
+    stream: 'Social Studies (CDP, English, Bengali, History, Geography & Political Science)',
     price: 499,
-    batchLabel: 'NOV 2026',
-    description: 'Specialized 60-sectional test package for Tripura TET Paper-II Social Studies including in-depth Tripura Geography, History, and Civics, plus 2 full-length 150-mark simulations.',
-    highlights: COMMON_HIGHLIGHTS,
+    batchLabel: '2026 Batch',
+    description: 'Daily Online Mock Tests Series for Tripura TET: Paper-II (Social Studies) 2026. Weekly 5 Days (Monday to Friday). Features 40+ Sectional Mock Tests (CDP, English, Bengali, History, Geography & Political Science) and 02 Full Length Mock Tests with 1500+ MCQs, OMR Sheet for practice, self performance analysis, expert guidance, and doubt clearance.',
+    highlights: [
+      'Weekly 5 Days (Monday to Friday) Online Practice',
+      '40+ Sectional Mock Tests (CDP, English, Bengali, History, Geography & Political Science)',
+      '02 Full Length Mock Tests (Covering Full Syllabus)',
+      '1500+ MCQs with OMR Sheet for Practice',
+      'Self Performance Analysis & Merit Ranking',
+      'Expert\'s Guidance & Doubt Clearance through Discussion',
+      'Bilingual Questions in English & Bengali (except English & Bengali language papers)',
+      'Flexible Admin Scheduled Launch Dates'
+    ],
     status: 'Open',
-    startsOn: '1st Week of November, 2026',
+    startsOn: 'Flexible / Admin Scheduled (Launch on Demand)',
   },
 ];
 
 export const MOCK_SUBJECTS_INITIAL: MockSubject[] = [
-  // Paper-I Subjects
+  // Paper-I Subjects (Banner 1: CDP, ENGLISH, BENGALI, MATH, EVS)
   { id: 'subj-p1-cdp', seriesId: 'series-ttet-paper1', name: 'Child Development & Pedagogy', sortOrder: 1 },
   { id: 'subj-p1-lang1', seriesId: 'series-ttet-paper1', name: 'Language – I (English)', sortOrder: 2 },
-  { id: 'subj-p1-lang2', seriesId: 'series-ttet-paper1', name: 'Language – II (Bengali / Kokborok)', sortOrder: 3 },
+  { id: 'subj-p1-lang2', seriesId: 'series-ttet-paper1', name: 'Language – II (Bengali)', sortOrder: 3 },
   { id: 'subj-p1-math', seriesId: 'series-ttet-paper1', name: 'Mathematics (Content & Pedagogy)', sortOrder: 4 },
   { id: 'subj-p1-evs', seriesId: 'series-ttet-paper1', name: 'Environmental Studies (EVS)', sortOrder: 5 },
 
-  // Paper-II Science Subjects
+  // Paper-II Science Subjects (Banner 2: CDP, ENGLISH, BENGALI, MATHS & SCIENCE)
   { id: 'subj-p2s-cdp', seriesId: 'series-ttet-paper2-sci', name: 'Child Development & Pedagogy', sortOrder: 1 },
   { id: 'subj-p2s-lang1', seriesId: 'series-ttet-paper2-sci', name: 'Language – I (English)', sortOrder: 2 },
-  { id: 'subj-p2s-lang2', seriesId: 'series-ttet-paper2-sci', name: 'Language – II (Bengali / Kokborok)', sortOrder: 3 },
+  { id: 'subj-p2s-lang2', seriesId: 'series-ttet-paper2-sci', name: 'Language – II (Bengali)', sortOrder: 3 },
   { id: 'subj-p2s-math', seriesId: 'series-ttet-paper2-sci', name: 'Mathematics (Content & Pedagogy)', sortOrder: 4 },
-  { id: 'subj-p2s-sci', seriesId: 'series-ttet-paper2-sci', name: 'Science (Physics, Chemistry, Bio & Pedagogy)', sortOrder: 5 },
+  { id: 'subj-p2s-sci', seriesId: 'series-ttet-paper2-sci', name: 'Science (Physics, Chemistry & Biology)', sortOrder: 5 },
 
-  // Paper-II Social Science Subjects
+  // Paper-II Social Studies Subjects (Banner 3: CDP, ENGLISH, BENGALI, HISTORY, GEOGRAPHY & POLITICAL SCIENCE)
   { id: 'subj-p2ss-cdp', seriesId: 'series-ttet-paper2-soc', name: 'Child Development & Pedagogy', sortOrder: 1 },
   { id: 'subj-p2ss-lang1', seriesId: 'series-ttet-paper2-soc', name: 'Language – I (English)', sortOrder: 2 },
-  { id: 'subj-p2ss-lang2', seriesId: 'series-ttet-paper2-soc', name: 'Language – II (Bengali / Kokborok)', sortOrder: 3 },
-  { id: 'subj-p2ss-hist', seriesId: 'series-ttet-paper2-soc', name: 'History, Political Science & Pedagogical Issues', sortOrder: 4 },
-  { id: 'subj-p2ss-geog', seriesId: 'series-ttet-paper2-soc', name: 'Geography & Environment (incl. Tripura Geography)', sortOrder: 5 },
+  { id: 'subj-p2ss-lang2', seriesId: 'series-ttet-paper2-soc', name: 'Language – II (Bengali)', sortOrder: 3 },
+  { id: 'subj-p2ss-hist', seriesId: 'series-ttet-paper2-soc', name: 'History & Pedagogical Issues', sortOrder: 4 },
+  { id: 'subj-p2ss-geog', seriesId: 'series-ttet-paper2-soc', name: 'Geography & Environment', sortOrder: 5 },
+  { id: 'subj-p2ss-pol', seriesId: 'series-ttet-paper2-soc', name: 'Political Science & Civics', sortOrder: 6 },
 ];
 
-// Helper to generate the 166 tests dynamically
+// Helper to generate the tests dynamically based on banners
 function generateInitialTests(): SeriesMockTest[] {
   const tests: SeriesMockTest[] = [];
 
-  // 1. Paper-I (5 subjects x 10 sectionals = 50 + 2 Full)
-  const p1Subjs = MOCK_SUBJECTS_INITIAL.filter(s => s.seriesId === 'series-ttet-paper1');
+  // 1. Paper-I (5 subjects x 6 sectionals = 30 Sectional Mock Tests + 2 Full Length)
+  const p1Subjs = MOCK_SUBJECTS_INITIAL.filter((s) => s.seriesId === 'series-ttet-paper1');
   for (const subj of p1Subjs) {
-    for (let i = 1; i <= 10; i++) {
+    const langMode = getSubjectLanguageMode(subj.name);
+    for (let i = 1; i <= 6; i++) {
       tests.push({
         id: `test-${subj.id}-${i}`,
         seriesId: 'series-ttet-paper1',
@@ -188,8 +227,10 @@ function generateInitialTests(): SeriesMockTest[] {
         marksPerQuestion: 1,
         negativeMarking: 0,
         durationMinutes: 30,
-        status: 'draft',
-        showSolutions: 'after_window',
+        status: i === 1 ? 'ready' : 'draft',
+        languageMode: langMode,
+        scheduledDate: new Date().toISOString().split('T')[0],
+        showSolutions: 'after_submit',
         shuffle: false,
       });
     }
@@ -200,23 +241,26 @@ function generateInitialTests(): SeriesMockTest[] {
       seriesId: 'series-ttet-paper1',
       subjectId: null,
       testType: 'full',
-      title: `T-TET Paper-I Full-Length Mock ${f}`,
+      title: `Tripura TET Paper-I Full-Length Mock ${f}`,
       testNo: f,
       questionCount: 150,
       totalMarks: 150,
       marksPerQuestion: 1,
       negativeMarking: 0,
       durationMinutes: 150,
-      status: 'draft',
-      showSolutions: 'after_window',
+      status: 'ready',
+      languageMode: 'bilingual',
+      scheduledDate: new Date().toISOString().split('T')[0],
+      showSolutions: 'after_submit',
       shuffle: false,
     });
   }
 
-  // 2. Paper-II Science (5 subjects x 10 sectionals = 50 + 2 Full)
-  const p2sSubjs = MOCK_SUBJECTS_INITIAL.filter(s => s.seriesId === 'series-ttet-paper2-sci');
+  // 2. Paper-II Science (5 subjects x 8 sectionals = 40 Sectional Mock Tests + 2 Full Length)
+  const p2sSubjs = MOCK_SUBJECTS_INITIAL.filter((s) => s.seriesId === 'series-ttet-paper2-sci');
   for (const subj of p2sSubjs) {
-    for (let i = 1; i <= 10; i++) {
+    const langMode = getSubjectLanguageMode(subj.name);
+    for (let i = 1; i <= 8; i++) {
       tests.push({
         id: `test-${subj.id}-${i}`,
         seriesId: 'series-ttet-paper2-sci',
@@ -229,8 +273,10 @@ function generateInitialTests(): SeriesMockTest[] {
         marksPerQuestion: 1,
         negativeMarking: 0,
         durationMinutes: 30,
-        status: 'draft',
-        showSolutions: 'after_window',
+        status: i === 1 ? 'ready' : 'draft',
+        languageMode: langMode,
+        scheduledDate: new Date().toISOString().split('T')[0],
+        showSolutions: 'after_submit',
         shuffle: false,
       });
     }
@@ -241,24 +287,26 @@ function generateInitialTests(): SeriesMockTest[] {
       seriesId: 'series-ttet-paper2-sci',
       subjectId: null,
       testType: 'full',
-      title: `T-TET Paper-II Science Full-Length Mock ${f}`,
+      title: `Tripura TET Paper-II (Science) Full-Length Mock ${f}`,
       testNo: f,
       questionCount: 150,
       totalMarks: 150,
       marksPerQuestion: 1,
       negativeMarking: 0,
       durationMinutes: 150,
-      status: 'draft',
-      showSolutions: 'after_window',
+      status: 'ready',
+      languageMode: 'bilingual',
+      scheduledDate: new Date().toISOString().split('T')[0],
+      showSolutions: 'after_submit',
       shuffle: false,
     });
   }
 
-  // 3. Paper-II Social Science (CDP 10, Lang1 10, Lang2 10, Hist 20, Geog 10 = 60 + 2 Full)
-  const p2ssSubjs = MOCK_SUBJECTS_INITIAL.filter(s => s.seriesId === 'series-ttet-paper2-soc');
+  // 3. Paper-II Social Studies (6 subjects x 7 sectionals = 42 Sectional Mock Tests + 2 Full Length)
+  const p2ssSubjs = MOCK_SUBJECTS_INITIAL.filter((s) => s.seriesId === 'series-ttet-paper2-soc');
   for (const subj of p2ssSubjs) {
-    const count = subj.id === 'subj-p2ss-hist' ? 20 : 10;
-    for (let i = 1; i <= count; i++) {
+    const langMode = getSubjectLanguageMode(subj.name);
+    for (let i = 1; i <= 7; i++) {
       tests.push({
         id: `test-${subj.id}-${i}`,
         seriesId: 'series-ttet-paper2-soc',
@@ -271,8 +319,10 @@ function generateInitialTests(): SeriesMockTest[] {
         marksPerQuestion: 1,
         negativeMarking: 0,
         durationMinutes: 30,
-        status: 'draft',
-        showSolutions: 'after_window',
+        status: i === 1 ? 'ready' : 'draft',
+        languageMode: langMode,
+        scheduledDate: new Date().toISOString().split('T')[0],
+        showSolutions: 'after_submit',
         shuffle: false,
       });
     }
@@ -283,15 +333,17 @@ function generateInitialTests(): SeriesMockTest[] {
       seriesId: 'series-ttet-paper2-soc',
       subjectId: null,
       testType: 'full',
-      title: `T-TET Paper-II Social Science Full-Length Mock ${f}`,
+      title: `Tripura TET Paper-II (Social Studies) Full-Length Mock ${f}`,
       testNo: f,
       questionCount: 150,
       totalMarks: 150,
       marksPerQuestion: 1,
       negativeMarking: 0,
       durationMinutes: 150,
-      status: 'draft',
-      showSolutions: 'after_window',
+      status: 'ready',
+      languageMode: 'bilingual',
+      scheduledDate: new Date().toISOString().split('T')[0],
+      showSolutions: 'after_submit',
       shuffle: false,
     });
   }
@@ -301,7 +353,7 @@ function generateInitialTests(): SeriesMockTest[] {
 
 export const MOCK_SERIES_TESTS_INITIAL: SeriesMockTest[] = generateInitialTests();
 
-// Sample seeded demo questions for test-subj-p1-cdp-1 to allow immediate interactive testing
+// Sample seeded demo questions for test-subj-p1-cdp-1 (Bilingual: English + Bengali)
 export const SAMPLE_QUESTIONS_P1_CDP_1: { questions: SeriesQuestion[]; keys: SeriesQuestionKey[] } = {
   questions: [
     {
@@ -380,6 +432,124 @@ export const SAMPLE_QUESTIONS_P1_CDP_1: { questions: SeriesQuestion[]; keys: Ser
       correctOption: 3,
       explanation: 'Thorndike formulated three primary laws: Readiness, Exercise, and Effect. The Law of Insight was formulated by Gestalt psychologists (Köhler, Wertheimer).',
       explanationBn: 'থর্নডাইকের তিনটি প্রাথমিক নিয়ম হলো প্রস্তুতি, অনুশীলন এবং ফলাফল। অন্তর্দৃষ্টির তত্ত্ব গেস্টাল্টবাদীদের।'
+    }
+  ]
+};
+
+// Sample seeded demo questions for test-subj-p1-lang1-1 (English ONLY - no Bengali translations)
+export const SAMPLE_QUESTIONS_P1_LANG1_1: { questions: SeriesQuestion[]; keys: SeriesQuestionKey[] } = {
+  questions: [
+    {
+      id: 'q-eng-1',
+      testId: 'test-subj-p1-lang1-1',
+      position: 1,
+      questionText: 'Choose the sentence that correctly transforms into the passive voice: "The academy will conduct the Tripura TET mock test tomorrow."',
+      options: [
+        'The Tripura TET mock test will be conducted by the academy tomorrow.',
+        'The Tripura TET mock test was conducted by the academy tomorrow.',
+        'The Tripura TET mock test would be conducted by the academy tomorrow.',
+        'The Tripura TET mock test is being conducted by the academy tomorrow.'
+      ]
+    },
+    {
+      id: 'q-eng-2',
+      testId: 'test-subj-p1-lang1-1',
+      position: 2,
+      questionText: 'Select the correct preposition: "The student was confident ______ achieving a high merit rank in the examination."',
+      options: [
+        'of',
+        'in',
+        'about',
+        'at'
+      ]
+    },
+    {
+      id: 'q-eng-3',
+      testId: 'test-subj-p1-lang1-1',
+      position: 3,
+      questionText: 'Select the antonym for the word "DILIGENT":',
+      options: [
+        'Lethargic',
+        'Industrious',
+        'Persistent',
+        'Meticulous'
+      ]
+    }
+  ],
+  keys: [
+    {
+      questionId: 'q-eng-1',
+      correctOption: 0,
+      explanation: 'Future simple active voice ("will conduct") transforms to "will be + past participle" ("will be conducted").'
+    },
+    {
+      questionId: 'q-eng-2',
+      correctOption: 0,
+      explanation: 'The adjective "confident" takes the preposition "of" when referring to belief in an outcome.'
+    },
+    {
+      questionId: 'q-eng-3',
+      correctOption: 0,
+      explanation: '"Diligent" means hardworking and persevering. "Lethargic" (sluggish, inactive) is its direct antonym.'
+    }
+  ]
+};
+
+// Sample seeded demo questions for test-subj-p1-lang2-1 (Bengali ONLY - in Bengali script)
+export const SAMPLE_QUESTIONS_P1_LANG2_1: { questions: SeriesQuestion[]; keys: SeriesQuestionKey[] } = {
+  questions: [
+    {
+      id: 'q-ben-1',
+      testId: 'test-subj-p1-lang2-1',
+      position: 1,
+      questionText: 'নিচের কোন বানানটি ব্যাকরণগতভাবে শুদ্ধ?',
+      options: [
+        'মুমূর্ষু',
+        'মুমুর্ষু',
+        'মুমুর্ষূ',
+        'মুমূর্ষূ'
+      ]
+    },
+    {
+      id: 'q-ben-2',
+      testId: 'test-subj-p1-lang2-1',
+      position: 2,
+      questionText: "'উপকূল' শব্দটির সঠিক ব্যাসবাক্য ও সমাস কোনটি?",
+      options: [
+        'কূলের সমীপে — অব্যয়ীভাব সমাস',
+        'কূলের পশ্চাত — তৎপুরুষ সমাস',
+        'কূলকে অতিক্রম — কর্মধারয় সমাস',
+        'কূল ও উপকূল — দ্বন্দ্ব সমাস'
+      ]
+    },
+    {
+      id: 'q-ben-3',
+      testId: 'test-subj-p1-lang2-1',
+      position: 3,
+      questionText: "'গায়ক' শব্দটির সঠিক সন্ধিবিচ্ছেদ কোনটি?",
+      options: [
+        'গৈ + অক',
+        'গা + অক',
+        'গে + অক',
+        'গো + অক'
+      ]
+    }
+  ],
+  keys: [
+    {
+      questionId: 'q-ben-1',
+      correctOption: 0,
+      explanation: "শুদ্ধ বানানটি হলো 'মুমূর্ষু' (হ্রস্ব উ-কার, দীর্ঘ ঊ-কার, হ্রস্ব উ-কার)।"
+    },
+    {
+      questionId: 'q-ben-2',
+      correctOption: 0,
+      explanation: "'কূলের সমীপে' = উপকূল। এটি সামীপ্য অর্থে অব্যয়ীভাব সমাসের উৎকৃষ্ট উদাহরণ।"
+    },
+    {
+      questionId: 'q-ben-3',
+      correctOption: 0,
+      explanation: "'গৈ + অক' মিলে হয় 'গায়ক'। সূত্র: ঐ-কারের পর অন্য স্বরবর্ণ থাকলে ঐ স্থানে আয়্ হয়।"
     }
   ]
 };
