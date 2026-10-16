@@ -461,7 +461,7 @@ drop policy if exists "enquiries: public insert" on public.enquiries;
 create policy "enquiries: public insert" on public.enquiries for insert to anon, authenticated with check (true);
 
 drop policy if exists "enquiries: admin all" on public.enquiries;
-create policy "enquiries: admin all" on public.enquiries for select, delete to authenticated
+create policy "enquiries: admin all" on public.enquiries for all to authenticated
   using (public.is_admin());
 
 -- ============================================================================
