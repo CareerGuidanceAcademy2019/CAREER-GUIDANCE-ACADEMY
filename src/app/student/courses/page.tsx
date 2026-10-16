@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Search, CreditCard, ShieldCheck, X, CheckCircle2 } from 'lucide-react';
 import { CourseCard } from '@/components/public/CourseCard';
 import { ReceiptModal } from '@/components/student/ReceiptModal';
+import { PayManualModal, type PayManualTarget } from '@/components/payment/PayManualModal';
 import { useCga } from '@/context/CgaContext';
 import { Course, CourseCategory, FeePayment } from '@/data/initialSeedData';
 
@@ -16,7 +17,7 @@ const CATEGORIES: ('All' | CourseCategory)[] = [
 ];
 
 export default function StudentCourseCataloguePage() {
-  const { db, currentStudent, enrolInCourse, joinWaitingList, showToast } = useCga();
+  const { db, currentStudent, enrolInCourse, joinWaitingList, showToast, submitPaymentVerification } = useCga();
   const [category, setCategory] = useState<'All' | CourseCategory>('All');
   const [modeFilter, setModeFilter] = useState<'All' | 'Offline' | 'Online'>('All');
   const [search, setSearch] = useState('');
@@ -24,7 +25,7 @@ export default function StudentCourseCataloguePage() {
   // Enrolment Modal state
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [paymentPlan, setPaymentPlan] = useState<'Full Payment' | 'Instalment 1'>('Full Payment');
-  const [paymentMode, setPaymentMode] = useState<FeePayment['paymentMode']>('UPI');
+  const [payManualTarget, setPayManualTarget] = useState<PayManualTarget | null>(null);
   const [generatedReceipt, setGeneratedReceipt] = useState<FeePayment | null>(null);
 
   if (!currentStudent) return null;
@@ -43,21 +44,20 @@ export default function StudentCourseCataloguePage() {
     return matchCat && matchMode && matchSearch;
   });
 
-  const handleConfirmPayment = async (e: React.FormEvent) => {
+  const handleProceedToPayment = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCourse) return;
-    const res = await enrolInCourse({
-      studentId: currentStudent.id,
-      courseId: selectedCourse.id,
-      paymentType: paymentPlan,
-      paymentMode,
+    setPayManualTarget({
+      itemType: 'course',
+      itemId: selectedCourse.id,
+      title: selectedCourse.name,
+      category: selectedCourse.category,
+      fullAmount: selectedCourse.price,
+      instalmentAmount: selectedCourse.firstInstalment,
+      instalmentAvailable: selectedCourse.instalmentAvailable,
+      paymentType: paymentPlan === 'Full Payment' ? 'full' : 'instalment_1',
     });
-    if (res.success && res.receipt) {
-      setSelectedCourse(null);
-      setGeneratedReceipt(res.receipt);
-    } else if (res.error) {
-      showToast('Enrolment failed', res.error, 'error');
-    }
+    setSelectedCourse(null);
   };
 
   return (
@@ -189,7 +189,7 @@ export default function StudentCourseCataloguePage() {
               </button>
             </div>
 
-            <form onSubmit={handleConfirmPayment} className="p-6 space-y-5">
+            <form onSubmit={handleProceedToPayment} className="p-6 space-y-5">
               {/* Choose Payment Plan */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-2">
@@ -245,37 +245,12 @@ export default function StudentCourseCataloguePage() {
                 </div>
               </div>
 
-              {/* Choose Payment Mode */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-2">
-                  2. Select Payment Mode (Simulated)
-                </label>
-                <div className="grid grid-cols-2 gap-2.5">
-                  {(['UPI', 'Debit/Credit Card', 'Net Banking', 'Cash at Counter'] as const).map(
-                    (mode) => (
-                      <button
-                        key={mode}
-                        type="button"
-                        onClick={() => setPaymentMode(mode)}
-                        className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
-                          paymentMode === mode
-                            ? 'bg-[#0a0e2a] text-white border-[#0a0e2a]'
-                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                        }`}
-                      >
-                        {mode}
-                      </button>
-                    )
-                  )}
-                </div>
-              </div>
-
               {/* Summary Box */}
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between">
                 <div>
                   <span className="text-xs text-slate-500 block">Payable Amount Now</span>
                   <span className="text-xs font-semibold text-emerald-700 flex items-center gap-1 mt-0.5">
-                    <ShieldCheck className="w-3.5 h-3.5" /> Unlocks Study PDFs & Mock Tests
+                    <ShieldCheck className="w-3.5 h-3.5" /> Instant UPI / Bank Gateway
                   </span>
                 </div>
                 <span className="text-2xl font-extrabold text-[#0a0e2a]">
@@ -297,14 +272,30 @@ export default function StudentCourseCataloguePage() {
                 </button>
                 <button
                   type="submit"
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-bold shadow-md cursor-pointer"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-bold shadow-md cursor-pointer transition-all"
                 >
-                  <CreditCard className="w-4 h-4" /> Complete Enrolment & Generate Receipt
+                  <CreditCard className="w-4 h-4" /> Pay via UPI / Bank & Verify
                 </button>
               </div>
             </form>
           </div>
         </div>
+      )}
+
+      {/* Reusable Manual Payment (UPI / Bank) Flow */}
+      {payManualTarget && (
+        <PayManualModal
+          target={payManualTarget}
+          onClose={() => setPayManualTarget(null)}
+          onSuccess={(refCode) => {
+            showToast(
+              'Payment Verification Submitted',
+              `Your payment reference ${refCode} has been queued for verification.`,
+              'success'
+            );
+            setPayManualTarget(null);
+          }}
+        />
       )}
 
       {/* Official Receipt Modal */}

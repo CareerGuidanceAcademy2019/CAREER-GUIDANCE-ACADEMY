@@ -53,6 +53,7 @@ export default function FacultyRegisterPage() {
   });
   const [workAbility, setWorkAbility] = useState<'yes' | 'no' | ''>('');
   const [showPw, setShowPw] = useState(false);
+  const [consentAgreed, setConsentAgreed] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<'pending' | 'confirm-email' | null>(null);
@@ -74,6 +75,7 @@ export default function FacultyRegisterPage() {
     if (!isEmail(form.email)) return setError('Please enter a valid email address.');
     if (form.password.length < 8) return setError('Password must be at least 8 characters long.');
     if (form.password !== form.confirm) return setError('Passwords do not match.');
+    if (!consentAgreed) return setError('Please review and accept the Faculty Terms & Privacy Policy to submit your profile.');
 
     setBusy(true);
     const res = await registerFaculty({
@@ -293,11 +295,49 @@ export default function FacultyRegisterPage() {
               </Field>
             </div>
 
+            {/* Faculty DPDP & Terms Consent */}
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+              <div className="flex items-start gap-2.5">
+                <input
+                  id="fac-consent"
+                  type="checkbox"
+                  checked={consentAgreed}
+                  onChange={(e) => setConsentAgreed(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded text-[#ea580c] border-slate-300 focus:ring-[#ea580c] focus-visible:ring-2 focus-visible:ring-[#ea580c] cursor-pointer shrink-0"
+                  required
+                  aria-required="true"
+                />
+                <label
+                  htmlFor="fac-consent"
+                  className="text-xs text-slate-700 leading-relaxed cursor-pointer select-none"
+                >
+                  <span className="font-semibold text-slate-900">Faculty Ethics &amp; DPDP Consent:</span>{' '}
+                  I confirm that all educational qualifications and work history provided are truthful. I accept Career Guidance Academy&apos;s{' '}
+                  <Link
+                    href="/terms-and-conditions"
+                    target="_blank"
+                    className="text-[#0056b3] underline font-semibold hover:text-blue-800 focus-visible:outline-2 focus-visible:outline-[#0056b3]"
+                  >
+                    Terms &amp; Conditions
+                  </Link>{' '}
+                  and{' '}
+                  <Link
+                    href="/privacy-policy"
+                    target="_blank"
+                    className="text-[#0056b3] underline font-semibold hover:text-blue-800 focus-visible:outline-2 focus-visible:outline-[#0056b3]"
+                  >
+                    Privacy Policy
+                  </Link>, and agree to protect academy study materials from unauthorized redistribution.
+                </label>
+              </div>
+            </div>
+
             <button
               id="fac-submit-btn"
               type="submit"
               disabled={busy}
-              className="w-full py-3.5 rounded-xl bg-[#ea580c] hover:bg-[#c2410c] disabled:opacity-60 text-white font-bold text-sm shadow-md inline-flex items-center justify-center gap-2 transition-all cursor-pointer"
+              className="w-full py-3.5 rounded-xl bg-[#ea580c] hover:bg-[#c2410c] disabled:opacity-60 text-white font-bold text-sm shadow-md inline-flex items-center justify-center gap-2 transition-all cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ea580c]"
+              aria-label="Submit Faculty Profile for Admin Verification"
             >
               <UserPlus className="w-4 h-4" />
               {busy ? 'Submitting…' : 'Submit for Admin Approval'}

@@ -17,6 +17,7 @@ export default function AdminActivatePage() {
   const { registerAdmin } = useCga();
   const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', confirm: '' });
   const [showPw, setShowPw] = useState(false);
+  const [consentAgreed, setConsentAgreed] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [confirmSent, setConfirmSent] = useState(false);
@@ -32,6 +33,7 @@ export default function AdminActivatePage() {
     if (!/^[6-9]\d{9}$/.test(normalizePhone(form.phone))) return setError('Please enter a valid 10-digit mobile number.');
     if (form.password.length < 8) return setError('Password must be at least 8 characters long.');
     if (form.password !== form.confirm) return setError('Passwords do not match.');
+    if (!consentAgreed) return setError('Please review and accept the Administrative Terms & DPDP Data Protection obligations.');
 
     setBusy(true);
     const res = await registerAdmin({
@@ -128,11 +130,49 @@ export default function AdminActivatePage() {
                   />
                 </div>
               </div>
+              {/* Admin DPDP & Confidentiality Consent */}
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+                <div className="flex items-start gap-2.5">
+                  <input
+                    id="adm-consent"
+                    type="checkbox"
+                    checked={consentAgreed}
+                    onChange={(e) => setConsentAgreed(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 rounded text-[#0a0e2a] border-slate-300 focus:ring-[#0a0e2a] focus-visible:ring-2 focus-visible:ring-[#0a0e2a] cursor-pointer shrink-0"
+                    required
+                    aria-required="true"
+                  />
+                  <label
+                    htmlFor="adm-consent"
+                    className="text-xs text-slate-700 leading-relaxed cursor-pointer select-none"
+                  >
+                    <span className="font-semibold text-slate-900">Administrative Data Protection &amp; Confidentiality:</span>{' '}
+                    As an authorized institute officer, I agree to handle all student data in strict compliance with India&apos;s DPDP Act, 2023, safeguard payment records, and abide by Career Guidance Academy&apos;s{' '}
+                    <Link
+                      href="/terms-and-conditions"
+                      target="_blank"
+                      className="text-[#0056b3] underline font-semibold hover:text-blue-800 focus-visible:outline-2 focus-visible:outline-[#0056b3]"
+                    >
+                      Terms
+                    </Link>{' '}
+                    and{' '}
+                    <Link
+                      href="/privacy-policy"
+                      target="_blank"
+                      className="text-[#0056b3] underline font-semibold hover:text-blue-800 focus-visible:outline-2 focus-visible:outline-[#0056b3]"
+                    >
+                      Privacy Policy
+                    </Link>.
+                  </label>
+                </div>
+              </div>
+
               <button
                 id="adm-submit-btn"
                 type="submit"
                 disabled={busy}
-                className="w-full py-3.5 rounded-xl bg-[#0a0e2a] hover:bg-[#1e2a5a] disabled:opacity-60 text-white font-bold text-sm shadow-md inline-flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full py-3.5 rounded-xl bg-[#0a0e2a] hover:bg-[#1e2a5a] disabled:opacity-60 text-white font-bold text-sm shadow-md inline-flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0a0e2a]"
+                aria-label="Create Password and Enter Admin Panel"
               >
                 <KeyRound className="w-4 h-4" />
                 {busy ? 'Activating…' : 'Create Password & Enter Admin Panel'}

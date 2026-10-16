@@ -27,3 +27,42 @@ This document logs sensible architectural choices made during the autonomous imp
 ### Decision 6: Dual-Layer Database Persistence (Supabase + Local Seed Sync)
 - **Context:** Remote Supabase project keys may be restricted to read-only API access in test/local environments, whereas local Supabase CLI or SQL Editor operates via DDL migration files.
 - **Decision:** `0004_t_tet_mock_series.sql` and `seed_t_tet.sql` are saved as standard migration scripts in `supabase/migrations/` and `supabase/seed_t_tet.sql`. Simultaneously, `src/data/initialSeedData.ts` and `cgaService.ts` are populated with the exact same 3 series, 15 subjects, and 166 draft mock tests so that local testing, unit tests, and client hydration operate with 100% fidelity without requiring a local Postgres daemon.
+
+---
+
+### Decision 7: Unified Manual Payment Architecture (`upi_manual` | `bank_transfer`)
+- **Context:** Students need to pay via UPI (GPay, PhonePe, Paytm, BHIM) or Bank Transfer (NEFT/RTGS). In the future, automated gateways (Razorpay) may be introduced.
+- **Decision:** Created ONE unified `payment_requests` table with `payment_method` (`upi_manual` | `bank_transfer`, with future `'razorpay'`), and an extensible TypeScript interface `PaymentProvider`. All fulfillment goes through ONE transactional function `cga_approve_payment()`, meaning future gateway webhooks will call the exact same function with `payment_method = 'razorpay'`.
+
+### Decision 8: Server-Side Amount Derivation & Tamper Resistance
+- **Context:** Client checkouts could maliciously attempt to submit ₹1 instead of full course fee.
+- **Decision:** In `cga_create_payment_request()`, the expected amount is derived strictly from Postgres tables (`courses.price`, `courses.first_instalment`, `study_materials.price`, or `mock_series.price`). Client-submitted amounts are completely ignored. Requests are rate-limited to 5 per hour per student.
+
+### Decision 9: High-Risk Financial Column Protection
+- **Context:** Altering the institute UPI ID, Bank Account Number, or Bank IFSC redirects incoming student payments to a different recipient.
+- **Decision:** Implemented `cga_update_payment_settings_secure` requiring caller re-authentication (re-entering admin password), evaluated via `extensions.crypt(p_admin_password, encrypted_password)` in Postgres. Changes are logged to the append-only `payment_audit_log` with before and after snapshots.
+
+### Decision 10: Global UTR Uniqueness with Privacy Protection
+- **Context:** UTR numbers must never be reused across different students or different requests.
+- **Decision:** A unique index on `utr_normalized` enforces global uniqueness across all students. If a student attempts to submit an existing UTR, the error message returned is: *"This UTR is already linked to another payment. Check the number or contact support."* — guaranteeing that student identity, batch, and name are never revealed.
+
+### Decision 11: Seat Race Condition & Refund Due Lifecycle
+- **Context:** In high-demand batches, multiple students could pay concurrently for the last available seat.
+- **Decision:** `cga_approve_payment` locks the course row `FOR UPDATE`. If `seats_available > 0`, it decrements the seat and creates the enrollment. If seats are exhausted, it sets status to `'refund_due'`, does NOT enroll the candidate, and enqueues them onto the waiting list.
+
+### Decision 12: Private Storage & Ephemeral Signed URLs
+- **Context:** Payment screenshot proofs contain sensitive financial transaction information.
+- **Decision:** Proof images are stored in a private Supabase Storage bucket `payment-proofs` with restricted path `{student_id}/{request_id}/...`. Public access is disabled by RLS. Admins and students view screenshots strictly via short-lived signed URLs (5 minutes max) generated server-side.
+
+### Decision 13: PostgreSQL Sequence for Official Receipt Numbers
+- **Context:** Concurrently generated receipts must never produce duplicate or colliding receipt numbers.
+- **Decision:** Created Postgres sequence `receipt_no_seq`. Receipt numbers are formatted as `CGA-RCP-YYYY-XXXXXX` from `nextval('receipt_no_seq')`, completely decoupled from application-layer timers or random numbers.
+
+### Decision 14: Minimal Compatible `series_enrollments` Table
+- **Context:** The mock test series purchase required a relational table to record students who purchased the T-TET mock test series.
+- **Decision:** Added `series_enrollments` with `(student_id, series_id, enrolled_at, payment_request_id, UNIQUE(student_id, series_id))` and wired it into `cga_approve_payment` for `item_type = 'mock_series'`. Also included it in candidate purge routines.
+
+### Decision 15: Dual-Layer Expiry Mechanism
+- **Context:** Awaiting payment requests must expire after 48 hours.
+- **Decision:** Created a cron-compatible function `cga_expire_stale_requests()`. In addition, status computation on read treats any `awaiting_payment` record where `now() > expires_at` as expired, preventing stale requests from accepting late proofs even if the scheduled sweeper is delayed.
+

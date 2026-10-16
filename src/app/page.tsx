@@ -21,6 +21,7 @@ import { PublicFooter } from '@/components/layout/PublicFooter';
 import { CourseCard } from '@/components/public/CourseCard';
 import { useCga } from '@/context/CgaContext';
 import { CustomAcademicEmblemSvg, CustomArrowRightSvg } from '@/components/ui/CustomIcons';
+import { getFacultyAvatarUrl, formatFacultyName } from '@/lib/names';
 
 export default function HomePage() {
   const { db } = useCga();
@@ -332,7 +333,7 @@ export default function HomePage() {
                   <div className="p-5 flex items-center gap-3.5 border-b border-slate-100">
                     <img
                       src={topper.photo}
-                      alt={topper.name}
+                      alt={`Photograph of student ${topper.name}, ${topper.rank} in ${topper.exam}`}
                       className="w-16 h-16 rounded-full object-cover ring-2 ring-[#ea580c] shrink-0"
                     />
                     <div>
@@ -398,8 +399,11 @@ export default function HomePage() {
                   >
                     <div className="flex items-center gap-3.5 mb-4">
                       <img
-                        src={member.photo}
-                        alt={member.name}
+                        src={member.photo || getFacultyAvatarUrl(member.name)}
+                        alt={`Faculty avatar of ${formatFacultyName(member.name)}, ${member.designation || 'Instructor'}`}
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).src = getFacultyAvatarUrl(member.name);
+                        }}
                         className="w-16 h-16 rounded-2xl object-cover border-2 border-[#0056b3]/20 shrink-0"
                       />
                       <div>
@@ -414,7 +418,7 @@ export default function HomePage() {
                           </span>
                         </div>
                         <h3 className="text-base font-extrabold text-[#0a0e2a] mt-1">
-                          {member.name}
+                          {formatFacultyName(member.name)}
                         </h3>
                       </div>
                     </div>
@@ -430,38 +434,80 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ==================== 7. STUDENT TESTIMONIALS ==================== */}
+        {/* ==================== 7. ACADEMIC METHODOLOGY & PILLARS ==================== */}
         <section className="py-16 bg-slate-50 border-t border-slate-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center max-w-2xl mx-auto mb-12">
-              <span className="text-xs font-extrabold uppercase tracking-widest text-[#dc2626]">
-                Student Voices
+              <span className="text-xs font-extrabold uppercase tracking-widest text-[#0056b3]">
+                Academic Excellence
               </span>
               <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0a0e2a] mt-1">
-                What Aspirants & Parents in Udaipur Say
+                Our Proven Pedagogical Methodology
               </h2>
+              <p className="text-xs sm:text-sm text-slate-600 mt-2">
+                Ground-level coaching built on disciplined mentorship, localized syllabus coverage, and regular performance evaluations.
+              </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {siteContent.testimonials.map((t) => (
-                <div
-                  key={t.id}
-                  className="bg-white rounded-2xl p-6 border border-slate-200 shadow-2xs flex flex-col justify-between"
-                >
-                  <div>
-                    <div className="flex items-center gap-1 text-amber-400 mb-3">
-                      {Array.from({ length: t.rating }).map((_, idx) => (
-                        <Star key={idx} className="w-4 h-4 fill-current" />
-                      ))}
-                    </div>
-                    <p className="text-sm text-slate-700 leading-relaxed italic">“{t.content}”</p>
+              <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-2xs flex flex-col justify-between">
+                <div>
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#0056b3] flex items-center justify-center font-bold mb-4">
+                    <BookOpen className="w-5 h-5" />
                   </div>
-                  <div className="mt-5 pt-4 border-t border-slate-100">
-                    <p className="text-sm font-extrabold text-[#0a0e2a]">{t.name}</p>
-                    <p className="text-xs font-semibold text-[#0056b3]">{t.role}</p>
-                  </div>
+                  <h3 className="text-base font-extrabold text-[#0a0e2a] mb-2">
+                    Comprehensive Syllabus Coverage
+                  </h3>
+                  <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                    Exhaustive module-by-module preparation aligned with latest TRBT, TPSC, JRBT and Board patterns, with dedicated attention to foundational concepts.
+                  </p>
                 </div>
-              ))}
+                <div className="mt-5 pt-4 border-t border-slate-100 flex items-center gap-1.5 text-xs font-bold text-[#0056b3]">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>Handcrafted Study Modules</span>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-2xs flex flex-col justify-between">
+                <div>
+                  <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold mb-4">
+                    <FileCheck className="w-5 h-5" />
+                  </div>
+                  <h3 className="text-base font-extrabold text-[#0a0e2a] mb-2">
+                    Rigorous Mock Tests &amp; Analysis
+                  </h3>
+                  <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                    Weekly OMR-style and timed assessments replicating exam environments, followed by question-by-question breakdown and doubt clearance.
+                  </p>
+                </div>
+                <div className="mt-5 pt-4 border-t border-slate-100 flex items-center gap-1.5 text-xs font-bold text-[#0056b3]">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>Individual Performance Tracking</span>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-2xs flex flex-col justify-between">
+                <div>
+                  <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center font-bold mb-4">
+                    <Users className="w-5 h-5" />
+                  </div>
+                  <h3 className="text-base font-extrabold text-[#0a0e2a] mb-2">
+                    Personalized Mentor Support
+                  </h3>
+                  <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                    Small, focused classroom batches at our Chanban campus ensure every student receives direct guidance from experienced faculty.
+                  </p>
+                </div>
+                <div className="mt-5 pt-4 border-t border-slate-100 flex items-center gap-1.5 text-xs font-bold text-[#0056b3]">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>Offline Campus at Udaipur</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Statutory Compliance Notice Banner */}
+            <div className="mt-10 p-4 rounded-xl bg-slate-100 border border-slate-200 text-center text-xs text-slate-500 max-w-3xl mx-auto">
+              <span className="font-semibold text-slate-700">Institutional Notice:</span> Career Guidance Academy (C.G.A) operates solely as an educational tutoring institute. We do not display unverified promotional endorsements. Academic outcomes are the result of student effort, dedicated classroom training, and independent selection processes by respective government examination boards.
             </div>
           </div>
         </section>

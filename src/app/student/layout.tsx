@@ -32,7 +32,8 @@ const STUDENT_NAV = [
   { href: '/student/my-courses', label: 'My Enrolled Courses', icon: GraduationCap },
   { href: '/student/materials', label: 'Study Materials (PDFs)', icon: FileText },
   { href: '/student/tests', label: 'Mock Tests & Rank', icon: ClipboardCheck },
-  { href: '/student/fees', label: 'Fees & Receipts', icon: CreditCard },
+  { href: '/student/fees', label: 'Fees & Ledger', icon: CreditCard },
+  { href: '/student/payments', label: 'My Payments & Proofs', icon: FileText },
   { href: '/student/achievements', label: 'Institute Toppers', icon: Trophy },
   { href: '/student/faculty', label: 'Our Faculty', icon: Users },
 ];
@@ -57,8 +58,8 @@ export default function StudentPortalLayout({ children }: { children: React.Reac
     );
   }
 
-  // Role-based access check: only STUDENT role can access Student Portal
-  if (!session || session.role !== 'STUDENT') {
+  // Role-based access check: STUDENT and ADMIN roles can access Student Portal
+  if (!session || (session.role !== 'STUDENT' && session.role !== 'ADMIN')) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
         <div className="max-w-md w-full bg-white rounded-3xl shadow-xl border border-slate-200 p-8 text-center space-y-5">

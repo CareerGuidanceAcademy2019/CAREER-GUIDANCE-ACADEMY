@@ -5,7 +5,7 @@ import { GraduationCap, Award, BookOpen, Briefcase, CheckCircle2 } from 'lucide-
 import { PublicHeader } from '@/components/layout/PublicHeader';
 import { PublicFooter } from '@/components/layout/PublicFooter';
 import { useCga } from '@/context/CgaContext';
-import { formatFacultyName } from '@/lib/names';
+import { formatFacultyName, getFacultyAvatarUrl } from '@/lib/names';
 
 export default function FacultyPage() {
   const { db } = useCga();
@@ -51,8 +51,11 @@ export default function FacultyPage() {
                 >
                   <div className="p-6 flex items-start gap-4 border-b border-slate-100">
                     <img
-                      src={member.photo || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80'}
-                      alt={formatFacultyName(member.name)}
+                      src={member.photo || getFacultyAvatarUrl(member.name)}
+                      alt={`Faculty avatar of ${formatFacultyName(member.name)}, ${member.designation || 'Instructor'}`}
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src = getFacultyAvatarUrl(member.name);
+                      }}
                       className="w-20 h-20 rounded-2xl object-cover border-2 border-[#0056b3]/20 shrink-0 shadow-sm"
                     />
                     <div>

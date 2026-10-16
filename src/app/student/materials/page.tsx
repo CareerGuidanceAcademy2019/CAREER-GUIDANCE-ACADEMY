@@ -13,14 +13,17 @@ import {
   X,
   ArrowRight,
   Printer,
+  CreditCard,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
 import { StudyMaterial } from '@/data/initialSeedData';
+import { PayManualModal, type PayManualTarget } from '@/components/payment/PayManualModal';
 
 export default function StudentStudyMaterialsPage() {
-  const { db, currentStudent } = useCga();
+  const { db, currentStudent, showToast } = useCga();
   const [filterType, setFilterType] = useState<'All' | 'Unlocked' | 'Locked'>('All');
   const [viewingMaterial, setViewingMaterial] = useState<StudyMaterial | null>(null);
+  const [payTarget, setPayTarget] = useState<PayManualTarget | null>(null);
 
   if (!currentStudent) return null;
 
@@ -161,15 +164,27 @@ export default function StudentStudyMaterialsPage() {
                   </button>
                 </div>
               ) : (
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-bold text-[#dc2626] flex items-center gap-1">
-                    <Lock className="w-3.5 h-3.5" /> Enrol to unlock
-                  </span>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPayTarget({
+                        itemType: 'material',
+                        itemId: mat.id,
+                        title: `${mat.title} (${mat.courseName || 'Notes PDF'})`,
+                        fullAmount: (mat as any).price || 199,
+                        paymentType: 'full',
+                      })
+                    }
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-bold cursor-pointer transition-all shadow-2xs"
+                  >
+                    <CreditCard className="w-3.5 h-3.5" /> Buy Notes (₹{(mat as any).price || 199})
+                  </button>
                   <Link
                     href="/student/courses"
-                    className="inline-flex items-center gap-1 px-3.5 py-2 rounded-xl bg-[#0a0e2a] hover:bg-slate-800 text-white text-xs font-bold"
+                    className="inline-flex items-center justify-center gap-1 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all"
                   >
-                    Enrol Now <ArrowRight className="w-3.5 h-3.5" />
+                    Enrol Course <ArrowRight className="w-3.5 h-3.5" />
                   </Link>
                 </div>
               )}
@@ -285,6 +300,21 @@ export default function StudentStudyMaterialsPage() {
             </div>
           </div>
         </div>
+      )}
+      {/* Standalone Notes Manual Payment Modal */}
+      {payTarget && (
+        <PayManualModal
+          target={payTarget}
+          onClose={() => setPayTarget(null)}
+          onSuccess={(refCode) => {
+            showToast(
+              'Notes Payment Submitted',
+              `Verification reference ${refCode} received. Once approved by admin, this study material will unlock automatically.`,
+              'success'
+            );
+            setPayTarget(null);
+          }}
+        />
       )}
     </div>
   );

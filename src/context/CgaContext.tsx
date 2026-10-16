@@ -79,6 +79,17 @@ interface CgaContextType {
     paymentMode: FeePayment['paymentMode'];
     remarks?: string;
   }) => Promise<{ success: boolean; receipt?: FeePayment; error?: string }>;
+  submitPaymentVerification: (params: {
+    courseId: string;
+    amount: number;
+    paymentMode: FeePayment['paymentMode'];
+    paymentType: FeePayment['paymentType'];
+    utr: string;
+    screenshotUrl?: string;
+    remarks?: string;
+  }) => Promise<{ success: boolean; receipt?: FeePayment; error?: string }>;
+  approvePayment: (paymentId: string) => Promise<{ success: boolean; error?: string }>;
+  rejectPayment: (paymentId: string, reason: string) => Promise<{ success: boolean; error?: string }>;
   submitMockTestAttempt: (params: {
     testId: string;
     answers: Record<string, number>;
@@ -425,6 +436,141 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
       return { success: true, receipt: res.receipt };
     },
     [refresh, showToast]
+  );
+
+  const submitPaymentVerification = useCallback<CgaContextType['submitPaymentVerification']>(
+    async (params) => {
+      const crs = db.courses.find((c) => c.id === params.courseId);
+      const studentId = sessionRef.current?.userId || 'std-1';
+      const studentName = sessionRef.current?.name || 'Student';
+      const courseName = crs?.name || 'Course';
+
+      const res = await cgaService.submitPaymentVerification({
+        studentId,
+        studentName,
+        courseId: params.courseId,
+        courseName,
+        amount: params.amount,
+        paymentMode: params.paymentMode,
+        paymentType: params.paymentType,
+        utr: params.utr,
+        screenshotUrl: params.screenshotUrl,
+        remarks: params.remarks,
+      });
+
+      if (!res.success || !res.receipt) {
+        showToast('Payment Submission Failed', res.error || 'Could not submit payment.', 'error');
+        return { success: false, error: res.error };
+      }
+
+      const receipt = res.receipt;
+      setDb((prev) => ({
+        ...prev,
+        feePayments: [receipt, ...prev.feePayments.filter((p) => p.id !== receipt.id)],
+      }));
+
+      showToast(
+        'Payment Submitted for Verification!',
+        `Tracking Ref: ${receipt.receiptNo}. Verification takes up to 6 hours.`,
+        'success'
+      );
+      return { success: true, receipt };
+    },
+    [db.courses, showToast]
+  );
+
+  const approvePayment = useCallback(
+    async (paymentId: string) => {
+      const targetPayment = db.feePayments.find((p) => p.id === paymentId);
+      if (!targetPayment) return { success: false, error: 'Payment record not found.' };
+
+      await cgaService.approvePayment(paymentId, sessionRef.current?.name || 'CGA Administrator');
+
+      setDb((prev) => {
+        const nextPayments = prev.feePayments.map((p) =>
+          p.id === paymentId
+            ? {
+                ...p,
+                status: 'Verified' as const,
+                reviewedBy: sessionRef.current?.name || 'Administrator',
+                reviewedAt: new Date().toISOString(),
+              }
+            : p
+        );
+
+        // Unlock enrollment / clear due for the student
+        const crs = prev.courses.find((c) => c.id === targetPayment.courseId);
+        const nextStudents = prev.students.map((st) => {
+          if (st.id === targetPayment.studentId) {
+            const existingEnr = st.enrollments.find((e) => e.courseId === targetPayment.courseId);
+            if (existingEnr) {
+              const newPaid = existingEnr.paidAmount + targetPayment.amount;
+              const newDue = Math.max(0, existingEnr.totalFee - newPaid);
+              return {
+                ...st,
+                enrollments: st.enrollments.map((e) =>
+                  e.courseId === targetPayment.courseId
+                    ? { ...e, paidAmount: newPaid, dueAmount: newDue }
+                    : e
+                ),
+              };
+            } else {
+              const totalFee = crs?.price || targetPayment.amount;
+              const paidAmount = targetPayment.amount;
+              const newEnrollment: StudentEnrollment = {
+                courseId: targetPayment.courseId,
+                courseName: targetPayment.courseName,
+                batchName: crs?.batchName || 'Regular Batch',
+                facultyName: crs?.facultyName || 'Faculty',
+                enrolledDate: new Date().toISOString().split('T')[0],
+                progress: 0,
+                totalFee,
+                paidAmount,
+                dueAmount: Math.max(0, totalFee - paidAmount),
+              };
+              return { ...st, enrollments: [...st.enrollments, newEnrollment] };
+            }
+          }
+          return st;
+        });
+
+        return {
+          ...prev,
+          feePayments: nextPayments,
+          students: nextStudents,
+        };
+      });
+
+      showToast(
+        'Payment Approved & Verified!',
+        `Official Receipt ${targetPayment.receiptNo} confirmed. Student access unlocked!`,
+        'success'
+      );
+      return { success: true };
+    },
+    [db.feePayments, showToast]
+  );
+
+  const rejectPayment = useCallback(
+    async (paymentId: string, reason: string) => {
+      await cgaService.rejectPayment(paymentId, reason);
+      setDb((prev) => ({
+        ...prev,
+        feePayments: prev.feePayments.map((p) =>
+          p.id === paymentId
+            ? {
+                ...p,
+                status: 'Rejected' as const,
+                rejectionReason: reason,
+                reviewedAt: new Date().toISOString(),
+              }
+            : p
+        ),
+      }));
+      showToast('Payment Rejected', `Reason: ${reason}`, 'info');
+      return { success: true };
+    },
+    [showToast]
   );
 
   const submitMockTestAttempt = useCallback<CgaContextType['submitMockTestAttempt']>(
@@ -816,8 +962,38 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
     [showToast]
   );
 
-  const currentStudent =
-    session?.role === 'STUDENT' ? db.students.find((s) => s.id === session.userId) || null : null;
+  const currentStudent = session
+    ? db.students.find((s) => s.id === session.userId) ||
+      (session.role === 'ADMIN'
+        ? {
+            id: session.userId,
+            studentCode: 'CGA-ADMIN',
+            name: session.name,
+            email: session.email,
+            phone: session.email === 'careerguidanceacademy2019@gmail.com' ? '7005929189' : '7629882835',
+            password: '',
+            photo: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
+            guardianName: 'Institute Administration',
+            address: 'Career Guidance Academy, Udaipur',
+            permanentAddress: 'Udaipur, Tripura',
+            qualification: 'Post Graduate',
+            targetExam: 'All Exams (Admin Preview)',
+            joinedDate: new Date().toISOString().slice(0, 10),
+            status: 'Active',
+            enrollments: db.courses.map((c) => ({
+              courseId: c.id,
+              courseName: c.name,
+              batchName: c.batchName,
+              facultyName: c.facultyName,
+              enrolledDate: new Date().toISOString().slice(0, 10),
+              progress: 100,
+              totalFee: c.price,
+              paidAmount: c.price,
+              dueAmount: 0,
+            })),
+          }
+        : null)
+    : null;
 
   return (
     <CgaContext.Provider
@@ -840,6 +1016,9 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         enrolInCourse,
         joinWaitingList,
         payCourseDue,
+        submitPaymentVerification,
+        approvePayment,
+        rejectPayment,
         submitMockTestAttempt,
         saveCourse,
         deleteCourse,

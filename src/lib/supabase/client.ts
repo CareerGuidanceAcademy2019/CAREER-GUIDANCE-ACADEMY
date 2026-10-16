@@ -11,3 +11,5 @@ export function getSupabase() {
   }
   return client;
 }
+
+export const createClient = getSupabase;

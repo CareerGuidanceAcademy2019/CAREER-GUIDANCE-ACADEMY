@@ -11,9 +11,13 @@
 
 insert into public.access_allowlist (identifier, role, note) values
   -- ---------- OFFICIAL C.G.A ACADEMY ADMINS ----------
-  ('admissions@cgaudaipur.in', 'admin', 'Career Guidance Academy Admissions Admin'),
-  ('+91 94361 82490',         'admin', 'C.G.A Udaipur Primary Office Contact'),
-  ('+91 87875 41120',         'admin', 'C.G.A Udaipur Secondary Office Contact')
+  ('careerguidanceacademy2019@gmail.com', 'admin', 'Subhradip Banik (CGA Administrator)'),
+  ('+91 70059 29189',                    'admin', 'Subhradip Banik Mobile'),
+  ('angatsaha825@gmail.com',             'admin', 'Angat Saha (CGA Administrator)'),
+  ('+91 76298 82835',                    'admin', 'Angat Saha Mobile'),
+  ('admissions@cgaudaipur.in',           'admin', 'Career Guidance Academy Admissions Admin'),
+  ('+91 94361 82490',                    'admin', 'C.G.A Udaipur Primary Office Contact'),
+  ('+91 87875 41120',                    'admin', 'C.G.A Udaipur Secondary Office Contact')
 on conflict (identifier) do nothing;
 
 -- ---------------------------------------------------------------------------

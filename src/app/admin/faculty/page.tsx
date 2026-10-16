@@ -22,7 +22,7 @@ import { useCga } from '@/context/CgaContext';
 import { FacultyMember } from '@/data/initialSeedData';
 import { cgaService, type FacultyAccount } from '@/services/cgaService';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { formatFacultyName } from '@/lib/names';
+import { formatFacultyName, getFacultyAvatarUrl } from '@/lib/names';
 
 export default function AdminFacultyPage() {
   const { db, saveFaculty, deleteFaculty, showToast } = useCga();
@@ -78,8 +78,7 @@ export default function AdminFacultyPage() {
       subject: '',
       qualification: 'M.A. / M.Sc., B.Ed., NET',
       experience: '8 Years Experience',
-      photo:
-        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
+      photo: '',
       bio: '',
       specializationTags: ['TET & STGT', 'Board Wing'],
     });
@@ -88,7 +87,11 @@ export default function AdminFacultyPage() {
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editing || !editing.name.trim()) return;
-    saveFaculty(editing, isNew);
+    const finalPhoto =
+      !editing.photo || editing.photo.includes('unsplash.com')
+        ? getFacultyAvatarUrl(editing.name)
+        : editing.photo;
+    saveFaculty({ ...editing, photo: finalPhoto }, isNew);
     setEditing(null);
     showToast('Saved', `Faculty profile for ${editing.name} saved.`, 'success');
   };
@@ -358,8 +361,11 @@ export default function AdminFacultyPage() {
                   <div className="space-y-3">
                     <div className="flex items-start gap-4">
                       <img
-                        src={member.photo || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80'}
+                        src={member.photo || getFacultyAvatarUrl(member.name)}
                         alt={member.name}
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).src = getFacultyAvatarUrl(member.name);
+                        }}
                         className="w-16 h-16 rounded-2xl object-cover shrink-0 border border-slate-200"
                       />
                       <div>

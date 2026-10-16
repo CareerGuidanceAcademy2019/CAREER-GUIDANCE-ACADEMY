@@ -44,6 +44,7 @@ export function PublicFooter() {
               {[
                 { href: '/about', label: 'About C.G.A Udaipur' },
                 { href: '/courses', label: 'All Courses & Batch Status' },
+                { href: '/how-to-pay', label: 'How to Pay & Find UTR' },
                 { href: '/achievements', label: 'Toppers & Rank-Holders' },
                 { href: '/faculty', label: 'Our Expert Faculty' },
                 { href: '/contact', label: 'Contact & Location Map' },
@@ -148,12 +149,76 @@ export function PublicFooter() {
           </div>
         </div>
 
-        <div className="mt-12 pt-6 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+        {/* Legal & Regulatory Compliance Row */}
+        <div className="mt-10 pt-8 border-t border-slate-800/80 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 text-xs text-slate-400">
+          <div>
+            <span className="font-bold text-white uppercase tracking-wider block mb-2">Legal & Compliance</span>
+            <ul className="space-y-1.5">
+              <li>
+                <Link href="/privacy-policy" className="hover:text-amber-400 transition-colors inline-block focus-visible:outline-2 focus-visible:outline-amber-400">
+                  Privacy Policy (DPDP 2023)
+                </Link>
+              </li>
+              <li>
+                <Link href="/terms-and-conditions" className="hover:text-amber-400 transition-colors inline-block focus-visible:outline-2 focus-visible:outline-amber-400">
+                  Terms and Conditions
+                </Link>
+              </li>
+              <li>
+                <Link href="/cookie-policy" className="hover:text-amber-400 transition-colors inline-block focus-visible:outline-2 focus-visible:outline-amber-400">
+                  Cookie &amp; Tracking Policy
+                </Link>
+              </li>
+              <li>
+                <Link href="/refund-policy" className="hover:text-amber-400 transition-colors inline-block focus-visible:outline-2 focus-visible:outline-amber-400">
+                  Refund Policy (Connect with Admin)
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <span className="font-bold text-white uppercase tracking-wider block mb-2">Data Protection Officer</span>
+            <p className="text-slate-400 leading-relaxed">
+              Designated Grievance &amp; DPDP Officer: <strong>Subhradip Banik</strong><br />
+              Email:{' '}
+              <a href="mailto:careerguidanceacademy2019@gmail.com" className="hover:text-amber-400 underline">
+                careerguidanceacademy2019@gmail.com
+              </a><br />
+              Phone: +91 70059 29189
+            </p>
+          </div>
+
+          <div>
+            <span className="font-bold text-white uppercase tracking-wider block mb-2">Registered Entity Details</span>
+            <p className="text-slate-400 leading-relaxed">
+              <strong>Career Guidance Academy (C.G.A)</strong><br />
+              Chanban (Behind Youthclub), Udaipur, Gomati Tripura, India.<br />
+              Legal Jurisdiction: Courts of Udaipur, Gomati District.
+            </p>
+          </div>
+
+          <div>
+            <span className="font-bold text-white uppercase tracking-wider block mb-2">Statutory Notice</span>
+            <p className="text-slate-400 leading-relaxed">
+              C.G.A is an autonomous coaching and tutoring institute. We are not affiliated with, endorsed by, or representing TRBT, JRBT, TBSE, or any government body.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-8 pt-6 border-t border-slate-800/60 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
           <p>
-            © {new Date().getFullYear()} {db.siteContent.instituteName}, Udaipur, Tripura 799114. All
-            Rights Reserved.
+            © {new Date().getFullYear()} {db.siteContent.instituteName}, Udaipur, Gomati Tripura. All Rights Reserved.
           </p>
-          <p>Phase 1 Interactive Client Prototype • Powered by C.G.A Digital Campus</p>
+          <div className="flex items-center gap-4">
+            <Link href="/privacy-policy" className="hover:text-slate-300">Privacy</Link>
+            <span>•</span>
+            <Link href="/terms-and-conditions" className="hover:text-slate-300">Terms</Link>
+            <span>•</span>
+            <Link href="/cookie-policy" className="hover:text-slate-300">Cookies</Link>
+            <span>•</span>
+            <Link href="/refund-policy" className="hover:text-slate-300">Refunds</Link>
+          </div>
         </div>
       </div>
     </footer>

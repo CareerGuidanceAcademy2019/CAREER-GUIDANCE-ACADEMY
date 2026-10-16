@@ -116,8 +116,8 @@ function LoginInner() {
       return;
     }
 
-    // Keep the selected tab honest: each portal only accepts its own role.
-    if (res.session.role !== activeTab) {
+    // Keep the selected tab honest, but allow ADMIN superuser to sign in from any tab
+    if (res.session.role !== activeTab && res.session.role !== 'ADMIN') {
       await cgaService.logout();
       setBusy(false);
       const actual = TABS.find((t) => t.id === res.session!.role)?.label ?? 'another';
@@ -126,9 +126,11 @@ function LoginInner() {
     }
 
     const next = params.get('next');
-    const role = res.session.role;
-    router.push(next && next.startsWith(PORTAL_PREFIX[role]) ? next : PORTAL_HOME[role]);
+    // If admin signs in on a specific portal tab, direct them to that portal
+    const targetRole = res.session.role === 'ADMIN' ? activeTab : res.session.role;
+    router.push(next && next.startsWith(PORTAL_PREFIX[targetRole]) ? next : PORTAL_HOME[targetRole]);
   };
+
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">

@@ -22,6 +22,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   RotateCcw,
+  Landmark,
 } from 'lucide-react';
 import { CGALogo } from '@/components/ui/CGALogo';
 import { CustomAcademicEmblemSvg, CustomArrowRightSvg } from '@/components/ui/CustomIcons';
@@ -29,11 +30,13 @@ import { useCga } from '@/context/CgaContext';
 
 const ADMIN_NAV = [
   { href: '/admin/dashboard', label: 'Admin Dashboard', icon: LayoutDashboard },
+  { href: '/admin/payments', label: 'Payment Verifications', icon: CreditCard, hasBadge: true },
+  { href: '/admin/fees', label: 'Fee & Defaulters', icon: CreditCard },
+  { href: '/admin/payment-settings', label: 'Bank & UPI Settings', icon: Landmark },
   { href: '/admin/access', label: 'Admin & Faculty Access', icon: ShieldCheck },
   { href: '/admin/students', label: 'Student Management', icon: Users },
   { href: '/admin/courses', label: 'Courses & Batch Control', icon: BookOpen },
   { href: '/admin/faculty', label: 'Faculty Management', icon: GraduationCap },
-  { href: '/admin/fees', label: 'Fee & Defaulters', icon: CreditCard },
   { href: '/admin/materials', label: 'Study Materials (PDFs)', icon: FileText },
   { href: '/admin/tests', label: 'Mock Tests & Ranks', icon: ClipboardCheck },
   { href: '/admin/achievements', label: 'Toppers & Achievements', icon: Trophy },
@@ -44,8 +47,10 @@ const ADMIN_NAV = [
 export default function AdminPortalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { isHydrated, session, logout } = useCga();
+  const { isHydrated, session, logout, db } = useCga();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const pendingPaymentsCount = db?.feePayments?.filter((p) => p.status === 'Pending').length || 0;
 
   const currentPageLabel =
     ADMIN_NAV.find((item) => pathname.startsWith(item.href))?.label || 'Admin Portal';
@@ -140,7 +145,12 @@ export default function AdminPortalLayout({ children }: { children: React.ReactN
                 }`}
               >
                 <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-amber-300' : 'text-slate-400'}`} />
-                <span>{item.label}</span>
+                <span className="truncate">{item.label}</span>
+                {item.hasBadge && pendingPaymentsCount > 0 && (
+                  <span className="ml-auto px-2 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-black animate-pulse">
+                    {pendingPaymentsCount}
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -221,7 +231,12 @@ export default function AdminPortalLayout({ children }: { children: React.ReactN
                       }`}
                     >
                       <Icon className="w-4 h-4" />
-                      <span>{item.label}</span>
+                      <span className="truncate">{item.label}</span>
+                      {item.hasBadge && pendingPaymentsCount > 0 && (
+                        <span className="ml-auto px-2 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-black">
+                          {pendingPaymentsCount}
+                        </span>
+                      )}
                     </Link>
                   );
                 })}

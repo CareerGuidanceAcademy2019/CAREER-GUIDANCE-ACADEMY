@@ -104,7 +104,7 @@ export default function AchievementsPage() {
                     <div className="relative inline-block">
                       <img
                         src={item.photo}
-                        alt={item.name}
+                        alt={`Photograph of student ${item.name}, ${item.rank} in ${item.exam}`}
                         className="w-24 h-24 rounded-full object-cover mx-auto ring-4 ring-amber-100 shadow-md"
                       />
                       <span className="absolute -bottom-1 -right-1 bg-[#ea580c] text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full shadow whitespace-nowrap">
@@ -131,6 +131,16 @@ export default function AchievementsPage() {
               ))}
             </div>
           )}
+
+          {/* CCPA & ASCI Statutory Compliance Disclaimer */}
+          <div className="mt-12 p-5 rounded-2xl bg-slate-100 border border-slate-200 text-center text-xs text-slate-600 max-w-4xl mx-auto space-y-1 leading-relaxed">
+            <span className="font-bold text-slate-800 uppercase tracking-wider block">
+              Official Regulatory Disclosure &amp; Non-Affiliation Disclaimer
+            </span>
+            <p>
+              Examination results, marks, and state ranks shown represent individual student performance evaluated independently by official examining boards (TRBT, TPSC, JRBT, TBSE, CBSE). Career Guidance Academy provides pedagogical tutoring and classroom preparation; C.G.A is an autonomous coaching academy and makes no official claim to conduct examinations or issue government employment appointments.
+            </p>
+          </div>
         </section>
       </main>
 

@@ -1,4 +1,5 @@
 export * from './mockSeriesSeedData';
+import { getFacultyAvatarUrl } from '@/lib/names';
 import {
   MOCK_SERIES_INITIAL,
   MOCK_SUBJECTS_INITIAL,
@@ -163,6 +164,12 @@ export interface FeePayment {
   paymentType: 'Full Payment' | 'Instalment 1' | 'Instalment 2' | 'Balance Clearance';
   date: string;
   remarks?: string;
+  status?: 'Pending' | 'Verified' | 'Rejected';
+  utr?: string;
+  screenshot?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  rejectionReason?: string;
 }
 
 export interface StudentEnrollment {
@@ -345,14 +352,14 @@ export const INITIAL_SEED_DATA: CgaDatabase = {
       { label: 'Board Distinction Success Rate', value: '96.4%' },
     ],
     contact: {
-      address: 'Chanban Youth Club Rd, behind Youth Club, Udaipur, Tripura 799114',
+      address: 'Chanban (Behind Youthclub), Udaipur, Gomati Tripura.',
       landmark: 'Behind Chanban Youth Club, Near Jagannath Bari Road',
       city: 'Udaipur (Gomati District)',
       state: 'Tripura',
       pincode: '799114',
-      phonePrimary: '+91 94361 82490',
-      phoneSecondary: '+91 87875 41120',
-      email: 'admissions@cgaudaipur.in',
+      phonePrimary: '+91-7005929189',
+      phoneSecondary: '+91 76298 82835',
+      email: 'careerguidanceacademy2019@gmail.com',
       officeHours: 'Mon – Sun: 7:30 AM to 8:00 PM',
       mapEmbedUrl:
         'https://www.google.com/maps?q=Chanban+Youth+Club+Rd+Udaipur+Tripura+799114&output=embed',
@@ -452,9 +459,11 @@ export const INITIAL_SEED_DATA: CgaDatabase = {
       subject: 'English, General Knowledge & Current Affairs',
       qualification: 'B.A. & M.A. in English',
       experience: '5 Years Experience',
-      photo: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=500&auto=format&fit=crop&q=80',
+      photo: getFacultyAvatarUrl('Mrs. Popi Ghosh'),
       bio: 'Principal at Career Guidance Academy (C.G.A). Mentors aspirants for TCS, TPSC Combined, SSC, RRB, and English language comprehension with online and offline teaching capability.',
       specializationTags: ['Principal', 'TCS / TPSC Combined', 'SSC & RRB', 'Descriptive English', 'Online & Offline'],
+      achievements: 'Guiding top rankers across competitive exams in Tripura',
+      workAbility: 'Online & Offline',
     },
     {
       id: 'fac-g-shil',
@@ -463,9 +472,11 @@ export const INITIAL_SEED_DATA: CgaDatabase = {
       subject: 'Bengali (TET-I & TET-II)',
       qualification: 'M.A. in Bengali with B.Ed.',
       experience: '10 Years Experience',
-      photo: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80',
+      photo: getFacultyAvatarUrl('Mr. G. Shil'),
       bio: 'Specialist faculty for Bengali language and pedagogy for TRBT TET Paper-I & Paper-II. Special achievements: TET-I, TET-II & STGT qualified under TRBT. Available for online and offline classes.',
       specializationTags: ['Assistant Teacher', 'TET-I & TET-II', 'Bengali', 'TRBT Qualified', 'Online & Offline'],
+      achievements: 'TET-I, TET-II & STGT qualified under TRBT',
+      workAbility: 'Online & Offline',
     },
     {
       id: 'fac-s-banik',
@@ -474,9 +485,11 @@ export const INITIAL_SEED_DATA: CgaDatabase = {
       subject: 'English, General Knowledge & Current Affairs',
       qualification: 'B.A. English (Honours), M.A. in English, B.Ed.',
       experience: '10 Years Experience',
-      photo: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=500&auto=format&fit=crop&q=80',
+      photo: getFacultyAvatarUrl('Mr. S. Banik'),
       bio: 'Prepares candidates for TET-I, TET-II, STGT, TPSC, and TCS/TPS examinations. Special achievements: TET-I, TET-II & STGT qualified under TRBT. Conducts both online and offline interactive lectures.',
       specializationTags: ['Assistant Teacher', 'TET & STGT', 'TPSC / TCS / TPS', 'English', 'GK & CA', 'Online & Offline'],
+      achievements: 'TET-I, TET-II & STGT qualified under TRBT',
+      workAbility: 'Online & Offline',
     },
     {
       id: 'fac-p-ghosh',
@@ -485,9 +498,11 @@ export const INITIAL_SEED_DATA: CgaDatabase = {
       subject: 'General Studies, Maths & Reasoning, GK, CA',
       qualification: 'B.Tech (80% Marks), Masters in Manufacturing',
       experience: '10 Years Experience',
-      photo: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500&auto=format&fit=crop&q=80',
+      photo: getFacultyAvatarUrl('Mr. P. Ghosh'),
       bio: 'Senior mentor for TCS, TPSC Combined, SSC & RRB. Special achievements: Selected as Election Inspector, Panchayat Executive Officer, LDC (JRBT), and TBSE Class 10 Board Rank Holder.',
       specializationTags: ['Assistant Teacher', 'TCS & TPSC Combined', 'SSC & RRB', 'Maths & Reasoning', 'General Studies', 'Online & Offline'],
+      achievements: 'Selected as Election Inspector, Panchayat Executive Officer, LDC (JRBT)',
+      workAbility: 'Online & Offline',
     },
     {
       id: 'fac-p-bhattacharjee',
@@ -496,9 +511,11 @@ export const INITIAL_SEED_DATA: CgaDatabase = {
       subject: 'Maths, Reasoning & General Science',
       qualification: 'M.Tech Biotechnology (NIT Durgapur)',
       experience: '5 Years Experience',
-      photo: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=500&auto=format&fit=crop&q=80',
+      photo: getFacultyAvatarUrl('Mr. P. Bhattacharjee'),
       bio: 'Guides TCS/TPS, TPSC, SSC, and RRB aspirants with high-speed calculation techniques and scientific reasoning. Special achievements: GATE Qualified (2014 & 2016), Qualified TPSC Tripura Secretariat Service 2023 (Rank 9th).',
       specializationTags: ['Assistant Teacher', 'TPSC Rank 9th', 'NIT Durgapur', 'GATE Qualified', 'Maths & Reasoning', 'General Science'],
+      achievements: 'GATE Qualified (2014 & 2016), TPSC Tripura Secretariat Service 2023 (Rank 9th)',
+      workAbility: 'Online & Offline',
     },
     {
       id: 'fac-r-paul',
@@ -507,9 +524,11 @@ export const INITIAL_SEED_DATA: CgaDatabase = {
       subject: 'Child Development and Pedagogy (CDP)',
       qualification: 'B.A. with Education (Honours), D.El.Ed.',
       experience: '10 Years Experience',
-      photo: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=500&auto=format&fit=crop&q=80',
+      photo: getFacultyAvatarUrl('Mrs. R. Paul'),
       bio: 'Specialist educator for Child Development and Pedagogy (CDP) for Tripura TET-I and TET-II. Special achievements: TET-I & TET-II qualified under TRBT. Mentors students with deep conceptual clarity in online and offline modes.',
       specializationTags: ['Assistant Teacher', 'Child Development & Pedagogy', 'TET-I & TET-II', 'TRBT Qualified', 'Education Honours'],
+      achievements: 'TET-I & TET-II qualified under TRBT',
+      workAbility: 'Online & Offline',
     },
     {
       id: 'fac-s-ghosh',
@@ -518,9 +537,11 @@ export const INITIAL_SEED_DATA: CgaDatabase = {
       subject: 'History & Political Science',
       qualification: 'B.A. in Political Science, M.A. in Political Science, B.Ed.',
       experience: '10 Years Experience',
-      photo: 'https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?w=500&auto=format&fit=crop&q=80',
+      photo: getFacultyAvatarUrl('Mr. S. Ghosh'),
       bio: 'Leads Social Studies, Indian Polity, and History preparation for TET-II & STGT under TRBT. Special achievements: TET-II & STPGT qualified under TRBT. Conducts both online and offline classes.',
       specializationTags: ['Assistant Teacher', 'TET-II & STGT', 'STPGT Qualified', 'Political Science', 'History', 'Online & Offline'],
+      achievements: 'TET-II & STPGT qualified under TRBT',
+      workAbility: 'Online & Offline',
     },
     {
       id: 'fac-j-paul',
@@ -529,9 +550,24 @@ export const INITIAL_SEED_DATA: CgaDatabase = {
       subject: 'Mathematics, Science & EVS',
       qualification: 'B.Sc. (B.Ed.), M.A.',
       experience: '6 Years Experience',
-      photo: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=500&auto=format&fit=crop&q=80',
+      photo: getFacultyAvatarUrl('Mr. J. Paul'),
       bio: 'Mentors TET-I and TET-II aspirants in Mathematics, General Science, and Environmental Studies. Special achievements: TET-II & C-TET (Science & Maths) Qualified. Delivers interactive online and offline lessons.',
       specializationTags: ['Assistant Teacher', 'TET-I & TET-II', 'Mathematics & Science', 'EVS', 'C-TET Qualified', 'Online & Offline'],
+      achievements: 'TET-II & C-TET (Science & Maths) Qualified',
+      workAbility: 'Online & Offline',
+    },
+    {
+      id: 'fac-r-debnath',
+      name: 'Mr. R. Debnath',
+      designation: 'Assistant Teacher',
+      subject: 'Math, Science & EVS',
+      qualification: 'B. Sc. with Chemistry (Honours), M. Sc. & B. Ed.',
+      experience: '7 Years Experience',
+      photo: getFacultyAvatarUrl('Mr. R. Debnath'),
+      bio: 'Appointed for TET-I & TET-II batches teaching Mathematics, Science, and Environmental Studies (EVS). Special achievements: TET-I & TET-II (Science) Qualified under TRBT. Available for online and offline teaching.',
+      specializationTags: ['Assistant Teacher', 'TET-I & TET-II', 'Math & Science', 'EVS', 'TRBT Qualified', 'Online & Offline'],
+      achievements: 'TET-I & TET-II (Science) Qualified under TRBT',
+      workAbility: 'Online & Offline',
     },
     {
       id: 'fac-s-majumder',
@@ -540,9 +576,24 @@ export const INITIAL_SEED_DATA: CgaDatabase = {
       subject: 'General Knowledge, General Science & Current Affairs',
       qualification: 'B.F.Sc., M.F.Sc. (Master of Fisheries Science)',
       experience: '5 Years Experience',
-      photo: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80',
+      photo: getFacultyAvatarUrl('Miss. S. Majumder'),
       bio: 'Faculty for TCS/TPS, TPSC Combined, and JRBT examinations. Special achievements: TPSC COMBINED-2 Qualified. Available for online and offline classroom coaching and mock analysis.',
       specializationTags: ['Assistant Teacher', 'TPSC Combined Qualified', 'TCS / TPS / JRBT', 'General Science', 'Current Affairs & GK'],
+      achievements: 'TPSC COMBINED-2 Qualified',
+      workAbility: 'Online & Offline',
+    },
+    {
+      id: 'fac-b-das',
+      name: 'Mr. B. Das',
+      designation: 'Office Assistant',
+      subject: 'ICT Instruction & Office Administration',
+      qualification: 'B.A. Pass & DCA',
+      experience: '5 Years Experience as ICT Instructor',
+      photo: getFacultyAvatarUrl('Mr. B. Das'),
+      bio: 'Office Assistant coordinating digital operations and student support with 5 years experience as ICT Instructor. Special achievements: MTS under JRBT. Available for online and offline work.',
+      specializationTags: ['Office Assistant', 'ICT Instructor', 'B.A. & DCA', 'MTS under JRBT', 'Online & Offline'],
+      achievements: 'MTS under JRBT',
+      workAbility: 'Online & Offline',
     },
     {
       id: 'fac-tridip-sarkar',
@@ -551,9 +602,11 @@ export const INITIAL_SEED_DATA: CgaDatabase = {
       subject: 'Administration, Operations & Student Support',
       qualification: 'Master’s Degree in Political Science (IGNOU), DCA',
       experience: '5 Years Experience',
-      photo: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80',
+      photo: getFacultyAvatarUrl('Mr. Tridip Sarkar'),
       bio: 'Office Manager coordinating campus administration, online & offline batch scheduling, and student support. Special achievements: Diploma in Computer Applications (DCA). Available for online and offline coordination.',
       specializationTags: ['Office Manager', 'Campus Administration', 'Operations', 'DCA Certified', 'Online & Offline Support'],
+      achievements: 'Diploma in Computer Applications (DCA)',
+      workAbility: 'Online & Offline',
     },
   ],
 

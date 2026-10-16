@@ -24,6 +24,7 @@ export default function RegisterPage() {
   const [sameAddress, setSameAddress] = useState(false);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [consentAgreed, setConsentAgreed] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [confirmEmailSent, setConfirmEmailSent] = useState(false);
@@ -63,6 +64,10 @@ export default function RegisterPage() {
     }
     if (password !== confirmPassword) {
       setError('Passwords do not match.');
+      return;
+    }
+    if (!consentAgreed) {
+      setError('You must accept the Terms & Conditions and Privacy Policy (DPDP Act 2023) to register.');
       return;
     }
 
@@ -283,7 +288,7 @@ export default function RegisterPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                <label htmlFor="reg-password" className="block text-xs font-bold text-slate-700 mb-1.5">
                   Create Password <span className="text-[#dc2626]">*</span>
                 </label>
                 <input
@@ -292,12 +297,14 @@ export default function RegisterPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Min. 8 characters"
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3] focus-visible:ring-2 focus-visible:ring-[#0056b3]"
+                  required
+                  aria-required="true"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                <label htmlFor="reg-confirm-password" className="block text-xs font-bold text-slate-700 mb-1.5">
                   Confirm Password <span className="text-[#dc2626]">*</span>
                 </label>
                 <input
@@ -306,8 +313,53 @@ export default function RegisterPage() {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="Re-enter password"
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3] focus-visible:ring-2 focus-visible:ring-[#0056b3]"
+                  required
+                  aria-required="true"
                 />
+              </div>
+            </div>
+
+            {/* Mandatory DPDP Act & Terms Consent Checkbox */}
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+              <div className="flex items-start gap-2.5">
+                <input
+                  id="reg-consent"
+                  type="checkbox"
+                  checked={consentAgreed}
+                  onChange={(e) => setConsentAgreed(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded text-[#0056b3] border-slate-300 focus:ring-[#0056b3] focus-visible:ring-2 focus-visible:ring-[#0056b3] cursor-pointer shrink-0"
+                  required
+                  aria-required="true"
+                />
+                <label
+                  htmlFor="reg-consent"
+                  className="text-xs text-slate-700 leading-relaxed cursor-pointer select-none"
+                >
+                  <span className="font-semibold text-slate-900">Mandatory Terms &amp; Privacy Consent:</span>{' '}
+                  I certify that all details submitted are accurate. I accept and agree to Career Guidance Academy&apos;s{' '}
+                  <Link
+                    href="/terms-and-conditions"
+                    target="_blank"
+                    className="text-[#0056b3] underline font-semibold hover:text-blue-800 focus-visible:outline-2 focus-visible:outline-[#0056b3]"
+                  >
+                    Terms &amp; Conditions
+                  </Link>,{' '}
+                  <Link
+                    href="/privacy-policy"
+                    target="_blank"
+                    className="text-[#0056b3] underline font-semibold hover:text-blue-800 focus-visible:outline-2 focus-visible:outline-[#0056b3]"
+                  >
+                    Privacy Policy (DPDP Act, 2023)
+                  </Link>, and{' '}
+                  <Link
+                    href="/refund-policy"
+                    target="_blank"
+                    className="text-[#0056b3] underline font-semibold hover:text-blue-800 focus-visible:outline-2 focus-visible:outline-[#0056b3]"
+                  >
+                    Refund Policy
+                  </Link>. For minor students (Class VII to X), this registration is made under verifiable parental / guardian supervision.
+                </label>
               </div>
             </div>
 
@@ -315,7 +367,8 @@ export default function RegisterPage() {
               id="reg-submit-btn"
               type="submit"
               disabled={busy}
-              className="w-full py-3.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] disabled:opacity-60 text-white font-bold text-sm shadow-md inline-flex items-center justify-center gap-2 transition-all cursor-pointer"
+              className="w-full py-3.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] disabled:opacity-60 text-white font-bold text-sm shadow-md inline-flex items-center justify-center gap-2 transition-all cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0056b3]"
+              aria-label="Complete Student Registration and Enter Portal"
             >
               <UserPlus className="w-4 h-4" />
               {busy ? 'Creating your account…' : 'Complete Registration & Enter Student Portal'}

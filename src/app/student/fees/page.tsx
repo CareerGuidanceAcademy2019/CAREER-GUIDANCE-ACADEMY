@@ -1,16 +1,16 @@
 'use client';
 
 import React, { useState } from 'react';
-import { CreditCard, CheckCircle2, AlertCircle, Eye, Receipt } from 'lucide-react';
+import { CreditCard, CheckCircle2, AlertCircle, Eye, Receipt, Clock, Sparkles } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
 import { ReceiptModal } from '@/components/student/ReceiptModal';
+import { PayManualModal, type PayManualTarget } from '@/components/payment/PayManualModal';
 import { FeePayment } from '@/data/initialSeedData';
 
 export default function StudentFeesPage() {
-  const { db, currentStudent, payCourseDue } = useCga();
+  const { db, currentStudent, showToast } = useCga();
   const [selectedReceipt, setSelectedReceipt] = useState<FeePayment | null>(null);
-  const [payingCourseId, setPayingCourseId] = useState<string | null>(null);
-  const [paymentMode, setPaymentMode] = useState<FeePayment['paymentMode']>('UPI');
+  const [payTarget, setPayTarget] = useState<PayManualTarget | null>(null);
 
   if (!currentStudent) return null;
 
@@ -19,23 +19,7 @@ export default function StudentFeesPage() {
   const totalDue = currentStudent.enrollments.reduce((acc, e) => acc + e.dueAmount, 0);
 
   const myPayments = db.feePayments.filter((p) => p.studentId === currentStudent.id);
-  const activePayEnrollment = currentStudent.enrollments.find((e) => e.courseId === payingCourseId);
-
-  const handlePayBalance = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!activePayEnrollment) return;
-    const res = await payCourseDue({
-      studentId: currentStudent.id,
-      courseId: activePayEnrollment.courseId,
-      amount: activePayEnrollment.dueAmount,
-      paymentMode,
-      remarks: 'Balance instalment paid via Student Portal.',
-    });
-    if (res.success && res.receipt) {
-      setPayingCourseId(null);
-      setSelectedReceipt(res.receipt);
-    }
-  };
+  const pendingPayments = myPayments.filter((p) => p.status === 'Pending');
 
   return (
     <div className="space-y-8">
@@ -44,10 +28,32 @@ export default function StudentFeesPage() {
           Fee Ledger, Instalment Dues & Official Receipts
         </h1>
         <p className="text-xs sm:text-sm text-slate-600 mt-1">
-          Track your course-wise fee status, pay pending instalments online, and download official
+          Track your course-wise fee status, pay pending instalments online via UPI / Bank transfer, and download official
           Career Guidance Academy receipts.
         </p>
       </div>
+
+      {/* Pending Verifications Notice Banner */}
+      {pendingPayments.length > 0 && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-amber-50 border border-amber-200 flex items-start gap-3.5 shadow-2xs">
+          <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5 animate-pulse" />
+          <div className="text-xs space-y-1">
+            <h3 className="font-extrabold text-amber-900 text-sm flex items-center gap-2">
+              Payment Under Admin Verification ({pendingPayments.length})
+            </h3>
+            <p className="text-amber-800 leading-relaxed">
+              You have submitted verification for your recent payment. Our admissions desk verifies bank UTRs within up to 6 hours (9:00 AM – 9:00 PM). Once verified, your cleared due balance and official download receipt will update automatically.
+            </p>
+            <div className="flex flex-wrap gap-2 pt-1 font-mono text-[11px] font-bold text-amber-900">
+              {pendingPayments.map((p) => (
+                <span key={p.id} className="bg-amber-100/80 px-2.5 py-1 rounded-lg border border-amber-300">
+                  Ref: {p.receiptNo} • UTR: {p.utr || 'Submitted'} • ₹{p.amount.toLocaleString('en-IN')}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
@@ -104,10 +110,19 @@ export default function StudentFeesPage() {
               {enr.dueAmount > 0 ? (
                 <button
                   type="button"
-                  onClick={() => setPayingCourseId(enr.courseId)}
-                  className="px-4 py-2.5 rounded-xl bg-[#dc2626] hover:bg-red-700 text-white text-xs font-extrabold shrink-0 cursor-pointer"
+                  onClick={() =>
+                    setPayTarget({
+                      itemType: 'course',
+                      itemId: enr.courseId,
+                      title: enr.courseName,
+                      fullAmount: enr.totalFee,
+                      dueAmount: enr.dueAmount,
+                      paymentType: 'balance',
+                    })
+                  }
+                  className="px-4 py-2.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-extrabold shrink-0 cursor-pointer shadow-xs inline-flex items-center gap-1.5 transition-all"
                 >
-                  Pay Balance ₹{enr.dueAmount.toLocaleString('en-IN')}
+                  <CreditCard className="w-3.5 h-3.5" /> Pay Due ₹{enr.dueAmount.toLocaleString('en-IN')} via UPI / Bank
                 </button>
               ) : (
                 <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold shrink-0">
@@ -129,98 +144,102 @@ export default function StudentFeesPage() {
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="border-b border-slate-200 text-slate-400 uppercase">
-                <th className="py-3 px-3">Receipt No.</th>
+                <th className="py-3 px-3">Receipt / Ref</th>
                 <th className="py-3 px-3">Date</th>
                 <th className="py-3 px-3">Course</th>
                 <th className="py-3 px-3">Type / Mode</th>
-                <th className="py-3 px-3">Amount Paid</th>
-                <th className="py-3 px-3 text-right">Receipt</th>
+                <th className="py-3 px-3">Amount</th>
+                <th className="py-3 px-3">Verification Status</th>
+                <th className="py-3 px-3 text-right">Official Receipt</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {myPayments.map((pay) => (
-                <tr key={pay.id} className="hover:bg-slate-50">
-                  <td className="py-3.5 px-3 font-mono font-bold text-[#0056b3] whitespace-nowrap">
-                    {pay.receiptNo}
-                  </td>
-                  <td className="py-3.5 px-3 text-slate-600 whitespace-nowrap">{pay.date}</td>
-                  <td className="py-3.5 px-3 font-bold text-slate-900">{pay.courseName}</td>
-                  <td className="py-3.5 px-3 text-slate-600 whitespace-nowrap">
-                    {pay.paymentType} ({pay.paymentMode})
-                  </td>
-                  <td className="py-3.5 px-3 font-extrabold text-emerald-700 whitespace-nowrap">
-                    ₹{pay.amount.toLocaleString('en-IN')}
-                  </td>
-                  <td className="py-3.5 px-3 text-right whitespace-nowrap">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedReceipt(pay)}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#0056b3] font-bold cursor-pointer whitespace-nowrap"
-                    >
-                      <Eye className="w-3.5 h-3.5" /> View / Download
-                    </button>
+              {myPayments.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-slate-400 text-xs">
+                    No payment records found yet.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                myPayments.map((pay) => {
+                  const status = pay.status ?? 'Verified';
+                  return (
+                    <tr key={pay.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="py-3.5 px-3 font-mono font-bold text-[#0056b3] whitespace-nowrap">
+                        <div>{pay.receiptNo}</div>
+                        {pay.utr && (
+                          <div className="text-[10px] text-slate-400 font-mono">UTR: {pay.utr}</div>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-3 text-slate-600 whitespace-nowrap">{pay.date}</td>
+                      <td className="py-3.5 px-3 font-bold text-slate-900">{pay.courseName}</td>
+                      <td className="py-3.5 px-3 text-slate-600 whitespace-nowrap">
+                        {pay.paymentType} ({pay.paymentMode})
+                      </td>
+                      <td className="py-3.5 px-3 font-extrabold text-emerald-700 whitespace-nowrap">
+                        ₹{pay.amount.toLocaleString('en-IN')}
+                      </td>
+                      <td className="py-3.5 px-3 whitespace-nowrap">
+                        {status === 'Verified' && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 text-[11px]">
+                            <CheckCircle2 className="w-3 h-3" /> Verified
+                          </span>
+                        )}
+                        {status === 'Pending' && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 font-bold border border-amber-300 text-[11px] animate-pulse">
+                            <Clock className="w-3 h-3" /> Under Verification
+                          </span>
+                        )}
+                        {status === 'Rejected' && (
+                          <span
+                            title={pay.rejectionReason}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-50 text-red-700 font-bold border border-red-200 text-[11px]"
+                          >
+                            <AlertCircle className="w-3 h-3" /> Rejected
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-3 text-right whitespace-nowrap">
+                        {status === 'Verified' ? (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedReceipt(pay)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#0056b3] font-bold cursor-pointer whitespace-nowrap transition-colors"
+                          >
+                            <Eye className="w-3.5 h-3.5" /> View / Download
+                          </button>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 italic">
+                            Available after verify
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Pay Due Modal */}
-      {activePayEnrollment && (
-        <div
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 p-4"
-          role="dialog"
-          aria-modal="true"
-        >
-          <form
-            onSubmit={handlePayBalance}
-            className="bg-white rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl border border-slate-200"
-          >
-            <h3 className="text-lg font-extrabold text-[#0a0e2a]">
-              Pay Pending Instalment Balance
-            </h3>
-            <p className="text-xs text-slate-600">{activePayEnrollment.courseName}</p>
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex justify-between items-center">
-              <span className="text-xs font-bold text-slate-600">Due Amount Payable:</span>
-              <span className="text-xl font-extrabold text-[#dc2626]">
-                ₹{activePayEnrollment.dueAmount.toLocaleString('en-IN')}
-              </span>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-2">
-                Select Simulated Payment Mode
-              </label>
-              <select
-                value={paymentMode}
-                onChange={(e) => setPaymentMode(e.target.value as FeePayment['paymentMode'])}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold bg-white"
-              >
-                <option value="UPI">UPI (Google Pay / PhonePe / Paytm)</option>
-                <option value="Debit/Credit Card">Debit / Credit Card</option>
-                <option value="Net Banking">Net Banking</option>
-              </select>
-            </div>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setPayingCourseId(null)}
-                className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-5 py-2.5 rounded-xl bg-[#0056b3] text-white text-xs font-bold cursor-pointer"
-              >
-                Confirm Payment & Get Receipt
-              </button>
-            </div>
-          </form>
-        </div>
+      {/* Unified Manual Payment (UPI & Bank) Flow */}
+      {payTarget && (
+        <PayManualModal
+          target={payTarget}
+          onClose={() => setPayTarget(null)}
+          onSuccess={(refCode) => {
+            showToast(
+              'Instalment Payment Submitted',
+              `Verification reference ${refCode} received. Once approved by admin, your fee ledger will update automatically.`,
+              'success'
+            );
+            setPayTarget(null);
+          }}
+        />
       )}
 
+      {/* Official Receipt Modal */}
       <ReceiptModal receipt={selectedReceipt} onClose={() => setSelectedReceipt(null)} />
     </div>
   );

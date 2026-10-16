@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { MapPin, Phone, Mail, Clock, Send, CheckCircle2, AlertCircle } from 'lucide-react';
+import Link from 'next/link';
+import { MapPin, Phone, Mail, Clock, Send, CheckCircle2, AlertCircle, ShieldCheck } from 'lucide-react';
 import { PublicHeader } from '@/components/layout/PublicHeader';
 import { PublicFooter } from '@/components/layout/PublicFooter';
 import { useCga } from '@/context/CgaContext';
@@ -15,6 +16,7 @@ export default function ContactPage() {
   const [email, setEmail] = useState('');
   const [courseInterest, setCourseInterest] = useState('Tripura TET (Paper I & II)');
   const [message, setMessage] = useState('');
+  const [consentGiven, setConsentGiven] = useState(false);
   const [error, setError] = useState('');
   const [submitted, setSubmitted] = useState(false);
 
@@ -34,6 +36,10 @@ export default function ContactPage() {
       setError('Please write your query or batch preference.');
       return;
     }
+    if (!consentGiven) {
+      setError('Please give consent to process your contact details for this enquiry under the DPDP Act, 2023.');
+      return;
+    }
 
     submitEnquiry({
       name: name.trim(),
@@ -48,6 +54,7 @@ export default function ContactPage() {
     setPhone('');
     setEmail('');
     setMessage('');
+    setConsentGiven(false);
   };
 
   return (
@@ -178,7 +185,7 @@ export default function ContactPage() {
                     )}
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                      <label htmlFor="enquiry-name" className="block text-xs font-bold text-slate-700 mb-1.5">
                         Full Name <span className="text-[#dc2626]">*</span>
                       </label>
                       <input
@@ -187,13 +194,15 @@ export default function ContactPage() {
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         placeholder="Enter student or guardian full name"
-                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3] focus-visible:ring-2 focus-visible:ring-[#0056b3]"
+                        required
+                        aria-required="true"
                       />
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        <label htmlFor="enquiry-phone" className="block text-xs font-bold text-slate-700 mb-1.5">
                           Mobile Number <span className="text-[#dc2626]">*</span>
                         </label>
                         <input
@@ -202,11 +211,13 @@ export default function ContactPage() {
                           value={phone}
                           onChange={(e) => setPhone(e.target.value)}
                           placeholder="+91 9436X XXXXX"
-                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3] focus-visible:ring-2 focus-visible:ring-[#0056b3]"
+                          required
+                          aria-required="true"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        <label htmlFor="enquiry-email" className="block text-xs font-bold text-slate-700 mb-1.5">
                           Email Address (Optional)
                         </label>
                         <input
@@ -215,20 +226,20 @@ export default function ContactPage() {
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           placeholder="you@example.com"
-                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3] focus-visible:ring-2 focus-visible:ring-[#0056b3]"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                      <label htmlFor="enquiry-course" className="block text-xs font-bold text-slate-700 mb-1.5">
                         Course / Exam Wing of Interest
                       </label>
                       <select
                         id="enquiry-course"
                         value={courseInterest}
                         onChange={(e) => setCourseInterest(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#0056b3] focus-visible:ring-2 focus-visible:ring-[#0056b3]"
                       >
                         {db.courses.map((c) => (
                           <option key={c.id} value={c.name}>
@@ -239,7 +250,7 @@ export default function ContactPage() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                      <label htmlFor="enquiry-message" className="block text-xs font-bold text-slate-700 mb-1.5">
                         Your Query / Preferred Batch Timing <span className="text-[#dc2626]">*</span>
                       </label>
                       <textarea
@@ -248,14 +259,45 @@ export default function ContactPage() {
                         value={message}
                         onChange={(e) => setMessage(e.target.value)}
                         placeholder="Ask about batch start date, study material, or fee instalments..."
-                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3] focus-visible:ring-2 focus-visible:ring-[#0056b3]"
+                        required
+                        aria-required="true"
                       />
+                    </div>
+
+                    {/* DPDP Act 2023 Explicit Consent Checkbox */}
+                    <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+                      <div className="flex items-start gap-2.5">
+                        <input
+                          id="enquiry-consent"
+                          type="checkbox"
+                          checked={consentGiven}
+                          onChange={(e) => setConsentGiven(e.target.checked)}
+                          className="mt-0.5 w-4 h-4 rounded text-[#0056b3] border-slate-300 focus:ring-[#0056b3] focus-visible:ring-2 focus-visible:ring-[#0056b3] cursor-pointer shrink-0"
+                          required
+                          aria-required="true"
+                        />
+                        <label
+                          htmlFor="enquiry-consent"
+                          className="text-xs text-slate-700 leading-relaxed cursor-pointer select-none"
+                        >
+                          <span className="font-semibold text-slate-900">DPDP Data Protection Consent:</span>{' '}
+                          I hereby consent to Career Guidance Academy (C.G.A) collecting and processing my name, mobile number, and enquiry details solely to respond to my academic query in accordance with India&apos;s Digital Personal Data Protection Act, 2023. I understand my data will not be sold or shared with third-party advertisers. See{' '}
+                          <Link
+                            href="/privacy-policy"
+                            className="text-[#0056b3] underline font-semibold hover:text-blue-800 focus-visible:outline-2 focus-visible:outline-[#0056b3]"
+                          >
+                            Privacy Policy
+                          </Link>.
+                        </label>
+                      </div>
                     </div>
 
                     <button
                       id="enquiry-submit-btn"
                       type="submit"
-                      className="w-full py-3.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white font-bold text-sm shadow-md inline-flex items-center justify-center gap-2 transition-all cursor-pointer"
+                      className="w-full py-3.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white font-bold text-sm shadow-md inline-flex items-center justify-center gap-2 transition-all cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0056b3]"
+                      aria-label="Submit Admission Enquiry to Career Guidance Academy"
                     >
                       <Send className="w-4 h-4" />
                       Submit Admission Enquiry

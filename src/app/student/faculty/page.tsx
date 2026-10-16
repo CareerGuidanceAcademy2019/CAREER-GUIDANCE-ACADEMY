@@ -3,7 +3,7 @@
 import React from 'react';
 import { Users, Briefcase } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
-import { formatFacultyName } from '@/lib/names';
+import { formatFacultyName, getFacultyAvatarUrl } from '@/lib/names';
 
 export default function StudentFacultyPage() {
   const { db } = useCga();
@@ -36,8 +36,11 @@ export default function StudentFacultyPage() {
             >
               <div className="flex items-center gap-4">
                 <img
-                  src={member.photo || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80'}
+                  src={member.photo || getFacultyAvatarUrl(member.name)}
                   alt={formatFacultyName(member.name)}
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src = getFacultyAvatarUrl(member.name);
+                  }}
                   className="w-16 h-16 rounded-2xl object-cover border border-slate-200 shrink-0"
                 />
                 <div>
