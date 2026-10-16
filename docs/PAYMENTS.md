@@ -121,3 +121,28 @@ select cron.schedule(
 4. **Reject:** If not found or invalid, click "Reject" and supply a clear reason. The student is notified in `/student/payments` and can resubmit with corrected proof.
 5. **Daily Reconciliation:** In `/admin/payments`, select the date range and click "Download Report" to download a server-verified CSV reconciliation report.
 6. **Financial Settings (`/admin/payment-settings`):** To change UPI ID or bank account details, supply your administrator password in the high-risk re-authentication modal.
+
+---
+
+## 7. Physical Walk-in & Counter Cash Enrolment Terminal (`/admin/counter-enrollment`)
+
+For walk-in students visiting the physical center at **Chanban (Behind Youthclub), Udaipur, Gomati Tripura**, administrators can collect physical payments (Cash, Counter UPI, Card Swipe, Cheque), register new students on the spot, enroll them across every academy section, and instantly issue high-resolution printable money receipts.
+
+### Key Capabilities:
+1. **Candidate Handling:**
+   - **Register Walk-in Candidate on the Spot:** Enter Name, 10-digit Phone, Guardian Name, Address, Qualification, and Target Exam. Generates a unique Student Code (`CGA-2026-XXXX`).
+   - **Select Existing Student:** Search and select existing registered students from the database.
+2. **Multi-Section Enrollment Options:**
+   - **Classroom / Hybrid Coaching Course:** Select batch, full course fee or 1st instalment, decrementing batch available seats immediately.
+   - **T-TET 2026 Comprehensive 15-Mock Series (Flat ₹499):** Unlocks `series_enrollments` access.
+   - **Digital Study Materials & Notes (Flat ₹199):** Unlocks `material_access` access.
+3. **Counter Payment Recording:**
+   - Payment Modes: `Cash at Counter`, `Counter UPI`, `Card Swipe`, `Cheque`.
+   - Real-time balance due calculation (`Due = Total Fee - Collected Amount`).
+   - Cashier remarks / counter notes stored on the receipt.
+4. **Official Physical Money Receipt (`CGA-RCP-YYYY-XXXXX`):**
+   - High-resolution academy letterhead with Udaipur address & contact info.
+   - Indian currency words converter (`numberToIndianWords`), e.g. *"Rupees Four Thousand Five Hundred Only"*.
+   - Signatory lines: Authorized Cashier Signature, Candidate Signature, and Official Academy Seal box.
+   - Clean `@media print` layout: Action buttons and modal backgrounds are automatically hidden during physical printing (`Ctrl+P` / Print button).
+   - Instant text receipt download (`.txt`) for SMS/WhatsApp distribution.

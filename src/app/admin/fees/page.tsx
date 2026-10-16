@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import {
   CreditCard,
   AlertCircle,
@@ -15,6 +16,7 @@ import {
   ImageIcon,
   ShieldCheck,
   ExternalLink,
+  Coins,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
 import { ReceiptModal } from '@/components/student/ReceiptModal';
@@ -111,14 +113,23 @@ export default function AdminFeesPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-extrabold text-[#0a0e2a]">
-          Fee Collection, Receipts & Defaulter Tracker
-        </h1>
-        <p className="text-xs sm:text-sm text-slate-600 mt-1">
-          Review student online UPI / Bank verifications, track cleared and pending balances, filter fee defaulters by
-          course or batch, and generate official C.G.A receipts.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-extrabold text-[#0a0e2a]">
+            Fee Collection, Receipts & Defaulter Tracker
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-600 mt-1">
+            Review student online UPI / Bank verifications, track cleared and pending balances, filter fee defaulters by
+            course or batch, and generate official C.G.A receipts.
+          </p>
+        </div>
+        <Link
+          href="/admin/counter-enrollment"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-all shrink-0 cursor-pointer"
+        >
+          <Coins className="w-4 h-4 text-emerald-200" />
+          Physical Walk-in & Counter Cash
+        </Link>
       </div>
 
       {/* ================= PENDING ONLINE PAYMENT VERIFICATIONS ================= */}

@@ -24,11 +24,13 @@ import {
   ChevronDown,
   X,
   Lock,
+  Coins,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
 import { PaymentRequest, PaymentStatus, PaymentAuditLogEntry } from '@/types/payments';
 import { PAYMENT_SETTINGS } from '@/config/paymentSettings';
 import { ReceiptModal } from '@/components/student/ReceiptModal';
+import { CounterEnrollmentModal } from '@/components/admin/CounterEnrollmentModal';
 import { FeePayment } from '@/data/initialSeedData';
 
 export default function AdminPaymentsPage() {
@@ -52,6 +54,9 @@ export default function AdminPaymentsPage() {
   const [rejectingRequest, setRejectingRequest] = useState<PaymentRequest | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [isProcessingReject, setIsProcessingReject] = useState(false);
+
+  // Counter Cash Enrolment Modal State
+  const [showCounterModal, setShowCounterModal] = useState(false);
 
   // Screenshot Proof Modal State
   const [previewScreenshot, setPreviewScreenshot] = useState<{
@@ -499,6 +504,14 @@ export default function AdminPaymentsPage() {
 
         {/* Top Action Buttons */}
         <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => setShowCounterModal(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
+          >
+            <Coins className="w-4 h-4 text-emerald-200" /> Collect Cash & Enrol
+          </button>
+
           <button
             type="button"
             onClick={handleOpenAuditLogs}
@@ -1191,6 +1204,16 @@ export default function AdminPaymentsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Counter Cash Enrolment Modal */}
+      {showCounterModal && (
+        <CounterEnrollmentModal
+          onClose={() => setShowCounterModal(false)}
+          onSuccess={() => {
+            fetchRequests();
+          }}
+        />
       )}
 
       {/* Official Receipt Modal */}

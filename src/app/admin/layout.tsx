@@ -23,6 +23,7 @@ import {
   ShieldCheck,
   RotateCcw,
   Landmark,
+  Coins,
 } from 'lucide-react';
 import { CGALogo } from '@/components/ui/CGALogo';
 import { CustomAcademicEmblemSvg, CustomArrowRightSvg } from '@/components/ui/CustomIcons';
@@ -30,6 +31,7 @@ import { useCga } from '@/context/CgaContext';
 
 const ADMIN_NAV = [
   { href: '/admin/dashboard', label: 'Admin Dashboard', icon: LayoutDashboard },
+  { href: '/admin/counter-enrollment', label: 'Counter Cash & Enrol', icon: Coins },
   { href: '/admin/payments', label: 'Payment Verifications', icon: CreditCard, hasBadge: true },
   { href: '/admin/fees', label: 'Fee & Defaulters', icon: CreditCard },
   { href: '/admin/payment-settings', label: 'Bank & UPI Settings', icon: Landmark },
