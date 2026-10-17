@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAdminSupabase, requireAdmin } from '@/lib/supabase/server';
+import { checkRateLimit, createRateLimitResponse, getClientIp, RATE_LIMIT_RULES } from '@/lib/rateLimit';
 
 /**
  * Server-side Daily Reconciliation Export (Admin-only).
@@ -10,6 +11,16 @@ export async function GET(request: Request) {
   const adminId = await requireAdmin();
   if (!adminId) {
     return NextResponse.json({ error: 'Unauthorized: Admin access required.' }, { status: 403 });
+  }
+
+  const ip = getClientIp(request);
+  const rateRes = await checkRateLimit(
+    `admin_export_${adminId}_${ip}`,
+    RATE_LIMIT_RULES.ADMIN_EXPORT.limit,
+    RATE_LIMIT_RULES.ADMIN_EXPORT.windowSeconds
+  );
+  if (!rateRes.allowed) {
+    return createRateLimitResponse(rateRes);
   }
 
   const { searchParams } = new URL(request.url);

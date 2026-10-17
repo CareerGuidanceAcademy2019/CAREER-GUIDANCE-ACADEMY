@@ -937,7 +937,21 @@ export const cgaService = {
 
   // ============ PUBLIC ============
   async submitEnquiry(e: Omit<EnquiryItem, 'id' | 'createdAt'>): Promise<ServiceResult> {
-    const { error } = await this.client().from('enquiries').insert({
+    const sb = this.client();
+    const cleanPhone = e.phone.replace(/\D/g, '');
+    const { data: rl } = await sb.rpc('check_rate_limit', {
+      p_key: `enquiry_${cleanPhone || 'anon'}`,
+      p_limit: 5,
+      p_window_seconds: 3600,
+    });
+    if (rl && !rl.allowed) {
+      return {
+        success: false,
+        error: `Enquiry submission limit reached. Please wait ${rl.retryAfter || 60} seconds before submitting another enquiry.`,
+      };
+    }
+
+    const { error } = await sb.from('enquiries').insert({
       name: e.name,
       phone: e.phone,
       email: e.email,
@@ -1475,6 +1489,17 @@ export const cgaService = {
 
   async getSeriesTestQuestions(testId: string): Promise<ServiceResult<QuestionsData>> {
     const sb = this.client();
+    const user = (await sb.auth.getUser()).data.user;
+    if (user?.id) {
+      const { data: rl } = await sb.rpc('check_rate_limit', {
+        p_key: `mock_start_${user.id}`,
+        p_limit: 10,
+        p_window_seconds: 60,
+      });
+      if (rl && !rl.allowed) {
+        return { success: false, error: 'Too many test launch attempts. Please wait a minute before launching another test.' };
+      }
+    }
     const { data, error } = await sb.rpc('get_test_questions', { p_test_id: testId });
     if (error) return { success: false, error: msg(error, 'Failed to fetch test questions.') };
     return { success: true, ...(data as QuestionsData) };
@@ -1482,6 +1507,18 @@ export const cgaService = {
 
   async saveAttemptProgress(testId: string, answers: Record<string, number>): Promise<void> {
     const sb = this.client();
+    const user = (await sb.auth.getUser()).data.user;
+    if (user?.id) {
+      const { data: rl } = await sb.rpc('check_rate_limit', {
+        p_key: `mock_save_${user.id}`,
+        p_limit: 60,
+        p_window_seconds: 60,
+      });
+      if (rl && !rl.allowed) {
+        // Capped / throttled silently to avoid spamming the database
+        return;
+      }
+    }
     await sb.rpc('save_attempt_progress', {
       p_test_id: testId,
       p_answers: answers,
@@ -1494,6 +1531,17 @@ export const cgaService = {
     timeTakenSeconds?: number;
   }): Promise<ServiceResult<SeriesAttempt & { totalMarks?: number }>> {
     const sb = this.client();
+    const user = (await sb.auth.getUser()).data.user;
+    if (user?.id) {
+      const { data: rl } = await sb.rpc('check_rate_limit', {
+        p_key: `mock_submit_${user.id}`,
+        p_limit: 5,
+        p_window_seconds: 60,
+      });
+      if (rl && !rl.allowed) {
+        return { success: false, error: 'Submission rate limit reached. Please wait before retrying.' };
+      }
+    }
     const { data, error } = await sb.rpc('submit_mock_attempt', {
       p_test_id: params.testId,
       p_answers: params.answers,

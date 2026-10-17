@@ -50,6 +50,41 @@ export async function proxy(request: NextRequest) {
 
   const { data } = await supabase.auth.getUser();
   const path = request.nextUrl.pathname;
+
+  // 2. Abuse Protection: General API Rate Limit ceiling (120 req/min per IP)
+  if (path.startsWith('/api/')) {
+    const forwarded = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || '127.0.0.1';
+    const clientIp = forwarded.split(',')[0].trim();
+    try {
+      const { data: rl } = await supabase.rpc('check_rate_limit', {
+        p_key: `api_gen_${clientIp}`,
+        p_limit: 120,
+        p_window_seconds: 60,
+      });
+      if (rl && !rl.allowed) {
+        return NextResponse.json(
+          {
+            error: 'Too Many Requests',
+            message: `Rate limit exceeded. Please wait ${rl.retryAfter} seconds before trying again.`,
+            retryAfter: rl.retryAfter,
+            limit: rl.limit,
+          },
+          {
+            status: 429,
+            headers: {
+              'Retry-After': String(rl.retryAfter),
+              'X-RateLimit-Limit': String(rl.limit),
+              'X-RateLimit-Remaining': '0',
+              'Cache-Control': 'no-store, no-cache, must-revalidate',
+            },
+          }
+        );
+      }
+    } catch {
+      // Fail-open for transient network/DB errors on general API check
+    }
+  }
+
   const isProtected =
     path.startsWith('/admin') || path.startsWith('/student') || path.startsWith('/faculty-portal');
 

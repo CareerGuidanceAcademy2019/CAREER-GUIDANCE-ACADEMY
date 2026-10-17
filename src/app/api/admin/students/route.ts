@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { randomBytes } from 'node:crypto';
 import { createAdminSupabase, requireAdmin } from '@/lib/supabase/server';
+import { checkRateLimit, createRateLimitResponse, getClientIp, RATE_LIMIT_RULES } from '@/lib/rateLimit';
 
 import { z } from 'zod';
 
@@ -19,6 +20,16 @@ const createStudentSchema = z.object({
 export async function POST(request: Request) {
   const adminId = await requireAdmin();
   if (!adminId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
+  const ip = getClientIp(request);
+  const rateRes = await checkRateLimit(
+    `admin_stu_${adminId}_${ip}`,
+    RATE_LIMIT_RULES.ADMIN_ACTION.limit,
+    RATE_LIMIT_RULES.ADMIN_ACTION.windowSeconds
+  );
+  if (!rateRes.allowed) {
+    return createRateLimitResponse(rateRes);
+  }
 
   const raw = await request.json().catch(() => null);
   const parseResult = createStudentSchema.safeParse(raw);

@@ -84,3 +84,13 @@ This document logs sensible architectural choices made during the autonomous imp
   4. **PII Masking & Data Minimization:** Student phone numbers and emails in administrative lists (/admin/students, /admin/payments, /admin/fees) are masked by default (+91 94•••••89, a•••t@gmail.com). An interactive click-to-reveal button decrypts the view and automatically logs a pii_revealed_by_admin event to the immutable security_audit_log.
   5. **Admin Inactivity Timeout:** Enforced a 15-minute idle inactivity timeout (AdminPortalLayout) listening to user input events and automatically terminating session tokens if unattended.
   6. **Minor Guardian Consent & Deletion Flow:** Minor enrollment requires parental/guardian declaration. Added an auditable account deletion flow (account_deletion_requests table + request_account_deletion RPC) allowing students to initiate data erasure, which administrators process and permanently purge via purge_candidate().
+
+---
+
+### Decision 19: Serverless Atomic Rate Limiting & Abuse Protection Architecture (Phase 4)
+- **Context:** Standard in-memory rate limiters fail across serverless instances and edge compute nodes. While Upstash Redis is supported, a self-contained, high-reliability database fallback is mandatory to ensure rate limiting operates without external SaaS subscriptions.
+- **Decision:**
+  1. **Atomic Sliding Window Engine:** Built Migration 0011 with table `rate_limit_entries` and row-level locked PostgreSQL RPC `check_rate_limit(p_key, p_limit, p_window_seconds)`. This guarantees strict ACID atomicity across concurrent requests on any hosting provider.
+  2. **Multi-Tier Thresholds:** Configured per-account and per-IP ceilings across login (5/15m per account, 20/15m per IP), registration (5/hr), forgot password (3/hr per email, 10/hr per IP), enquiry submissions (5/hr), payment proof submissions (10/hr), mock tests (10/min start, 60/min debounced save, 5/min submit), and general API proxy ceiling (120/min per IP).
+  3. **Standard RFC 6585 Compliance:** Responses return HTTP 429 Too Many Requests with `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` headers.
+  4. **Audit Integration:** When any rate limit is breached, an automatic security event `rate_limit_exceeded` is written to `public.security_audit_log`.

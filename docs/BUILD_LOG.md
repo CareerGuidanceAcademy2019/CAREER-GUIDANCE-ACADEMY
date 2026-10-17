@@ -168,3 +168,27 @@ This file tracks progress across all phases with timestamps and validation resul
   - Built working Deletion Request UI modal in `/student/profile`.
 - **Backup & Disaster Recovery:**
   - Documented physical and logical backup and restore procedures in `docs/BACKUP_PROCEDURE.md`.
+
+---
+
+## [Pre-Deployment Pass — Phase 4: Abuse Protection and Rate Limiting]
+- **Date & Time:** 2026-10-17T14:55:00+05:30
+- **Database-Backed Atomic Sliding Window Engine:**
+  - Applied `supabase/migrations/0011_rate_limiting.sql` creating `rate_limit_entries` and `check_rate_limit` RPC with row-level locks (`FOR UPDATE`).
+  - Added periodic automatic prune routine `prune_expired_rate_limits()`.
+  - Built-in audit trail writing `rate_limit_exceeded` events directly to `security_audit_log`.
+- **Unified TypeScript Provider (`src/lib/rateLimit.ts`):**
+  - Flexible provider interface supporting Supabase database engine with optional Upstash Redis pipeline if configured.
+  - Generates RFC 6585 compliant HTTP 429 responses with `Retry-After`, `X-RateLimit-Limit`, and reset timestamps.
+- **Enforced Rate Limit Rules:**
+  - **General API:** 120 req/min per IP enforced globally via `src/proxy.ts`.
+  - **Admin Actions:** 60 req/min per admin/IP on `/api/admin/students` and `/api/admin/parse-test`.
+  - **Admin Reconciliation Exports:** 10 req/min on `/api/admin/payments/export`.
+  - **Admissions Enquiries:** 5 per hour per phone/IP in `cgaService.submitEnquiry`.
+  - **Mock Test Operations:** 10 starts/min, 60 saves/min (debounced), 5 submits/min in `cgaService`.
+- **WAF & Firewall Deployment Recommendations:**
+  - Documented Cloudflare WAF, OWASP Core Rulesets, Turnstile bot protection, and TLS 1.3 settings in `docs/DEPLOY_CHECKLIST.md`.
+- **Automated Verification:**
+  - `tests/rate_limit_suite.mjs`: PASSED 5/5 tests (normal decrement, 5-attempt threshold lockout, login lockout, enquiry throttling, mock submit rate limiting).
+  - `npx tsc --noEmit`: PASSED with 0 errors.
+  - `npm run lint`: PASSED with 0 errors.

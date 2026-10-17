@@ -2,11 +2,22 @@ import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/supabase/server';
 import { PDFParse } from 'pdf-parse';
 import { parseRawQuestionsText } from '@/lib/mcqParser';
+import { checkRateLimit, createRateLimitResponse, getClientIp, RATE_LIMIT_RULES } from '@/lib/rateLimit';
 
 export async function POST(request: Request) {
   const adminId = await requireAdmin();
   if (!adminId) {
     return NextResponse.json({ error: 'Unauthorized. Administrator access required.' }, { status: 403 });
+  }
+
+  const ip = getClientIp(request);
+  const rateRes = await checkRateLimit(
+    `admin_parse_${adminId}_${ip}`,
+    RATE_LIMIT_RULES.ADMIN_ACTION.limit,
+    RATE_LIMIT_RULES.ADMIN_ACTION.windowSeconds
+  );
+  if (!rateRes.allowed) {
+    return createRateLimitResponse(rateRes);
   }
 
   try {
