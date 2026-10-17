@@ -1,0 +1,66 @@
+{
+  "/": {
+    "loadTimeMs": 5327,
+    "metrics": {
+      "fcp": 128,
+      "domContentLoaded": 51,
+      "fullLoad": 145,
+      "transferSize": 11563,
+      "decodedBodySize": 57893
+    },
+    "scores": {
+      "performance": 98,
+      "accessibility": 95,
+      "bestPractices": 96,
+      "seo": 100
+    }
+  },
+  "/courses": {
+    "loadTimeMs": 1657,
+    "metrics": {
+      "fcp": 160,
+      "domContentLoaded": 31,
+      "fullLoad": 163,
+      "transferSize": 11081,
+      "decodedBodySize": 57056
+    },
+    "scores": {
+      "performance": 98,
+      "accessibility": 95,
+      "bestPractices": 96,
+      "seo": 100
+    }
+  },
+  "/mock-tests": {
+    "loadTimeMs": 2487,
+    "metrics": {
+      "fcp": 104,
+      "domContentLoaded": 31,
+      "fullLoad": 134,
+      "transferSize": 9537,
+      "decodedBodySize": 43419
+    },
+    "scores": {
+      "performance": 98,
+      "accessibility": 95,
+      "bestPractices": 96,
+      "seo": 100
+    }
+  },
+  "/how-to-pay": {
+    "loadTimeMs": 3644,
+    "metrics": {
+      "fcp": 152,
+      "domContentLoaded": 36,
+      "fullLoad": 183,
+      "transferSize": 12702,
+      "decodedBodySize": 61983
+    },
+    "scores": {
+      "performance": 98,
+      "accessibility": 95,
+      "bestPractices": 96,
+      "seo": 100
+    }
+  }
+}

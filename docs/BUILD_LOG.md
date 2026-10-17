@@ -241,4 +241,35 @@ This file tracks progress across all phases with timestamps and validation resul
   - `npm run lint`: PASSED with 0 errors.
   - Playwright QA suite: PASSED 100%.
 
+---
+
+## [Pre-Deployment Pass — Phase 7: Performance and Load Testing]
+- **Date & Time:** 2026-10-17T17:28:00+05:30
+- **Lighthouse & Core Web Vitals Benchmark:**
+  - Audited key pages (`/`, `/courses`, `/mock-tests`, `/how-to-pay`).
+  - Results: Performance 98/100, Accessibility 95/100, Best Practices 96/100, SEO 100/100.
+  - FCP recorded at 104ms – 160ms; DOM Content Loaded within 31ms – 51ms.
+- **High-Concurrency Load Testing (Autocannon):**
+  - Executed 5 realistic stress scenarios against local production build (`http://localhost:3005`):
+    - **Scenario (a):** 300 concurrent visitors on public pages. Throughput reached 962–1,151 req/sec.
+    - **Scenario (b):** 200 concurrent students accessing `/login`. Throughput reached 1,506 req/sec (p50: 126ms, p99: 411ms, 0 errors).
+    - **Scenario (c):** 200 concurrent mock test CBT attempts. Throughput reached 1,135 req/sec (p50: 168ms, p99: 276ms, 0 errors).
+    - **Scenario (d):** 50 concurrent payment flow visits. Throughput reached 1,024 req/sec (p50: 46ms, p99: 83ms, 0 errors).
+    - **Scenario (e):** 20 concurrent admin exports. Memory remained stable under 140MB with bounded row streaming.
+- **Bottleneck Remediation:**
+  - Identified redundant remote Supabase auth network calls on static public pages in `src/proxy.ts`.
+  - Refactored proxy middleware to bypass remote auth checks for anonymous public requests without auth cookies, increasing throughput and eliminating pool exhaustion.
+- **Database Index Optimization:**
+  - Created and applied `supabase/migrations/0012_performance_indexes.sql` creating 12 performance indexes across `payment_requests`, `mock_attempts`, `mock_questions`, `series_enrollments`, `enrollments`, and `rate_limit_entries`.
+- **Concurrency Invariant Verifications:**
+  - Verified last-seat enrolment race condition: exactly 3 seats allocated, 17 marked `refund_due`, 0 over-subscription.
+  - Verified one-attempt-per-test invariant: exactly 1 attempt recorded, 9 concurrent duplicate requests blocked.
+- **Published Report:**
+  - Published comprehensive results and Supabase free-plan operational advice in `docs/PERFORMANCE_REPORT.md`.
+- **Verification:**
+  - `npx tsc --noEmit`: PASSED with 0 errors.
+  - `npm run lint`: PASSED with 0 errors.
+  - Load test suite: PASSED 100%.
+
+
 

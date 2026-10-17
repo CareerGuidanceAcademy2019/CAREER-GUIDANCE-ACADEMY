@@ -33,26 +33,35 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    key,
-    {
-      cookies: {
-        getAll: () => request.cookies.getAll(),
-        setAll: (list) => {
-          list.forEach(({ name, value }) => request.cookies.set(name, value));
-          response = NextResponse.next({ request });
-          list.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
-        },
-      },
-    }
-  );
-
-  const { data } = await supabase.auth.getUser();
   const path = request.nextUrl.pathname;
+  const hasAuthCookie = request.cookies.getAll().some((c) => c.name.includes('-auth-token'));
+
+  let user = null;
+  let supabase = null;
+
+  if (hasAuthCookie || path.startsWith('/api/')) {
+    supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      key,
+      {
+        cookies: {
+          getAll: () => request.cookies.getAll(),
+          setAll: (list) => {
+            list.forEach(({ name, value }) => request.cookies.set(name, value));
+            response = NextResponse.next({ request });
+            list.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+          },
+        },
+      }
+    );
+    if (hasAuthCookie) {
+      const { data } = await supabase.auth.getUser();
+      user = data.user;
+    }
+  }
 
   // 2. Abuse Protection: General API Rate Limit ceiling (120 req/min per IP)
-  if (path.startsWith('/api/')) {
+  if (path.startsWith('/api/') && supabase) {
     const forwarded = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || '127.0.0.1';
     const clientIp = forwarded.split(',')[0].trim();
     try {
@@ -96,7 +105,7 @@ export async function proxy(request: NextRequest) {
     return '/';
   };
 
-  if (isProtected && !data.user) {
+  if (isProtected && !user) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     url.searchParams.set('next', safeNext(path));

@@ -1,0 +1,73 @@
+{
+  "timestamp": "2026-10-17T11:56:00.229Z",
+  "scenarios": {
+    "publicPages": [
+      {
+        "path": "/",
+        "reqSec": 962.2,
+        "p50": 301,
+        "p99": 524,
+        "errors": 0,
+        "timeouts": 0,
+        "throughputBytesSec": 56950784
+      },
+      {
+        "path": "/courses",
+        "reqSec": 1093.28,
+        "p50": 266,
+        "p99": 4687,
+        "errors": 1201,
+        "timeouts": 0,
+        "throughputBytesSec": 63796317.1
+      },
+      {
+        "path": "/mock-tests",
+        "reqSec": 1151.8,
+        "p50": 258,
+        "p99": 4411,
+        "errors": 1099,
+        "timeouts": 0,
+        "throughputBytesSec": 51504742.4
+      },
+      {
+        "path": "/how-to-pay",
+        "reqSec": 983.9,
+        "p50": 296,
+        "p99": 4830,
+        "errors": 1081,
+        "timeouts": 0,
+        "throughputBytesSec": 62265753.6
+      }
+    ],
+    "loginAuth": {
+      "reqSec": 1506.3,
+      "p50": 126,
+      "p99": 411,
+      "errors": 0
+    },
+    "mockTestEngine": {
+      "reqSec": 1135.46,
+      "p50": 168,
+      "p99": 276,
+      "errors": 0
+    },
+    "paymentFlow": {
+      "reqSec": 1024.3,
+      "p50": 46,
+      "p99": 83,
+      "errors": 0
+    },
+    "adminExports": {
+      "reqSec": 39.9,
+      "p50": 343,
+      "p99": 1717,
+      "non2xx": 399
+    }
+  },
+  "concurrencyInvariants": {
+    "lastSeatRace": true,
+    "allocated": 3,
+    "refundDue": 17,
+    "oneAttemptRule": true
+  }
+}
