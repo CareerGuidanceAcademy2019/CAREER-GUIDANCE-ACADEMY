@@ -189,6 +189,7 @@ export default function ContactPage() {
                       <label htmlFor="enquiry-hp">Website Security Verification</label>
                       <input
                         id="enquiry-hp"
+                        name="enquiry-hp"
                         type="text"
                         value={honeypot}
                         onChange={(e) => setHoneypot(e.target.value)}

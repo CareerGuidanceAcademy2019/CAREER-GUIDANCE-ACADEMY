@@ -217,3 +217,28 @@ This file tracks progress across all phases with timestamps and validation resul
   - `npx tsc --noEmit`: PASSED with 0 errors.
   - `npm run lint`: PASSED with 0 errors.
 
+---
+
+## [Pre-Deployment Pass — Phase 6: Full Functional & Link Verification]
+- **Date & Time:** 2026-10-17T17:10:00+05:30
+- **Automated Headless Crawler & Page Audit:**
+  - Built and executed `scripts/run_qa_verification.mjs` using Playwright Chromium and Axe-Core across all 16 public and utility routes.
+  - Resolved Google Maps iframe CSP restriction in `next.config.ts` by adding `https://www.google.com` and `https://maps.google.com` to `frame-src`.
+  - Added explicit `name="enquiry-hp"` to honeypot field in `src/app/contact/page.tsx`.
+  - Confirmed 0 console errors, 0 failed network requests, 0 broken images, and 0 placeholder `#` links.
+- **Role Isolation & Unauthorized Access Verification:**
+  - Verified 8 protected student routes (`/student/dashboard`, `/student/courses`, `/student/materials`, `/student/tests`, `/student/payments`, etc.) redirect unauthenticated anonymous requests to `/login`.
+  - Verified 9 protected administrator routes (`/admin/dashboard`, `/admin/students`, `/admin/payments`, `/admin/payment-settings`, `/admin/access`, etc.) block unauthenticated requests.
+- **Responsive Viewport Testing:**
+  - Verified mobile layout at 360x640px and tablet layout at 768x1024px with zero horizontal scroll overflow (`scrollWidth == clientWidth`).
+- **Interactive Modules & SEO:**
+  - Verified bilingual toggle on `/how-to-pay` renders authentic Bengali instructions.
+  - Verified `robots.txt` blocks `/admin/`, `/student/`, `/faculty-portal/`, and `/api/` while declaring the sitemap URL.
+  - Verified `sitemap.xml` provides valid XML indexing 14 public canonical URLs.
+  - Generated full QA report at `docs/QA_REPORT.md` and captured 18 screenshots in `docs/screenshots/`.
+- **Verification:**
+  - `npx tsc --noEmit`: PASSED with 0 errors.
+  - `npm run lint`: PASSED with 0 errors.
+  - Playwright QA suite: PASSED 100%.
+
+

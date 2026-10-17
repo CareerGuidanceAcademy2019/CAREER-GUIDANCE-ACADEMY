@@ -15,10 +15,32 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 });
 
+const siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://careerguidanceacademy.in';
+
 export const metadata: Metadata = {
-  title: 'Career Guidance Academy (C.G.A) | Premier Coaching in Udaipur, Tripura',
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: 'Career Guidance Academy (C.G.A) | Coaching in Udaipur, Tripura',
+    template: '%s | Career Guidance Academy',
+  },
   description:
     'Official web portal of Career Guidance Academy (C.G.A), Chanban Youth Club Rd, Udaipur, Tripura 799114. Coaching for TET, STGT, STPGT, TPSC, JRBT, Banking, SSC, Railway, and Class VII to X (TBSE & CBSE).',
+  alternates: {
+    canonical: './',
+  },
+  openGraph: {
+    title: 'Career Guidance Academy (C.G.A) | Coaching in Udaipur, Tripura',
+    description:
+      'Premier coaching institute in Udaipur, Gomati Tripura. Offline classroom coaching and online mock test series for competitive exams and school foundations.',
+    url: siteUrl,
+    siteName: 'Career Guidance Academy (C.G.A)',
+    locale: 'en_IN',
+    type: 'website',
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({

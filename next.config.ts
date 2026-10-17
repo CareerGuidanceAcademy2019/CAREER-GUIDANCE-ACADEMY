@@ -7,7 +7,7 @@ const cspHeader = `
   img-src 'self' blob: data: https://craicxwqaygdydtdaxtw.supabase.co https://images.unsplash.com;
   font-src 'self' https://fonts.gstatic.com data:;
   connect-src 'self' https://craicxwqaygdydtdaxtw.supabase.co https://api.supabase.com https://challenges.cloudflare.com;
-  frame-src 'self' https://challenges.cloudflare.com;
+  frame-src 'self' https://challenges.cloudflare.com https://www.google.com https://maps.google.com;
   frame-ancestors 'none';
   form-action 'self';
   base-uri 'self';

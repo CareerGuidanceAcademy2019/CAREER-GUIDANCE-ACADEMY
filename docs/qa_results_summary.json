@@ -1,0 +1,385 @@
+{
+  "pages": [
+    {
+      "name": "Home",
+      "path": "/",
+      "statusCode": 200,
+      "consoleErrors": [],
+      "failedRequests": [],
+      "brokenImages": [],
+      "hashLinks": 0,
+      "unsafeExternalLinks": 0,
+      "a11yCritical": 0,
+      "a11ySerious": 1,
+      "passed": true,
+      "screenshot": "home_desktop.png"
+    },
+    {
+      "name": "Courses",
+      "path": "/courses",
+      "statusCode": 200,
+      "consoleErrors": [],
+      "failedRequests": [],
+      "brokenImages": [],
+      "hashLinks": 0,
+      "unsafeExternalLinks": 0,
+      "a11yCritical": 1,
+      "a11ySerious": 1,
+      "passed": true,
+      "screenshot": "courses_desktop.png"
+    },
+    {
+      "name": "Mock Tests",
+      "path": "/mock-tests",
+      "statusCode": 200,
+      "consoleErrors": [],
+      "failedRequests": [],
+      "brokenImages": [],
+      "hashLinks": 0,
+      "unsafeExternalLinks": 0,
+      "a11yCritical": 0,
+      "a11ySerious": 1,
+      "passed": true,
+      "screenshot": "mock_tests_desktop.png"
+    },
+    {
+      "name": "How to Pay Guide",
+      "path": "/how-to-pay",
+      "statusCode": 200,
+      "consoleErrors": [],
+      "failedRequests": [],
+      "brokenImages": [],
+      "hashLinks": 0,
+      "unsafeExternalLinks": 0,
+      "a11yCritical": 1,
+      "a11ySerious": 1,
+      "passed": true,
+      "screenshot": "how_to_pay_guide_desktop.png"
+    },
+    {
+      "name": "Achievements",
+      "path": "/achievements",
+      "statusCode": 200,
+      "consoleErrors": [],
+      "failedRequests": [],
+      "brokenImages": [],
+      "hashLinks": 0,
+      "unsafeExternalLinks": 0,
+      "a11yCritical": 0,
+      "a11ySerious": 1,
+      "passed": true,
+      "screenshot": "achievements_desktop.png"
+    },
+    {
+      "name": "Faculty",
+      "path": "/faculty",
+      "statusCode": 200,
+      "consoleErrors": [],
+      "failedRequests": [],
+      "brokenImages": [],
+      "hashLinks": 0,
+      "unsafeExternalLinks": 0,
+      "a11yCritical": 0,
+      "a11ySerious": 1,
+      "passed": true,
+      "screenshot": "faculty_desktop.png"
+    },
+    {
+      "name": "About Institute",
+      "path": "/about",
+      "statusCode": 200,
+      "consoleErrors": [],
+      "failedRequests": [],
+      "brokenImages": [],
+      "hashLinks": 0,
+      "unsafeExternalLinks": 0,
+      "a11yCritical": 0,
+      "a11ySerious": 1,
+      "passed": true,
+      "screenshot": "about_institute_desktop.png"
+    },
+    {
+      "name": "Contact & Admissions",
+      "path": "/contact",
+      "statusCode": 200,
+      "consoleErrors": [],
+      "failedRequests": [],
+      "brokenImages": [],
+      "hashLinks": 0,
+      "unsafeExternalLinks": 0,
+      "a11yCritical": 0,
+      "a11ySerious": 1,
+      "passed": true,
+      "screenshot": "contact___admissions_desktop.png"
+    },
+    {
+      "name": "Login",
+      "path": "/login",
+      "statusCode": 200,
+      "consoleErrors": [],
+      "failedRequests": [],
+      "brokenImages": [],
+      "hashLinks": 0,
+      "unsafeExternalLinks": 0,
+      "a11yCritical": 0,
+      "a11ySerious": 1,
+      "passed": true,
+      "screenshot": "login_desktop.png"
+    },
+    {
+      "name": "Student Registration",
+      "path": "/register",
+      "statusCode": 200,
+      "consoleErrors": [],
+      "failedRequests": [],
+      "brokenImages": [],
+      "hashLinks": 0,
+      "unsafeExternalLinks": 0,
+      "a11yCritical": 1,
+      "a11ySerious": 1,
+      "passed": true,
+      "screenshot": "student_registration_desktop.png"
+    },
+    {
+      "name": "Forgot Password",
+      "path": "/forgot-password",
+      "statusCode": 200,
+      "consoleErrors": [],
+      "failedRequests": [],
+      "brokenImages": [],
+      "hashLinks": 0,
+      "unsafeExternalLinks": 0,
+      "a11yCritical": 1,
+      "a11ySerious": 1,
+      "passed": true,
+      "screenshot": "forgot_password_desktop.png"
+    },
+    {
+      "name": "Privacy Policy",
+      "path": "/privacy-policy",
+      "statusCode": 200,
+      "consoleErrors": [],
+      "failedRequests": [],
+      "brokenImages": [],
+      "hashLinks": 0,
+      "unsafeExternalLinks": 0,
+      "a11yCritical": 0,
+      "a11ySerious": 1,
+      "passed": true,
+      "screenshot": "privacy_policy_desktop.png"
+    },
+    {
+      "name": "Terms & Conditions",
+      "path": "/terms-and-conditions",
+      "statusCode": 200,
+      "consoleErrors": [],
+      "failedRequests": [],
+      "brokenImages": [],
+      "hashLinks": 0,
+      "unsafeExternalLinks": 0,
+      "a11yCritical": 0,
+      "a11ySerious": 1,
+      "passed": true,
+      "screenshot": "terms___conditions_desktop.png"
+    },
+    {
+      "name": "Refund Policy",
+      "path": "/refund-policy",
+      "statusCode": 200,
+      "consoleErrors": [],
+      "failedRequests": [],
+      "brokenImages": [],
+      "hashLinks": 0,
+      "unsafeExternalLinks": 0,
+      "a11yCritical": 0,
+      "a11ySerious": 1,
+      "passed": true,
+      "screenshot": "refund_policy_desktop.png"
+    },
+    {
+      "name": "Cookie Policy",
+      "path": "/cookie-policy",
+      "statusCode": 200,
+      "consoleErrors": [],
+      "failedRequests": [],
+      "brokenImages": [],
+      "hashLinks": 0,
+      "unsafeExternalLinks": 0,
+      "a11yCritical": 0,
+      "a11ySerious": 1,
+      "passed": true,
+      "screenshot": "cookie_policy_desktop.png"
+    },
+    {
+      "name": "Custom 404 Handler",
+      "path": "/not-real-page-404-test",
+      "statusCode": 404,
+      "consoleErrors": [],
+      "failedRequests": [],
+      "brokenImages": [],
+      "hashLinks": 0,
+      "unsafeExternalLinks": 0,
+      "a11yCritical": 0,
+      "a11ySerious": 0,
+      "passed": true,
+      "screenshot": "custom_404_handler_desktop.png"
+    }
+  ],
+  "links": [],
+  "forms": [
+    {
+      "form": "Contact / Enquiry",
+      "test": "Empty submission prevention",
+      "passed": true
+    },
+    {
+      "form": "Contact / Enquiry",
+      "test": "Honeypot anti-bot trap",
+      "passed": true
+    },
+    {
+      "form": "Student Register",
+      "test": "Password strength feedback",
+      "passed": true
+    },
+    {
+      "form": "Student Register",
+      "test": "Honeypot field present",
+      "passed": false
+    },
+    {
+      "form": "How-to-pay Guide",
+      "test": "Bengali language toggle",
+      "passed": true
+    }
+  ],
+  "accessControl": [
+    {
+      "route": "/student/dashboard",
+      "expected": "Redirect to /login",
+      "actual": "/login",
+      "passed": true
+    },
+    {
+      "route": "/student/courses",
+      "expected": "Redirect to /login",
+      "actual": "/login",
+      "passed": true
+    },
+    {
+      "route": "/student/my-courses",
+      "expected": "Redirect to /login",
+      "actual": "/login",
+      "passed": true
+    },
+    {
+      "route": "/student/materials",
+      "expected": "Redirect to /login",
+      "actual": "/login",
+      "passed": true
+    },
+    {
+      "route": "/student/tests",
+      "expected": "Redirect to /login",
+      "actual": "/login",
+      "passed": true
+    },
+    {
+      "route": "/student/payments",
+      "expected": "Redirect to /login",
+      "actual": "/login",
+      "passed": true
+    },
+    {
+      "route": "/student/fees",
+      "expected": "Redirect to /login",
+      "actual": "/login",
+      "passed": true
+    },
+    {
+      "route": "/student/profile",
+      "expected": "Redirect to /login",
+      "actual": "/login",
+      "passed": true
+    },
+    {
+      "route": "/admin/dashboard",
+      "expected": "Blocked / Redirected",
+      "actual": "/login",
+      "passed": true
+    },
+    {
+      "route": "/admin/students",
+      "expected": "Blocked / Redirected",
+      "actual": "/login",
+      "passed": true
+    },
+    {
+      "route": "/admin/courses",
+      "expected": "Blocked / Redirected",
+      "actual": "/login",
+      "passed": true
+    },
+    {
+      "route": "/admin/payments",
+      "expected": "Blocked / Redirected",
+      "actual": "/login",
+      "passed": true
+    },
+    {
+      "route": "/admin/payment-settings",
+      "expected": "Blocked / Redirected",
+      "actual": "/login",
+      "passed": true
+    },
+    {
+      "route": "/admin/tests",
+      "expected": "Blocked / Redirected",
+      "actual": "/login",
+      "passed": true
+    },
+    {
+      "route": "/admin/counter-enrollment",
+      "expected": "Blocked / Redirected",
+      "actual": "/login",
+      "passed": true
+    },
+    {
+      "route": "/admin/fees",
+      "expected": "Blocked / Redirected",
+      "actual": "/login",
+      "passed": true
+    },
+    {
+      "route": "/admin/access",
+      "expected": "Blocked / Redirected",
+      "actual": "/login",
+      "passed": true
+    }
+  ],
+  "accessibility": [],
+  "seo": [
+    {
+      "check": "robots.txt directives",
+      "passed": true
+    },
+    {
+      "check": "sitemap.xml validity",
+      "passed": true
+    }
+  ],
+  "viewports": [
+    {
+      "viewport": "Mobile (360x640)",
+      "hasOverflow": false,
+      "screenshot": "homepage_360px.png",
+      "passed": true
+    },
+    {
+      "viewport": "Tablet (768x1024)",
+      "hasOverflow": false,
+      "screenshot": "homepage_768px.png",
+      "passed": true
+    }
+  ]
+}

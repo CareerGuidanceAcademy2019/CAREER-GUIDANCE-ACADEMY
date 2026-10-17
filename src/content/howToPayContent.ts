@@ -1,4 +1,4 @@
-import { PaymentSettingsRecord } from '@/config/paymentSettings';
+import type { PaymentSettingsRecord } from '../config/paymentSettings.ts';
 
 export interface HowToPayTranslations {
   badge: string;
