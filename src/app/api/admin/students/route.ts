@@ -2,34 +2,48 @@ import { NextResponse } from 'next/server';
 import { randomBytes } from 'node:crypto';
 import { createAdminSupabase, requireAdmin } from '@/lib/supabase/server';
 
-const str = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+import { z } from 'zod';
+
+const createStudentSchema = z.object({
+  name: z.string().trim().min(1, 'Name is required').max(120),
+  email: z.string().trim().toLowerCase().email('Invalid email address').max(200),
+  phone: z.string().trim().max(20).optional().default(''),
+  guardianName: z.string().trim().max(120).optional().default(''),
+  address: z.string().trim().max(300).optional().default(''),
+  permanentAddress: z.string().trim().max(300).optional(),
+  qualification: z.string().trim().max(120).optional().default(''),
+  targetExam: z.string().trim().max(120).optional().default(''),
+}).strict();
 
 /** Admin creates a student account. Returns a one-time temporary password. */
 export async function POST(request: Request) {
   const adminId = await requireAdmin();
   if (!adminId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-  const body = await request.json().catch(() => null);
-  const email = str(body?.email, 200).toLowerCase();
-  const name = str(body?.name, 120);
-  if (!name || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-    return NextResponse.json({ error: 'A valid name and email are required.' }, { status: 400 });
+  const raw = await request.json().catch(() => null);
+  const parseResult = createStudentSchema.safeParse(raw);
+  if (!parseResult.success) {
+    return NextResponse.json(
+      { error: 'Validation failed', details: parseResult.error.format() },
+      { status: 400 }
+    );
   }
 
+  const data = parseResult.data;
   const tempPassword = randomBytes(9).toString('base64url');
   const admin = createAdminSupabase();
   const { error } = await admin.auth.admin.createUser({
-    email,
+    email: data.email,
     password: tempPassword,
     email_confirm: true,
     user_metadata: {
-      name,
-      phone: str(body?.phone, 20),
-      guardian_name: str(body?.guardianName, 120),
-      address: str(body?.address, 300),
-      permanent_address: str(body?.permanentAddress || body?.address, 300),
-      qualification: str(body?.qualification, 120),
-      target_exam: str(body?.targetExam, 120),
+      name: data.name,
+      phone: data.phone,
+      guardian_name: data.guardianName,
+      address: data.address,
+      permanent_address: data.permanentAddress || data.address,
+      qualification: data.qualification,
+      target_exam: data.targetExam,
     },
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });

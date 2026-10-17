@@ -98,4 +98,47 @@ This file tracks progress across all phases with timestamps and validation resul
   - TypeScript strict compilation: 0 errors (`npx tsc --noEmit`).
   - Unit tests: 21/21 passing.
 
+---
+
+## [Pre-Deployment Pass — Phase 2: Security Hardening & IDOR Verification]
+- **Date & Time:** 2026-10-17T13:30:00+05:30
+- **Dependency & Vulnerability Hardening:**
+  - Upgraded Next.js to `16.4.2` and `eslint-config-next` to `16.4.2`, resolving all 6 high-severity Next.js runtime vulnerabilities (SSG/ISR cache poisoning, SSRF, dynamicParams disclosure).
+  - Pinned `overrides: { "braces": "^3.0.3" }` in `package.json`.
+  - Installed `zod` for strict runtime schema validation.
+- **HTTP Response Security Headers (`next.config.ts`):**
+  - Configured strict `Content-Security-Policy` with restricted script, font, image, and frame origins; `object-src 'none'`; `frame-ancestors 'none'`.
+  - Added `Strict-Transport-Security` (63072000s, includeSubDomains, preload).
+  - Added `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, and `Permissions-Policy`.
+  - Set `poweredByHeader: false` to eliminate `X-Powered-By: Next.js`.
+- **Proxy & CSRF Hardening (`src/proxy.ts`):**
+  - Enforced Origin header validation on all state-changing HTTP methods (`POST`, `PUT`, `DELETE`, `PATCH`).
+  - Sanitized open redirects on `next` query parameter across `/login` and `/register`, whitelisting only internal relative paths (`/`).
+- **Database Migrations & IDOR Protection (Supabase):**
+  - Created and applied `supabase/migrations/0008_security_hardening.sql`:
+    - Added trigger `trg_prevent_self_role_escalation` on `public.profiles` blocking non-administrators from elevating their role, status, or student code.
+    - Restricted `public.profiles` update RLS policy to enforce that non-admins can never update the `role` column.
+    - Converted `payment_settings` to authenticated-only read; anonymous users are strictly barred.
+    - Revoked EXECUTE privileges on `purge_candidate`, `delete_candidate_by_admin`, and `rls_auto_enable` from `anon` and `public`.
+  - Created and applied `supabase/migrations/0009_security_audit_log.sql`:
+    - Created append-only immutable `security_audit_log` table with RLS restricting read to active admins.
+    - Added `log_security_event` RPC with email masking (`a***t@gmail.com`) for privacy preservation.
+- **Input Validation & Resource Bounds (API Handlers):**
+  - Hardened `src/app/api/admin/students/route.ts` with strict Zod schema validation rejecting untrusted fields.
+  - Hardened `src/app/api/admin/payments/export/route.ts` with date regex validation (`YYYY-MM-DD`) and capped exports to max 5000 rows.
+  - Hardened `src/app/api/admin/parse-test/route.ts` with 10MB payload size limit and allowed file type enforcement (`.pdf`, `.txt`, `.csv`).
+- **Custom Error & Status Pages:**
+  - Built `src/app/not-found.tsx` (human 404 page, zero AI emojis, Lucide icons, helpful navigation).
+  - Built `src/app/error.tsx` (production 500 error boundary; suppresses stack traces and raw SQL, displays reference digest).
+  - Built `src/app/forbidden.tsx` (human 403 Forbidden page for unprivileged access attempts).
+- **Credential Hygiene:**
+  - Eliminated `DEMO_CREDENTIALS` and all plaintext `password123` instances from `src/data/initialSeedData.ts`.
+  - Removed client-controlled `user_metadata.account_type` role fallback in `cgaService.ts`.
+- **Automated Verification:**
+  - `tests/admin_route_authorization.test.mjs`: PASSED 100% across all admin API endpoints.
+  - `tests/security_idor_suite.mjs`: PASSED 18/18 live tests (Anonymous restrictions, IDOR reads/writes, privilege escalation attempt, RPC abuse prevention).
+  - `npx tsc --noEmit`: PASSED with 0 errors.
+  - `npm run lint`: PASSED with 0 errors.
+
+
 

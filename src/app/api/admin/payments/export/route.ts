@@ -42,12 +42,24 @@ export async function GET(request: Request) {
       .eq('status', 'approved')
       .order('reviewed_at', { ascending: false });
 
+    // Validate date format YYYY-MM-DD
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (startDate && !dateRegex.test(startDate)) {
+      return NextResponse.json({ error: 'Invalid startDate format. Expected YYYY-MM-DD.' }, { status: 400 });
+    }
+    if (endDate && !dateRegex.test(endDate)) {
+      return NextResponse.json({ error: 'Invalid endDate format. Expected YYYY-MM-DD.' }, { status: 400 });
+    }
+
     if (startDate) {
       query = query.gte('reviewed_at', `${startDate}T00:00:00Z`);
     }
     if (endDate) {
       query = query.lte('reviewed_at', `${endDate}T23:59:59Z`);
     }
+
+    // Hard ceiling on export row count to protect server memory
+    query = query.limit(5000);
 
     const { data: requests, error } = await query;
     if (error) {

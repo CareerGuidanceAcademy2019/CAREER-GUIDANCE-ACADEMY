@@ -191,7 +191,7 @@ export interface StudentProfile {
   name: string;
   email: string;
   phone: string;
-  password: string;
+  password?: string;
   photo: string;
   guardianName: string;
   address: string;
@@ -288,20 +288,6 @@ export interface CgaDatabase {
   seriesEnrollments: SeriesEnrollment[];
   seriesAttempts: SeriesAttempt[];
 }
-
-export const DEMO_CREDENTIALS = {
-  student: {
-    email: 'student@cgaudaipur.in',
-    password: 'password123',
-    name: 'Arijit Debnath',
-    studentId: 'stu-1',
-  },
-  admin: {
-    email: 'admin@cgaudaipur.in',
-    password: 'admin123',
-    name: 'Dr. Subrata Majumder (Director, C.G.A)',
-  },
-};
 
 export const INITIAL_SEED_DATA: CgaDatabase = {
   siteContent: {
@@ -2584,7 +2570,6 @@ export const INITIAL_SEED_DATA: CgaDatabase = {
       name: 'Arijit Debnath',
       email: 'student@cgaudaipur.in',
       phone: '+91 94369 11204',
-      password: 'password123',
       photo: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80',
       guardianName: 'Sri Dulal Debnath',
       address: 'Rajarbag, Near Gomati District Hospital, Udaipur, Tripura 799114',
@@ -2624,7 +2609,6 @@ export const INITIAL_SEED_DATA: CgaDatabase = {
       name: 'Priyanka Majumder',
       email: 'priyanka.m@cgaudaipur.in',
       phone: '+91 87874 22319',
-      password: 'password123',
       photo: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&auto=format&fit=crop&q=80',
       guardianName: 'Sri Tapas Majumder',
       address: 'Chanban, Behind Youth Club, Udaipur, Tripura 799114',
@@ -2664,7 +2648,6 @@ export const INITIAL_SEED_DATA: CgaDatabase = {
       name: 'Sourav Kanti Das',
       email: 'sourav.das@cgaudaipur.in',
       phone: '+91 96123 88410',
-      password: 'password123',
       photo: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80',
       guardianName: 'Sri Haripada Das',
       address: 'Matabari Road, Udaipur, Tripura 799114',
@@ -2693,7 +2676,6 @@ export const INITIAL_SEED_DATA: CgaDatabase = {
       name: 'Riya Karmakar',
       email: 'riya.k@cgaudaipur.in',
       phone: '+91 98621 55012',
-      password: 'password123',
       photo: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&auto=format&fit=crop&q=80',
       guardianName: 'Sri Bimal Karmakar',
       address: 'Dhajanagar, Udaipur, Gomati Tripura 799114',
@@ -2721,7 +2703,6 @@ export const INITIAL_SEED_DATA: CgaDatabase = {
       name: 'Abhishek Debbarma',
       email: 'abhishek.db@cgaudaipur.in',
       phone: '+91 70051 99231',
-      password: 'password123',
       photo: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&auto=format&fit=crop&q=80',
       guardianName: 'Sri Ratan Debbarma',
       address: 'Kakraban Road, Udaipur, Tripura 799114',

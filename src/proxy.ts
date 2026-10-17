@@ -8,9 +8,34 @@ import { createServerClient } from '@supabase/ssr';
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
+  const key =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !key) {
+    return response;
+  }
+
+  // 1. CSRF / Origin verification on state-changing requests
+  const method = request.method.toUpperCase();
+  if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+    const origin = request.headers.get('origin');
+    const host = request.headers.get('host');
+    if (origin && host) {
+      try {
+        const originUrl = new URL(origin);
+        if (originUrl.host !== host && !originUrl.host.endsWith('.trycloudflare.com')) {
+          return new NextResponse('Forbidden: Cross-site request rejected.', { status: 403 });
+        }
+      } catch {
+        return new NextResponse('Bad Request: Invalid Origin header.', { status: 400 });
+      }
+    }
+  }
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    key,
     {
       cookies: {
         getAll: () => request.cookies.getAll(),
@@ -28,12 +53,32 @@ export async function proxy(request: NextRequest) {
   const isProtected =
     path.startsWith('/admin') || path.startsWith('/student') || path.startsWith('/faculty-portal');
 
+  // Open-redirect safe destination
+  const safeNext = (target: string) => {
+    if (target.startsWith('/') && !target.startsWith('//') && !target.startsWith('/\\') && !target.includes(':')) {
+      return target;
+    }
+    return '/';
+  };
+
   if (isProtected && !data.user) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
-    url.searchParams.set('next', path);
+    url.searchParams.set('next', safeNext(path));
     return NextResponse.redirect(url);
   }
+
+  // Validate next param on login/register to prevent open redirect
+  if ((path === '/login' || path === '/register') && request.nextUrl.searchParams.has('next')) {
+    const rawNext = request.nextUrl.searchParams.get('next') || '';
+    const cleanNext = safeNext(rawNext);
+    if (rawNext !== cleanNext) {
+      const url = request.nextUrl.clone();
+      url.searchParams.set('next', cleanNext);
+      return NextResponse.redirect(url);
+    }
+  }
+
   return response;
 }
 

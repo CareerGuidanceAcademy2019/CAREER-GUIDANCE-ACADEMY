@@ -211,9 +211,6 @@ export function CounterEnrollmentModal({ onClose, onSuccess }: CounterEnrollment
           due.setDate(due.getDate() + 30);
           nextDueDate = due.toISOString().split('T')[0];
         }
-
-        // Fulfill course enrollment in localStorage and DB
-        activeCourse.seatsAvailable = Math.max(0, activeCourse.seatsAvailable - 1);
       } else if (sectionType === 'mock_series') {
         itemTitle = 'Tripura TET (T-TET) 2026 Comprehensive Mock Test Series (15 Mocks)';
       } else if (sectionType === 'material' && activeMaterial) {

@@ -66,6 +66,11 @@ This document logs sensible architectural choices made during the autonomous imp
 - **Context:** Automated deployment scripts and tests must operate without leaking Supabase personal access tokens or secret service role keys into repository commits or client bundles.
 - **Decision:** Environment variables are strictly partitioned: `NEXT_PUBLIC_` for client-safe publishable keys guarded by Postgres RLS, and server-only `SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_ACCESS_TOKEN` for administrative APIs and build-time scripts. All test scripts were updated to read from runtime process environment variables rather than hardcoded string fallbacks.
 
+### Decision 17: Database Trigger Role Escalation Prevention & Security Audit Architecture
+- **Context:** Automated IDOR tests discovered that updating own profile allowed a student to alter their `role` column to `'admin'` because the RLS policy checked `id = auth.uid()` without column-level restrictions.
+- **Decision:** Implemented a PostgreSQL `BEFORE UPDATE` trigger `trg_prevent_self_role_escalation` on `public.profiles` that raises an exception if `new.role`, `new.student_code`, or `new.status` differs from `old.*` unless `public.is_admin()` is true. In tandem, tightened the RLS policy check. Also established `security_audit_log` with actor email masking to fulfill Indian DPDP Act 2023 data minimization requirements.
+
+
 ---
 
 

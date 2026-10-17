@@ -4,9 +4,8 @@ import { PDFParse } from 'pdf-parse';
 import { parseRawQuestionsText } from '@/lib/mcqParser';
 
 export async function POST(request: Request) {
-  const adminId = await requireAdmin().catch(() => null);
-  const portalRole = request.headers.get('x-portal-role');
-  if (!adminId && portalRole !== 'ADMIN' && process.env.NODE_ENV === 'production') {
+  const adminId = await requireAdmin();
+  if (!adminId) {
     return NextResponse.json({ error: 'Unauthorized. Administrator access required.' }, { status: 403 });
   }
 
@@ -22,8 +21,15 @@ export async function POST(request: Request) {
       if (textParam && textParam.trim()) {
         extractedText = textParam;
       } else if (file) {
-        const buffer = Buffer.from(await file.arrayBuffer());
+        if (file.size > 10 * 1024 * 1024) {
+          return NextResponse.json({ error: 'Payload too large. Maximum file size is 10 MB.' }, { status: 413 });
+        }
         const fileName = (file.name || '').toLowerCase();
+        const allowedExtensions = ['.pdf', '.txt', '.csv'];
+        if (!allowedExtensions.some(ext => fileName.endsWith(ext))) {
+          return NextResponse.json({ error: 'Unsupported file type. Only PDF, TXT, or CSV files are permitted.' }, { status: 415 });
+        }
+        const buffer = Buffer.from(await file.arrayBuffer());
 
         if (fileName.endsWith('.pdf')) {
           const parser = new PDFParse({ data: buffer });

@@ -402,27 +402,20 @@ export const cgaService = {
       };
     }
 
-    // Fallback if profiles table is empty or not yet migrated:
-    // Extract role and identity from user_metadata or defaults for Admin
-    const meta = data.user.user_metadata || {};
-    const metaType = String(meta.account_type || '').toLowerCase();
+    // Fallback if profile row is temporarily unavailable:
+    // Only verified institute director and administrator emails can assume administrative role
     const isKnownAdmin =
-      metaType === 'admin' ||
       data.user.email === 'angatsaha825@gmail.com' ||
       data.user.email === 'careerguidanceacademy2019@gmail.com';
-    const role: PortalRole =
-      isKnownAdmin
-        ? 'ADMIN'
-        : metaType === 'faculty'
-        ? 'FACULTY'
-        : 'STUDENT';
+    const role: PortalRole = isKnownAdmin ? 'ADMIN' : 'STUDENT';
+    const meta = data.user.user_metadata || {};
     const name =
       meta.name ||
       (data.user.email === 'careerguidanceacademy2019@gmail.com'
         ? 'Subhradip Banik'
         : data.user.email === 'angatsaha825@gmail.com'
         ? 'Angat Saha'
-        : data.user.email?.split('@')[0] || 'Administrator');
+        : data.user.email?.split('@')[0] || 'User');
     const email = data.user.email || '';
 
     return {
