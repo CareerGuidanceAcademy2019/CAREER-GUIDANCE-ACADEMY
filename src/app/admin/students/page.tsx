@@ -17,6 +17,7 @@ import {
 import { useCga } from '@/context/CgaContext';
 import { StudentProfile } from '@/data/initialSeedData';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { MaskedData } from '@/components/ui/MaskedData';
 
 export default function AdminStudentsPage() {
   const { db, saveStudent, toggleStudentStatus, deleteStudent, showToast } = useCga();
@@ -220,7 +221,7 @@ export default function AdminStudentsPage() {
                       <span className="font-mono font-bold text-[#0056b3] block">
                         {stu.studentCode}
                       </span>
-                      <span className="text-slate-500">{stu.phone}</span>
+                      <MaskedData value={stu.phone} type="phone" subjectId={stu.studentCode} className="text-slate-500 text-xs" />
                     </td>
                     <td className="py-3.5 px-4 font-semibold text-slate-700">{stu.targetExam}</td>
                     <td className="py-3.5 px-4 whitespace-nowrap">
@@ -353,17 +354,13 @@ export default function AdminStudentsPage() {
                   <span className="text-[10px] font-bold text-slate-400 block uppercase">
                     Phone (WhatsApp)
                   </span>
-                  <span className="font-bold text-slate-800">
-                    {inspectingStudent.phone || '—'}
-                  </span>
+                  <MaskedData value={inspectingStudent.phone || ''} type="phone" subjectId={inspectingStudent.studentCode} className="font-bold text-slate-800" />
                 </div>
                 <div className="bg-white p-3 rounded-xl border border-slate-100">
                   <span className="text-[10px] font-bold text-slate-400 block uppercase">
                     Registered Email
                   </span>
-                  <span className="font-bold text-slate-800 truncate block">
-                    {inspectingStudent.email}
-                  </span>
+                  <MaskedData value={inspectingStudent.email} type="email" subjectId={inspectingStudent.studentCode} className="font-bold text-slate-800 truncate block" />
                 </div>
                 <div className="bg-white p-3 rounded-xl border border-slate-100">
                   <span className="text-[10px] font-bold text-slate-400 block uppercase">

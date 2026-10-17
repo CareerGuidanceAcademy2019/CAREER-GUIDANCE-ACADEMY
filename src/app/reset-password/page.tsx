@@ -7,6 +7,9 @@ import { PublicHeader } from '@/components/layout/PublicHeader';
 import { PublicFooter } from '@/components/layout/PublicFooter';
 import { cgaService } from '@/services/cgaService';
 
+import { PasswordStrengthMeter } from '@/components/ui/PasswordStrengthMeter';
+import { evaluatePasswordStrength } from '@/lib/passwordPolicy';
+
 export default function ResetPasswordPage() {
   const [ready, setReady] = useState(false);
   const [password, setPassword] = useState('');
@@ -28,7 +31,10 @@ export default function ResetPasswordPage() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (password.length < 8) return setError('Password must be at least 8 characters.');
+    const strength = evaluatePasswordStrength(password);
+    if (!strength.isValid) {
+      return setError(strength.feedback[0] || 'Password must be at least 10 characters and cannot be a common phrase.');
+    }
     if (password !== confirm) return setError('Passwords do not match.');
     setBusy(true);
     const res = await cgaService.updatePassword(password);
@@ -73,15 +79,18 @@ export default function ResetPasswordPage() {
                   <span>{error}</span>
                 </div>
               )}
-              <input
-                id="new-password"
-                type="password"
-                autoComplete="new-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="New password (min 8 characters)"
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
-              />
+              <div>
+                <input
+                  id="new-password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="New password (minimum 10 characters)"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                />
+                <PasswordStrengthMeter password={password} />
+              </div>
               <input
                 id="confirm-password"
                 type="password"

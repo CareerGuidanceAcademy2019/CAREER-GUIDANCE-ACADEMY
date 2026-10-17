@@ -441,21 +441,11 @@ export const cgaService = {
         });
         if (!error && data) {
           email = data as string;
-        } else if (parsed.value === '7629882835') {
-          email = 'angatsaha825@gmail.com';
-        } else if (parsed.value === '7005929189') {
-          email = 'careerguidanceacademy2019@gmail.com';
         } else {
           return { success: false, error: 'Invalid phone number or password.' };
         }
       } catch {
-        if (parsed.value === '7629882835') {
-          email = 'angatsaha825@gmail.com';
-        } else if (parsed.value === '7005929189') {
-          email = 'careerguidanceacademy2019@gmail.com';
-        } else {
-          return { success: false, error: 'Invalid phone number or password.' };
-        }
+        return { success: false, error: 'Invalid phone number or password.' };
       }
     }
 
@@ -1608,4 +1598,44 @@ export const cgaService = {
 
     return error ? { success: false, error: msg(error, 'Failed to close test.') } : { success: true };
   },
+
+  async logSecurityEvent(
+    eventType: string,
+    details: Record<string, unknown> = {}
+  ): Promise<{ success: boolean }> {
+    try {
+      const sb = this.client();
+      const user = (await sb.auth.getUser()).data?.user;
+      await sb.rpc('log_security_event', {
+        p_event_type: eventType,
+        p_details: details,
+        p_actor_email: user?.email || null,
+      });
+      return { success: true };
+    } catch {
+      return { success: false };
+    }
+  },
+
+  async requestAccountDeletion(
+    reason?: string,
+    guardianConsent = false
+  ): Promise<ServiceResult<{ requestId: string }>> {
+    try {
+      const sb = this.client();
+      const { data, error } = await sb.rpc('request_account_deletion', {
+        p_reason: reason || null,
+        p_guardian_consent: guardianConsent,
+      });
+
+      if (error) {
+        return { success: false, error: msg(error, 'Could not submit account deletion request.') };
+      }
+
+      return { success: true, requestId: data as string };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Error processing deletion request.' };
+    }
+  },
 };
+

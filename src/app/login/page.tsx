@@ -84,6 +84,7 @@ function LoginInner() {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
+  const [honeypot, setHoneypot] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('STUDENT');
@@ -98,6 +99,15 @@ function LoginInner() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (honeypot) {
+      // Bot trapped: artificial delay, generic error
+      setBusy(true);
+      await new Promise((r) => setTimeout(r, 600));
+      setBusy(false);
+      setError('Invalid email or password.');
+      return;
+    }
 
     if (!parseIdentifier(identifier)) {
       setError('Enter a valid email address or 10-digit mobile number.');
@@ -195,6 +205,19 @@ function LoginInner() {
             <p className="text-xs sm:text-sm text-slate-500 mt-1 mb-6">{tab.subtitle}</p>
 
             <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+              {/* Anti-bot honeypot field */}
+              <div className="hidden" aria-hidden="true">
+                <label htmlFor="login-hp">Security Verification Field</label>
+                <input
+                  id="login-hp"
+                  type="text"
+                  value={honeypot}
+                  onChange={(e) => setHoneypot(e.target.value)}
+                  tabIndex={-1}
+                  autoComplete="off"
+                />
+              </div>
+
               {error && (
                 <div role="alert" className="p-3.5 rounded-xl bg-red-50 border border-red-200 flex items-start gap-2.5 text-xs font-semibold text-[#dc2626]">
                   <AlertCircle className="w-4 h-4 shrink-0 mt-px" />

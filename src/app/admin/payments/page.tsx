@@ -32,6 +32,7 @@ import { PAYMENT_SETTINGS } from '@/config/paymentSettings';
 import { ReceiptModal } from '@/components/student/ReceiptModal';
 import { CounterEnrollmentModal } from '@/components/admin/CounterEnrollmentModal';
 import { FeePayment } from '@/data/initialSeedData';
+import { MaskedData } from '@/components/ui/MaskedData';
 
 export default function AdminPaymentsPage() {
   const { db, session, showToast } = useCga();
@@ -719,7 +720,9 @@ export default function AdminPaymentsPage() {
                           {req.studentCode}
                         </div>
                         {req.studentPhone && (
-                          <div className="text-[11px] text-slate-400 mt-0.5">{req.studentPhone}</div>
+                          <div className="mt-0.5">
+                            <MaskedData value={req.studentPhone} type="phone" subjectId={req.studentCode} className="text-[11px] text-slate-400" />
+                          </div>
                         )}
                       </td>
 

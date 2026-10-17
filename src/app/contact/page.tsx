@@ -17,12 +17,19 @@ export default function ContactPage() {
   const [courseInterest, setCourseInterest] = useState('Tripura TET (Paper I & II)');
   const [message, setMessage] = useState('');
   const [consentGiven, setConsentGiven] = useState(false);
+  const [honeypot, setHoneypot] = useState('');
   const [error, setError] = useState('');
   const [submitted, setSubmitted] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (honeypot) {
+      // Bot trapped
+      setSubmitted(true);
+      return;
+    }
 
     if (!name.trim() || name.trim().length < 2) {
       setError('Please enter your full name.');
@@ -177,6 +184,19 @@ export default function ContactPage() {
                   </div>
                 ) : (
                   <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+                    {/* Anti-bot honeypot field */}
+                    <div className="hidden" aria-hidden="true">
+                      <label htmlFor="enquiry-hp">Website Security Verification</label>
+                      <input
+                        id="enquiry-hp"
+                        type="text"
+                        value={honeypot}
+                        onChange={(e) => setHoneypot(e.target.value)}
+                        tabIndex={-1}
+                        autoComplete="off"
+                      />
+                    </div>
+
                     {error && (
                       <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 flex items-center gap-2.5 text-xs font-semibold text-[#dc2626]">
                         <AlertCircle className="w-4 h-4 shrink-0" />

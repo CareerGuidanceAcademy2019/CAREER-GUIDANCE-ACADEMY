@@ -8,6 +8,8 @@ import { PublicHeader } from '@/components/layout/PublicHeader';
 import { PublicFooter } from '@/components/layout/PublicFooter';
 import { useCga } from '@/context/CgaContext';
 import { isEmail, normalizePhone } from '@/lib/names';
+import { PasswordStrengthMeter } from '@/components/ui/PasswordStrengthMeter';
+import { evaluatePasswordStrength } from '@/lib/passwordPolicy';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -25,6 +27,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [consentAgreed, setConsentAgreed] = useState(false);
+  const [honeypot, setHoneypot] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [confirmEmailSent, setConfirmEmailSent] = useState(false);
@@ -33,6 +36,13 @@ export default function RegisterPage() {
     e.preventDefault();
     setError('');
     const permanent = sameAddress ? address : permanentAddress;
+
+    // Honeypot bot protection
+    if (honeypot) {
+      setBusy(false);
+      setConfirmEmailSent(true);
+      return;
+    }
 
     if (!name.trim() || name.trim().length < 3) {
       setError('Please enter your full name (minimum 3 characters).');
@@ -58,8 +68,9 @@ export default function RegisterPage() {
       setError('Please enter your permanent address.');
       return;
     }
-    if (!password || password.length < 8) {
-      setError('Password must be at least 8 characters long.');
+    const pwCheck = evaluatePasswordStrength(password);
+    if (!pwCheck.isValid) {
+      setError(pwCheck.feedback[0] || 'Password must be at least 10 characters and not easily guessable.');
       return;
     }
     if (password !== confirmPassword) {
@@ -286,38 +297,54 @@ export default function RegisterPage() {
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="reg-password" className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Create Password <span className="text-[#dc2626]">*</span>
-                </label>
-                <input
-                  id="reg-password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Min. 8 characters"
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3] focus-visible:ring-2 focus-visible:ring-[#0056b3]"
-                  required
-                  aria-required="true"
-                />
-              </div>
+            {/* Anti-bot honeypot field */}
+            <div className="hidden" aria-hidden="true">
+              <label htmlFor="reg-hp">Website Security Field</label>
+              <input
+                id="reg-hp"
+                type="text"
+                value={honeypot}
+                onChange={(e) => setHoneypot(e.target.value)}
+                tabIndex={-1}
+                autoComplete="off"
+              />
+            </div>
 
-              <div>
-                <label htmlFor="reg-confirm-password" className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Confirm Password <span className="text-[#dc2626]">*</span>
-                </label>
-                <input
-                  id="reg-confirm-password"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Re-enter password"
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3] focus-visible:ring-2 focus-visible:ring-[#0056b3]"
-                  required
-                  aria-required="true"
-                />
+            <div className="space-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="reg-password" className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Create Password <span className="text-[#dc2626]">*</span>
+                  </label>
+                  <input
+                    id="reg-password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Min. 10 characters"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3] focus-visible:ring-2 focus-visible:ring-[#0056b3]"
+                    required
+                    aria-required="true"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="reg-confirm-password" className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Confirm Password <span className="text-[#dc2626]">*</span>
+                  </label>
+                  <input
+                    id="reg-confirm-password"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Re-enter password"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3] focus-visible:ring-2 focus-visible:ring-[#0056b3]"
+                    required
+                    aria-required="true"
+                  />
+                </div>
               </div>
+              <PasswordStrengthMeter password={password} />
             </div>
 
             {/* Mandatory DPDP Act & Terms Consent Checkbox */}

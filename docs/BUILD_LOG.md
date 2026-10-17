@@ -140,5 +140,31 @@ This file tracks progress across all phases with timestamps and validation resul
   - `npx tsc --noEmit`: PASSED with 0 errors.
   - `npm run lint`: PASSED with 0 errors.
 
+---
 
-
+## [Pre-Deployment Pass — Phase 3: Authentication and Data Protection]
+- **Date & Time:** 2026-10-17T14:35:00+05:30
+- **Password Policy & Entropy:**
+  - Implemented `src/lib/passwordPolicy.ts` enforcing minimum 10 characters, rejection of common passwords (top 200 list), and entropy scoring.
+  - Built `src/components/ui/PasswordStrengthMeter.tsx` with dynamic visual feedback.
+  - Integrated into `/register` and `/reset-password` pages.
+- **Bot Protection & Honeypot Fields:**
+  - Implemented invisible honeypot anti-bot traps (`reg-hp`, `login-hp`, `enquiry-hp`) in student registration, login, and campus enquiry forms.
+  - Neutralizes automated spam and credential-stuffing bots silently without disrupting legitimate users.
+- **Non-Enumerating Authentication:**
+  - Standardized forgot-password and login responses to uniform messages to prevent account and email enumeration.
+  - Removed demo hardcoded phone numbers from login resolution in `cgaService.ts`.
+- **Admin Session Security & Idle Inactivity Timeout:**
+  - Added 15-minute idle inactivity timeout in `src/app/admin/layout.tsx` across mouse, keyboard, and touch events.
+  - Documented complete MFA TOTP setup in `docs/MFA_SETUP.md`.
+- **Data Minimization & PII Masking:**
+  - Created `src/components/ui/MaskedData.tsx` masking phone numbers (`+91 94•••••89`) and emails (`a••••t@gmail.com`).
+  - Integrated into `/admin/students`, `/admin/payments`, and `/admin/fees` tables.
+  - Interactive click-to-reveal automatically records `pii_revealed_by_admin` audit events to `public.security_audit_log`.
+- **DPDP Act 2023 Account Deletion Flow:**
+  - Created and applied `supabase/migrations/0010_account_deletion_flow.sql` with table `account_deletion_requests` and RPCs `request_account_deletion` and `process_account_deletion`.
+  - Tied deletion flow to `public.purge_candidate()` for permanent cascade erasure of student records.
+  - Added minor guardian consent certification for school coaching candidates.
+  - Built working Deletion Request UI modal in `/student/profile`.
+- **Backup & Disaster Recovery:**
+  - Documented physical and logical backup and restore procedures in `docs/BACKUP_PROCEDURE.md`.

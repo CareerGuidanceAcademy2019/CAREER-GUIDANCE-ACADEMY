@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -51,6 +51,33 @@ export default function AdminPortalLayout({ children }: { children: React.ReactN
   const router = useRouter();
   const { isHydrated, session, logout, db } = useCga();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Security Hardening: 15-minute idle inactivity timeout for Admin sessions
+  useEffect(() => {
+    if (!session || session.role !== 'ADMIN') return;
+    const TIMEOUT_MS = 15 * 60 * 1000;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const resetTimer = () => {
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        try {
+          await logout();
+        } finally {
+          router.push('/login?as=admin&reason=idle_timeout');
+        }
+      }, TIMEOUT_MS);
+    };
+
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart'];
+    events.forEach((evt) => window.addEventListener(evt, resetTimer, { passive: true }));
+    resetTimer();
+
+    return () => {
+      clearTimeout(timer);
+      events.forEach((evt) => window.removeEventListener(evt, resetTimer));
+    };
+  }, [session, logout, router]);
 
   const pendingPaymentsCount = db?.feePayments?.filter((p) => p.status === 'Pending').length || 0;
 

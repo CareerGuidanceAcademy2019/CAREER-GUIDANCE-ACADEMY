@@ -21,6 +21,7 @@ import {
 import { useCga } from '@/context/CgaContext';
 import { ReceiptModal } from '@/components/student/ReceiptModal';
 import { FeePayment } from '@/data/initialSeedData';
+import { MaskedData } from '@/components/ui/MaskedData';
 
 export default function AdminFeesPage() {
   const { db, payCourseDue, approvePayment, rejectPayment, showToast } = useCga();
@@ -328,9 +329,10 @@ export default function AdminFeesPage() {
                 <tr key={`${row.studentId}-${row.courseId}`} className="hover:bg-slate-50">
                   <td className="py-3.5 px-4">
                     <p className="font-extrabold text-slate-900">{row.studentName}</p>
-                    <p className="text-[11px] text-slate-500">
-                      {row.studentCode} • {row.phone}
-                    </p>
+                    <div className="text-[11px] text-slate-500 flex items-center gap-1">
+                      <span>{row.studentCode} •</span>
+                      <MaskedData value={row.phone} type="phone" subjectId={row.studentCode} className="text-[11px] text-slate-500" />
+                    </div>
                   </td>
                   <td className="py-3.5 px-4">
                     <p className="font-bold text-slate-800">{row.courseName}</p>

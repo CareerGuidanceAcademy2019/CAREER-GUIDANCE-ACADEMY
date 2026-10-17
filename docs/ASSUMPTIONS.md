@@ -73,4 +73,14 @@ This document logs sensible architectural choices made during the autonomous imp
 
 ---
 
+---
 
+### Decision 18: Authentication, Minor Guardian Consent & Data Protection Architecture (Phase 3)
+- **Context:** Students preparing for board exams (Classes VII to X) are minors under Indian law, requiring parental consent under DPDP Act 2023. Password attacks and account enumeration pose ongoing threats to student privacy, while administrative accounts require strict session hygiene and audit trails.
+- **Decision:**
+  1. **Password Policy:** Minimum 10 characters, rejection of common passwords (top 200 list), and real-time entropy scoring via evaluatePasswordStrength.
+  2. **Non-Enumerating Authentication:** Uniform response messages on login and password reset ('If an account exists, instructions have been sent' / 'Invalid email or password') with timing-safe delays to neutralize user enumeration.
+  3. **Bot Mitigation:** Hidden honeypot fields (reg-hp, login-hp, enquiry-hp) placed across registration, login, and admission enquiry forms that quietly discard or stall automated bot submissions.
+  4. **PII Masking & Data Minimization:** Student phone numbers and emails in administrative lists (/admin/students, /admin/payments, /admin/fees) are masked by default (+91 94•••••89, a•••t@gmail.com). An interactive click-to-reveal button decrypts the view and automatically logs a pii_revealed_by_admin event to the immutable security_audit_log.
+  5. **Admin Inactivity Timeout:** Enforced a 15-minute idle inactivity timeout (AdminPortalLayout) listening to user input events and automatically terminating session tokens if unattended.
+  6. **Minor Guardian Consent & Deletion Flow:** Minor enrollment requires parental/guardian declaration. Added an auditable account deletion flow (account_deletion_requests table + request_account_deletion RPC) allowing students to initiate data erasure, which administrators process and permanently purge via purge_candidate().

@@ -11,23 +11,34 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [honeypot, setHoneypot] = useState('');
   const [error, setError] = useState('');
 
   const handleRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    
+    // Bot honeypot trap: if filled, simulate success without executing request
+    if (honeypot) {
+      setSent(true);
+      return;
+    }
+
     if (!email.trim() || !email.includes('@')) {
       setError('Please enter a valid registered email address.');
       return;
     }
+
     setBusy(true);
-    const res = await cgaService.requestPasswordReset(email);
-    setBusy(false);
-    if (!res.success) {
-      setError(res.error || 'Could not send reset email.');
-      return;
+    try {
+      await cgaService.requestPasswordReset(email.trim().toLowerCase());
+    } catch {
+      // Suppress backend details to prevent email enumeration
+    } finally {
+      setBusy(false);
+      // Uniform response prevents user enumeration
+      setSent(true);
     }
-    setSent(true);
   };
 
   return (
@@ -57,6 +68,18 @@ export default function ForgotPasswordPage() {
 
           {!sent ? (
             <form onSubmit={handleRequest} className="space-y-4" noValidate>
+              {/* Bot honeypot trap field (hidden from human users) */}
+              <div style={{ position: 'absolute', left: '-9999px', opacity: 0 }} aria-hidden="true">
+                <input
+                  type="text"
+                  name="user_verification_trap"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={honeypot}
+                  onChange={(e) => setHoneypot(e.target.value)}
+                />
+              </div>
+
               <p className="text-xs text-slate-600 leading-relaxed">
                 Enter your registered email address. We will email you a secure link to set a new
                 password.
