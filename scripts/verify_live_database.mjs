@@ -24,7 +24,7 @@ async function query(sql) {
 }
 
 async function main() {
-  console.log('🛡️ Running Gravitas Live Supabase Database Verification Suite...\n');
+  console.log('[VERIFY] Running Gravitas Live Supabase Database Verification Suite...\n');
 
   let passed = 0;
   let failed = 0;
@@ -32,10 +32,10 @@ async function main() {
   async function check(name, fn) {
     try {
       await fn();
-      console.log(`  ✅ PASS: ${name}`);
+      console.log(`  [SUCCESS] PASS: ${name}`);
       passed++;
     } catch (err) {
-      console.error(`  ❌ FAIL: ${name}`);
+      console.error(`  [FAIL] FAIL: ${name}`);
       console.error(`     ${err.message}`);
       failed++;
     }

@@ -31,7 +31,7 @@ async function seed() {
   if (facError) {
     console.error('Faculty seed error:', facError);
   } else {
-    console.log(`✅ ${d.faculty.length} faculty members seeded successfully!`);
+    console.log(`[SUCCESS] ${d.faculty.length} faculty members seeded successfully!`);
   }
 
   console.log(`Seeding ${d.achievements.length} achievements...`);
@@ -51,7 +51,7 @@ async function seed() {
   if (achError) {
     console.error('Achievements seed error:', achError);
   } else {
-    console.log(`✅ ${d.achievements.length} achievements seeded successfully!`);
+    console.log(`[SUCCESS] ${d.achievements.length} achievements seeded successfully!`);
   }
 
   console.log(`Seeding ${d.announcements.length} announcements...`);
@@ -71,7 +71,7 @@ async function seed() {
   if (annError) {
     console.error('Announcements seed error:', annError);
   } else {
-    console.log(`✅ ${d.announcements.length} announcements seeded successfully!`);
+    console.log(`[SUCCESS] ${d.announcements.length} announcements seeded successfully!`);
   }
 }
 

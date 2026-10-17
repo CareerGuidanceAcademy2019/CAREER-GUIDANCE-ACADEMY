@@ -11,6 +11,7 @@ import {
   Check,
   Upload,
   AlertCircle,
+  AlertTriangle,
   ExternalLink,
   ShieldCheck,
   Clock,
@@ -731,8 +732,9 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
                 )}
 
                 {isBlurryOrSmall && (
-                  <p className="text-xs text-amber-700 mt-1 font-medium bg-amber-50 p-2 rounded-lg border border-amber-200">
-                    ⚠️ The uploaded image seems very small or low-resolution. Please ensure the 12-digit UTR is clearly readable.
+                  <p className="text-xs text-amber-700 mt-1 font-medium bg-amber-50 p-2 rounded-lg border border-amber-200 flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>The uploaded image seems very small or low-resolution. Please ensure the 12-digit UTR is clearly readable.</span>
                   </p>
                 )}
 

@@ -8,7 +8,7 @@ if (!TOKEN) {
 
 async function main() {
   const sql = fs.readFileSync('supabase/migrations/0008_security_hardening.sql', 'utf8');
-  console.log(`📡 Applying Migration 0008 to Supabase [${PROJECT_REF}]...`);
+  console.log(`[DEPLOY] Applying Migration 0008 to Supabase [${PROJECT_REF}]...`);
 
   const response = await fetch(`https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query`, {
     method: 'POST',
@@ -25,7 +25,7 @@ async function main() {
     process.exit(1);
   }
 
-  console.log('✅ Migration 0008 applied successfully! Response:', text);
+  console.log('[SUCCESS] Migration 0008 applied successfully! Response:', text);
 }
 
 main().catch(console.error);

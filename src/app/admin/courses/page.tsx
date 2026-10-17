@@ -188,7 +188,7 @@ export default function AdminCoursesAndBatchesPage() {
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
               >
-                {m === 'All' ? 'All Batches' : m === 'Offline' ? '🏫 Offline Batches' : '💻 Online Batches'}
+                {m === 'All' ? 'All Batches' : m === 'Offline' ? 'Offline Batches' : 'Online Batches'}
               </button>
             ))}
           </div>
@@ -238,7 +238,7 @@ export default function AdminCoursesAndBatchesPage() {
                               : 'bg-amber-50 text-amber-800 border border-amber-200'
                           }`}
                         >
-                          {course.mode === 'Online' ? '💻 Online' : '🏫 Offline'}
+                          {course.mode === 'Online' ? 'Online' : 'Offline'}
                         </span>
                       </div>
                       <p className="font-extrabold text-slate-900 line-clamp-1">{course.name}</p>
@@ -613,8 +613,8 @@ export default function AdminCoursesAndBatchesPage() {
                   }
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-bold"
                 >
-                  <option value="Offline">🏫 Offline Classroom (Udaipur)</option>
-                  <option value="Online">💻 Online Interactive</option>
+                  <option value="Offline">Offline Classroom (Udaipur)</option>
+                  <option value="Online">Online Interactive</option>
                 </select>
               </div>
 

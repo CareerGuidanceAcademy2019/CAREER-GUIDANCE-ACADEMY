@@ -208,7 +208,7 @@ export default function StudentMockTestsPage() {
                             : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
-                        🌐 Bilingual (Eng + বাংলা)
+                        Bilingual (English and Bengali)
                       </button>
                       <button
                         type="button"
@@ -485,7 +485,7 @@ export default function StudentMockTestsPage() {
         <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-200">
           <div>
             <span className="inline-block px-3 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-extrabold">
-              ✓ Test Submitted Successfully • Official Evaluation
+              Test Submitted Successfully • Official Evaluation
             </span>
             <h2 className="text-xl font-extrabold text-[#0a0e2a] mt-1">
               {completedAttempt.testTitle}
@@ -927,7 +927,7 @@ export default function StudentMockTestsPage() {
                   : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
               }`}
             >
-              🌐 Bilingual
+              Bilingual
             </button>
           </div>
         </div>
@@ -964,17 +964,17 @@ export default function StudentMockTestsPage() {
                       {/* Language Mode Badge */}
                       {langMode === 'english_only' && (
                         <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-bold">
-                          🇬🇧 English Only
+                          English Only
                         </span>
                       )}
                       {langMode === 'bengali_only' && (
                         <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold font-sans">
-                          🇧🇩 বাংলা পত্র
+                          বাংলা পত্র (Bengali Only)
                         </span>
                       )}
                       {langMode === 'bilingual' && (
                         <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-bold">
-                          🌐 Bilingual (Eng + বাংলা)
+                          Bilingual (English and Bengali)
                         </span>
                       )}
                     </div>

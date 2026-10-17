@@ -155,7 +155,7 @@ export default function CoursesCataloguePage() {
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    🏫 Offline Batches ({db.courses.filter((c) => c.mode === 'Offline').length})
+                    Offline Batches ({db.courses.filter((c) => c.mode === 'Offline').length})
                   </button>
                   <button
                     type="button"
@@ -166,7 +166,7 @@ export default function CoursesCataloguePage() {
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    💻 Online Batches ({db.courses.filter((c) => c.mode === 'Online').length})
+                    Online Batches ({db.courses.filter((c) => c.mode === 'Online').length})
                   </button>
                 </div>
               </div>

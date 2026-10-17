@@ -4,7 +4,7 @@ interface SvgProps {
   className?: string;
 }
 
-/** Custom hand-crafted check badge SVG (replaces raw ✓ emoji) */
+/** Custom hand-crafted check badge SVG (replaces raw checkmark) */
 export function CustomCheckSvg({ className = 'w-3.5 h-3.5' }: SvgProps) {
   return (
     <svg
@@ -26,7 +26,7 @@ export function CustomCheckSvg({ className = 'w-3.5 h-3.5' }: SvgProps) {
   );
 }
 
-/** Custom hand-crafted cross mark SVG (replaces raw ✗ emoji) */
+/** Custom hand-crafted cross mark SVG (replaces raw crossmark) */
 export function CustomCrossSvg({ className = 'w-3.5 h-3.5' }: SvgProps) {
   return (
     <svg

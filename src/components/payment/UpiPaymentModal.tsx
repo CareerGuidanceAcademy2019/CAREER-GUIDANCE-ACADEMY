@@ -519,7 +519,7 @@ export function UpiPaymentModal({
 
               <div>
                 <span className="inline-block px-3 py-1 rounded-full bg-amber-50 text-amber-900 border border-amber-200 text-xs font-extrabold uppercase">
-                  ⏳ Under Admin Verification
+                  Under Admin Verification
                 </span>
                 <h3 className="text-xl font-extrabold text-[#0a0e2a] mt-2">
                   Payment Submitted Successfully!

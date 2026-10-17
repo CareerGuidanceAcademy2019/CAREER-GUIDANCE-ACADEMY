@@ -100,7 +100,7 @@ export default function StudentCourseCataloguePage() {
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                🏫 Offline Batches
+                Offline Batches
               </button>
               <button
                 type="button"
@@ -111,7 +111,7 @@ export default function StudentCourseCataloguePage() {
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                💻 Online Batches
+                Online Batches
               </button>
             </div>
           </div>

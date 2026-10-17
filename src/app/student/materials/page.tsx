@@ -82,9 +82,9 @@ export default function StudentStudyMaterialsPage() {
               Study Material Delivery & Usage Policy
             </h4>
             <p className="text-xs text-slate-700 mt-0.5 leading-relaxed">
-              <strong className="text-[#0056b3]">🏫 Offline Batches:</strong> Students receive physical printed notes & booklet handouts at the Udaipur center.{' '}
+              <strong className="text-[#0056b3]">Offline Batches:</strong> Students receive physical printed notes & booklet handouts at the Udaipur center.{' '}
               <span className="mx-1">•</span>
-              <strong className="text-slate-900">💻 Digital Softcopies:</strong> Available in secure <em>View-Only Reader</em> mode in the browser. Downloading, copying, or exporting softcopies is strictly restricted to Academy Administrators.
+              <strong className="text-slate-900">Digital Softcopies:</strong> Available in secure <em>View-Only Reader</em> mode in the browser. Downloading, copying, or exporting softcopies is strictly restricted to Academy Administrators.
             </p>
           </div>
         </div>

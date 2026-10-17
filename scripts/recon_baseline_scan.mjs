@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 
-console.log('🔍 Starting Phase 1 Recon & Baseline Scans...\n');
+console.log('[SCAN] Starting Phase 1 Recon & Baseline Scans...\n');
 
 const DANGEROUS_PATTERNS = [
   { name: 'dangerouslySetInnerHTML', regex: /dangerouslySetInnerHTML/g },
@@ -79,19 +79,19 @@ scanDirectory('.', issues);
 
 console.log('--- DANGEROUS PATTERNS DETECTED ---');
 if (issues.dangerous.length === 0) {
-  console.log('✅ None detected.');
+  console.log('[SUCCESS] None detected.');
 } else {
   for (const d of issues.dangerous) {
-    console.log(`⚠️  ${d.file}:${d.line} - [${d.type}] -> ${d.snippet}`);
+    console.log(`[WARN]  ${d.file}:${d.line} - [${d.type}] -> ${d.snippet}`);
   }
 }
 
 console.log('\n--- POTENTIAL SECRETS DETECTED IN CODE ---');
 if (issues.secrets.length === 0) {
-  console.log('✅ None detected in source tree.');
+  console.log('[SUCCESS] None detected in source tree.');
 } else {
   for (const s of issues.secrets) {
-    console.log(`🚨 ${s.file}:${s.line} - [${s.type}] -> ${s.snippet}`);
+    console.log(`[ALERT] ${s.file}:${s.line} - [${s.type}] -> ${s.snippet}`);
   }
 }
 

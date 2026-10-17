@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import {
   CheckCircle2,
+  AlertCircle,
   QrCode,
   ShieldCheck,
   Lock,
@@ -186,8 +187,9 @@ export function HowToPayGuide({
             <p className="text-xs text-slate-700 leading-relaxed font-medium">
               {content.utrApps[selectedApp].location}
             </p>
-            <p className="text-[11px] text-slate-500 italic">
-              💡 {content.utrApps[selectedApp].notes}
+            <p className="text-[11px] text-slate-500 italic flex items-center gap-1">
+              <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span>{content.utrApps[selectedApp].notes}</span>
             </p>
           </div>
         </div>
@@ -285,7 +287,7 @@ export function HowToPayGuide({
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 absolute right-3 top-1/2 -translate-y-1/2" />
                 </div>
                 <span className="text-[10px] font-medium text-emerald-700 mt-1 block">
-                  ✓ Exactly 12 digits matched
+                  Exactly 12 digits matched
                 </span>
               </div>
 
@@ -327,7 +329,7 @@ export function HowToPayGuide({
             <ul className="space-y-1.5 text-xs text-emerald-950">
               {content.dos.map((item, idx) => (
                 <li key={idx} className="flex items-start gap-1.5">
-                  <span className="text-emerald-600 font-bold">✓</span>
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
                   <span>{item}</span>
                 </li>
               ))}
@@ -343,7 +345,7 @@ export function HowToPayGuide({
             <ul className="space-y-1.5 text-xs text-red-950">
               {content.donts.map((item, idx) => (
                 <li key={idx} className="flex items-start gap-1.5">
-                  <span className="text-red-600 font-bold">✕</span>
+                  <AlertCircle className="w-3.5 h-3.5 text-red-600 shrink-0 mt-0.5" />
                   <span>{item}</span>
                 </li>
               ))}

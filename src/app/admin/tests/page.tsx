@@ -422,7 +422,7 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                             : 'bg-amber-50 text-[#ea580c] border border-amber-200'
                         }`}
                       >
-                        {test.status === 'Published' ? '🚀 Launched' : '⏳ Draft / Scheduled'}
+                        {test.status === 'Published' ? 'Launched' : 'Draft / Scheduled'}
                       </span>
                     </div>
 
@@ -436,17 +436,17 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                     <div className="flex items-center gap-1.5 pt-1">
                       {langMode === 'english_only' && (
                         <span className="px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-700 text-[10px] font-bold border border-indigo-200">
-                          🇬🇧 English Only
+                          English Only
                         </span>
                       )}
                       {langMode === 'bengali_only' && (
                         <span className="px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200 font-sans">
-                          🇧🇩 Bengali Only (বাংলা)
+                          Bengali Only (বাংলা)
                         </span>
                       )}
                       {langMode === 'bilingual' && (
                         <span className="px-2 py-0.5 rounded-lg bg-purple-50 text-purple-700 text-[10px] font-bold border border-purple-200">
-                          🌐 Bilingual (Eng + বাংলা)
+                          Bilingual (English and Bengali)
                         </span>
                       )}
                     </div>

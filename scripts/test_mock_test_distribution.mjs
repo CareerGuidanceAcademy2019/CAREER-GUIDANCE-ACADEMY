@@ -108,7 +108,7 @@ assert.strictEqual(parsed[1].correctOptionIndex, 1, 'Q2 should have correct opti
 assert.strictEqual(parsed[2].correctOptionIndex, 2, 'Q3 should have correct option C (2)');
 assert.ok(parsed[0].explanation.includes('Thorndike'), 'Q1 explanation should mention Thorndike');
 assert.ok(parsed[1].explanation.includes('Gomati'), 'Q2 explanation should mention Gomati');
-console.log('✓ MCQ Parser successfully extracted 3 questions, options A-D, answers, and explanations');
+console.log('[PASS] MCQ Parser successfully extracted 3 questions, options A-D, answers, and explanations');
 
 console.log('\n--- 2. Testing Question Distribution Separation ---');
 // When distributed to students who have NOT submitted:
@@ -131,7 +131,7 @@ for (const q of forExamTaking) {
   assert.strictEqual(q.explanation, '', 'Explanation MUST be masked prior to submission');
   assert.strictEqual(q.options.length, 4, 'Options must be present for student to choose');
 }
-console.log('✓ Distribution before submission: ONLY questions and options are exposed (keys/explanations stripped)');
+console.log('[PASS] Distribution before submission: ONLY questions and options are exposed (keys/explanations stripped)');
 
 console.log('\n--- 3. Testing Test Submission & Authoritative Scoring ---');
 // Student answers: Q1 -> A (correct), Q2 -> A (wrong), Q3 -> C (correct)
@@ -163,7 +163,7 @@ assert.strictEqual(wrong, 1, 'Should be 1 wrong answer');
 assert.strictEqual(unattempted, 0, 'Should be 0 unattempted');
 assert.strictEqual(score, 7, 'Score should be 2*4 - 1*1 = 7');
 assert.strictEqual(accuracy, 67, 'Accuracy should be 2/3 = 67%');
-console.log(`✓ Test evaluated: Score ${score}/${totalMarks}, Accuracy ${accuracy}%, Correct: ${correct}, Wrong: ${wrong}`);
+console.log(`[PASS] Test evaluated: Score ${score}/${totalMarks}, Accuracy ${accuracy}%, Correct: ${correct}, Wrong: ${wrong}`);
 
 console.log('\n--- 4. Testing Solutions Unlock After Submission ---');
 const afterSubmission = distributeToStudent(parsed, true);
@@ -171,7 +171,7 @@ assert.strictEqual(afterSubmission[0].correctOptionIndex, 0);
 assert.strictEqual(afterSubmission[1].correctOptionIndex, 1);
 assert.strictEqual(afterSubmission[2].correctOptionIndex, 2);
 assert.ok(afterSubmission[0].explanation.length > 0);
-console.log('✓ Solutions & Result view unlocked: Official answer keys and explanations available only after submission');
+console.log('[PASS] Solutions & Result view unlocked: Official answer keys and explanations available only after submission');
 
 console.log('\n=========================================');
 console.log('ALL MOCK TEST DISTRIBUTION TESTS PASSED!');

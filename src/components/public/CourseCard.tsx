@@ -10,6 +10,8 @@ import {
   CheckCircle2,
   Lock,
   ArrowRight,
+  Printer,
+  BookOpen,
 } from 'lucide-react';
 import { Course } from '@/data/initialSeedData';
 import { CustomWaitlistSvg } from '@/components/ui/CustomIcons';
@@ -68,7 +70,7 @@ export function CourseCard({
                   : 'bg-amber-50 text-amber-800 border-amber-200'
               }`}
             >
-              {course.mode === 'Online' ? '💻 Online Live' : '🏫 Offline Classroom'}
+              {course.mode === 'Online' ? 'Online Live' : 'Offline Classroom'}
             </span>
           </div>
 
@@ -104,11 +106,13 @@ export function CourseCard({
         <div className="mb-3">
           {course.mode === 'Offline' ? (
             <div className="text-[11px] font-semibold text-emerald-800 bg-emerald-50/90 px-2.5 py-1.5 rounded-xl border border-emerald-200/80 flex items-center gap-1.5">
-              <span>🖨️ Physical printed booklets at Udaipur center + view-only softcopy</span>
+              <Printer className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+              <span>Physical printed booklets at Udaipur center + view-only softcopy</span>
             </div>
           ) : (
             <div className="text-[11px] font-semibold text-blue-800 bg-blue-50/90 px-2.5 py-1.5 rounded-xl border border-blue-200/80 flex items-center gap-1.5">
-              <span>📖 Digital study material in secure View-Only Reader mode</span>
+              <BookOpen className="w-3.5 h-3.5 text-[#0056b3] shrink-0" />
+              <span>Digital study material in secure View-Only Reader mode</span>
             </div>
           )}
         </div>
