@@ -62,7 +62,10 @@ This document logs sensible architectural choices made during the autonomous imp
 - **Context:** The mock test series purchase required a relational table to record students who purchased the T-TET mock test series.
 - **Decision:** Added `series_enrollments` with `(student_id, series_id, enrolled_at, payment_request_id, UNIQUE(student_id, series_id))` and wired it into `cga_approve_payment` for `item_type = 'mock_series'`. Also included it in candidate purge routines.
 
-### Decision 15: Dual-Layer Expiry Mechanism
-- **Context:** Awaiting payment requests must expire after 48 hours.
-- **Decision:** Created a cron-compatible function `cga_expire_stale_requests()`. In addition, status computation on read treats any `awaiting_payment` record where `now() > expires_at` as expired, preventing stale requests from accepting late proofs even if the scheduled sweeper is delayed.
+### Decision 16: Pre-Deployment Security Architecture & Token Hygiene
+- **Context:** Automated deployment scripts and tests must operate without leaking Supabase personal access tokens or secret service role keys into repository commits or client bundles.
+- **Decision:** Environment variables are strictly partitioned: `NEXT_PUBLIC_` for client-safe publishable keys guarded by Postgres RLS, and server-only `SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_ACCESS_TOKEN` for administrative APIs and build-time scripts. All test scripts were updated to read from runtime process environment variables rather than hardcoded string fallbacks.
+
+---
+
 

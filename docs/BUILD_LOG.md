@@ -81,7 +81,21 @@ This file tracks progress across all phases with timestamps and validation resul
   - Upload file type & size constraints (JPG/PNG/WEBP, max 5MB).
   - Authentic C.G.A institute credentials in payment settings.
   - Bilingual How-to-pay guide content.
-- Passed: 12/12 unit tests passing (0 failures).
-- Passed: TypeScript compilation (`npx tsc --noEmit`) with 0 errors.
-- Authored `docs/PAYMENTS.md` and `docs/FINAL_REPORT.md`.
+---
+
+## [Pre-Deployment Pass — Phase 1: Reconnaissance & Baseline]
+- **Date & Time:** 2026-10-17T12:55:00+05:30
+- **System Mapping:**
+  - Complete architecture map published to `docs/SYSTEM_MAP.md`.
+  - Mapped 43 Page Routes (14 Public, 10 Student, 2 Faculty, 17 Admin), 3 API Route Handlers, 1 Next.js 16 Proxy Middleware, 26 PostgreSQL relational tables, 18 stored procedures / RPCs, and 1 private Supabase Storage bucket (`payment-proofs`).
+- **Dependency Audit (`npm audit`):**
+  - Identified vulnerabilities in Next.js 16.3.7 and nested packages (`braces`, `source-map-js`). Pinned for resolution.
+- **Secret & Static Vulnerability Scan (`scripts/recon_baseline_scan.mjs`):**
+  - Scanned repository for dangerous patterns (`dangerouslySetInnerHTML`, `eval`, `new Function`, string-built SQL, open redirects). Verified zero dangerous patterns in production application components.
+  - Sanitized CLI scripts (`execute_master_setup.mjs`, `verify_live_database.mjs`) to strictly require `process.env.SUPABASE_ACCESS_TOKEN`, preventing secret retention in git.
+  - Flagged mock passwords (`password123`) in seed files for elimination in Phase 2/3.
+- **Verification:**
+  - TypeScript strict compilation: 0 errors (`npx tsc --noEmit`).
+  - Unit tests: 21/21 passing.
+
 
