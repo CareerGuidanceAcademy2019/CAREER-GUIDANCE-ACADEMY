@@ -22,7 +22,7 @@ import {
   SeriesAttempt,
 } from '@/data/initialSeedData';
 import { getSupabase } from '@/lib/supabase/client';
-import { parseIdentifier, getFacultyAvatarUrl } from '@/lib/names';
+import { parseIdentifier, getFacultyAvatarUrl, normalizePhone } from '@/lib/names';
 import { PAYMENT_SETTINGS } from '@/config/paymentSettings';
 
 export type PortalRole = 'STUDENT' | 'FACULTY' | 'ADMIN';
@@ -70,6 +70,15 @@ export interface AllowlistEntry {
   identifier: string;
   role: 'admin' | 'faculty';
   note: string;
+  createdAt: string;
+}
+
+export interface PendingAdminApplication {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  status: string;
   createdAt: string;
 }
 
@@ -465,9 +474,13 @@ export const cgaService = {
       const row = (Array.isArray(state) ? state[0] : state) as { role?: string; status?: string } | null;
       if (row?.status === 'Pending') {
         await sb.auth.signOut();
+        const pendingMsg =
+          row.role === 'admin'
+            ? 'Your administrator registration is awaiting verification and approval from an existing C.G.A administrator. You can sign in once verified.'
+            : 'Your faculty registration is awaiting approval from the C.G.A administrator. You can sign in once it is approved.';
         return {
           success: false,
-          error: 'Your faculty registration is awaiting approval from the C.G.A administrator. You can sign in once it is approved.',
+          error: pendingMsg,
         };
       }
     } catch {}
@@ -505,7 +518,7 @@ export const cgaService = {
         success: false,
         error: dbError
           ? meta.account_type === 'admin'
-            ? 'This email / phone number is not on the C.G.A administrator access list. Ask an existing admin to add you first.'
+            ? 'Could not register administrator account. Please verify that your email and 10-digit mobile number are valid.'
             : 'Could not create the account. This phone number may already be registered.'
           : error.message,
       };
@@ -522,6 +535,24 @@ export const cgaService = {
   async registerStudent(
     payload: RegisterPayload
   ): Promise<ServiceResult<{ session: AuthSession; needsEmailConfirmation: boolean }>> {
+    if (!payload.name?.trim() || payload.name.trim().length < 3) {
+      return { success: false, error: 'Full candidate name (minimum 3 characters) is required.' };
+    }
+    if (!payload.phone || !/^[6-9]\d{9}$/.test(normalizePhone(payload.phone))) {
+      return { success: false, error: 'A valid 10-digit mobile number is required.' };
+    }
+    if (!payload.guardianName?.trim() || payload.guardianName.trim().length < 3) {
+      return { success: false, error: "Parent's / Guardian's name is required for registration." };
+    }
+    if (!payload.address?.trim() || payload.address.trim().length < 5) {
+      return { success: false, error: 'Present residential address is required.' };
+    }
+    if (!payload.qualification?.trim() || payload.qualification.trim().length < 2) {
+      return { success: false, error: 'Educational qualification or standard is required.' };
+    }
+    if (!payload.targetExam?.trim() || payload.targetExam.trim().length < 2) {
+      return { success: false, error: 'Target competitive examination is required.' };
+    }
     if (!(await this.isPhoneAvailable(payload.phone))) {
       return { success: false, error: 'An account with this phone number already exists. Please sign in.' };
     }
@@ -531,7 +562,7 @@ export const cgaService = {
       phone: payload.phone.trim(),
       guardian_name: payload.guardianName.trim(),
       address: payload.address.trim(),
-      permanent_address: (payload.permanentAddress ?? '').trim(),
+      permanent_address: (payload.permanentAddress ?? payload.address).trim(),
       qualification: payload.qualification.trim(),
       target_exam: payload.targetExam.trim(),
     });
@@ -563,15 +594,31 @@ export const cgaService = {
 
   async registerAdmin(
     payload: AdminRegisterPayload
-  ): Promise<ServiceResult<{ session: AuthSession; needsEmailConfirmation: boolean }>> {
+  ): Promise<ServiceResult<{ session: AuthSession; needsEmailConfirmation: boolean; pendingApproval?: boolean }>> {
     if (!(await this.isPhoneAvailable(payload.phone))) {
       return { success: false, error: 'An account with this phone number already exists. Please sign in instead.' };
     }
-    return this.signUpWithMeta(payload.email, payload.password, {
+    const res = await this.signUpWithMeta(payload.email, payload.password, {
       account_type: 'admin',
       name: payload.name.trim(),
       phone: payload.phone.trim(),
     });
+    if (res.success) {
+      const sb = this.client();
+      try {
+        const { data: state } = await sb.rpc('my_account_state');
+        const row = (Array.isArray(state) ? state[0] : state) as { role?: string; status?: string } | null;
+        if (row?.status === 'Pending') {
+          await sb.auth.signOut();
+          return {
+            success: true,
+            needsEmailConfirmation: false,
+            pendingApproval: true,
+          };
+        }
+      } catch {}
+    }
+    return res;
   },
 
   // ============ ADMIN: ACCESS LIST & FACULTY APPROVAL ============
@@ -637,6 +684,63 @@ export const cgaService = {
       p_approve: approve,
     });
     return error ? { success: false, error: msg(error, 'Could not update faculty.') } : { success: true };
+  },
+
+  // ============ ADMIN: PENDING ADMINISTRATOR VERIFICATION ============
+  async listPendingAdmins(): Promise<PendingAdminApplication[]> {
+    const { data, error } = await this.client().rpc('cga_list_pending_admins');
+    if (error || !data) return [];
+    return ((data as Row[]) ?? []).map((r) => ({
+      id: r.id,
+      name: r.name,
+      email: r.email,
+      phone: r.phone ?? '',
+      status: r.status,
+      createdAt: formatStamp(r.created_at),
+    }));
+  },
+
+  async setAdminApproval(profileId: string, approve: boolean): Promise<ServiceResult> {
+    const rpcName = approve ? 'cga_approve_admin' : 'cga_reject_admin';
+    const { error } = await this.client().rpc(rpcName, { p_profile_id: profileId });
+    return error ? { success: false, error: msg(error, 'Could not process administrator application.') } : { success: true };
+  },
+
+  // ============ ADMIN: BATCH & ENROLLMENT ACCESS DURATION CONTROLS ============
+  async updateBatchDuration(courseId: string, newValidUntil: string): Promise<ServiceResult<{ updatedCount: number }>> {
+    const { data, error } = await this.client().rpc('cga_update_batch_duration', {
+      p_course_id: courseId,
+      p_new_valid_until: newValidUntil,
+    });
+    return error
+      ? { success: false, error: msg(error, 'Could not update batch access duration.') }
+      : { success: true, updatedCount: Number(data ?? 0) };
+  },
+
+  async extendBatchDuration(courseId: string, additionalMonths: number): Promise<ServiceResult<{ updatedCount: number }>> {
+    const { data, error } = await this.client().rpc('cga_extend_batch_duration_months', {
+      p_course_id: courseId,
+      p_months: additionalMonths,
+    });
+    return error
+      ? { success: false, error: msg(error, 'Could not extend batch access duration.') }
+      : { success: true, updatedCount: Number(data ?? 0) };
+  },
+
+  async updateStudentEnrollmentDuration(enrollmentId: string, newValidUntil: string): Promise<ServiceResult> {
+    const { error } = await this.client().rpc('cga_update_student_enrollment_duration', {
+      p_enrollment_id: enrollmentId,
+      p_new_valid_until: newValidUntil,
+    });
+    return error ? { success: false, error: msg(error, 'Could not update student access duration.') } : { success: true };
+  },
+
+  async updateSeriesEnrollmentDuration(seriesEnrollmentId: string, newValidUntil: string): Promise<ServiceResult> {
+    const { error } = await this.client().rpc('cga_update_series_enrollment_duration', {
+      p_series_enrollment_id: seriesEnrollmentId,
+      p_new_valid_until: newValidUntil,
+    });
+    return error ? { success: false, error: msg(error, 'Could not update series access duration.') } : { success: true };
   },
 
   /** The signed-in faculty member's own profile + public card. */
@@ -757,13 +861,25 @@ export const cgaService = {
     localDeletedIds.forEach((id) => mergedTestsMap.delete(id));
     const allMasterTests = Array.from(mergedTestsMap.values());
 
-    const studentRows = profiles.filter((p) => p.role === 'student');
+    // Only authentic students who have registered and possess phone, email, and required details
+    const studentRows = profiles.filter(
+      (p) =>
+        p.role === 'student' &&
+        Boolean(p.name?.trim() && p.name.trim().length >= 3) &&
+        Boolean(p.email?.trim()) &&
+        Boolean(p.phone?.trim()) &&
+        Boolean(p.guardian_name?.trim()) &&
+        Boolean(p.address?.trim()) &&
+        Boolean(p.qualification?.trim()) &&
+        Boolean(p.target_exam?.trim())
+    );
     const students: StudentProfile[] = studentRows.map((p) => {
       const enr: StudentEnrollment[] = enrollments
         .filter((e) => e.student_id === p.id)
         .map((e) => {
           const c = courseList.find((x) => x.id === e.course_id);
           return {
+            id: e.id,
             courseId: e.course_id,
             courseName: c?.name ?? '',
             batchName: c?.batchName ?? '',
@@ -774,6 +890,7 @@ export const cgaService = {
             paidAmount: Number(e.paid_amount),
             dueAmount: Number(e.due_amount),
             nextDueDate: e.next_due_date ?? undefined,
+            accessValidUntil: e.access_valid_until ?? undefined,
           };
         });
       return {
@@ -904,8 +1021,8 @@ export const cgaService = {
       studyMaterials: materialList.length > 0 ? materialList : INITIAL_SEED_DATA.studyMaterials,
       mockTests: finalMockTests,
       testAttempts,
-      students: studentRows.length > 0 ? students : INITIAL_SEED_DATA.students,
-      feePayments: payments.length > 0 ? feePayments : INITIAL_SEED_DATA.feePayments,
+      students,
+      feePayments,
       announcements:
         announcements.length > 0
           ? (announcements.map((a) => ({
@@ -929,6 +1046,7 @@ export const cgaService = {
         seriesId: e.series_id,
         paymentId: e.payment_id ?? undefined,
         enrolledAt: e.enrolled_at,
+        accessValidUntil: e.access_valid_until ?? undefined,
       })),
       seriesAttempts: seriesAttemptsRaw.map((a: Row) =>
         toSeriesAttempt(a, studentName(a.student_id), studentCode(a.student_id), studentPhone(a.student_id))

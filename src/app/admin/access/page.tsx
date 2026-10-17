@@ -11,15 +11,19 @@ import {
   Mail,
   Phone,
   RefreshCw,
+  Clock,
+  UserCheck,
+  UserX,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
-import { cgaService, type AllowlistEntry } from '@/services/cgaService';
+import { cgaService, type AllowlistEntry, type PendingAdminApplication } from '@/services/cgaService';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { isEmail, normalizePhone, parseIdentifier } from '@/lib/names';
+import { parseIdentifier, isEmail } from '@/lib/names';
 
 export default function AdminAccessPage() {
-  const { session, showToast } = useCga();
+  const { showToast } = useCga();
   const [entries, setEntries] = useState<AllowlistEntry[]>([]);
+  const [pendingAdmins, setPendingAdmins] = useState<PendingAdminApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<AllowlistEntry | null>(null);
@@ -32,14 +36,42 @@ export default function AdminAccessPage() {
 
   const load = async () => {
     setLoading(true);
-    const data = await cgaService.listAllowlist();
-    setEntries(data);
+    const [allowlistData, pendingData] = await Promise.all([
+      cgaService.listAllowlist(),
+      cgaService.listPendingAdmins(),
+    ]);
+    setEntries(allowlistData);
+    setPendingAdmins(pendingData);
     setLoading(false);
   };
 
   useEffect(() => {
     load();
   }, []);
+
+  const handleApproveAdmin = async (app: PendingAdminApplication) => {
+    setBusy(true);
+    const res = await cgaService.setAdminApproval(app.id, true);
+    setBusy(false);
+    if (!res.success) {
+      showToast('Approval Error', res.error || 'Failed to approve administrator', 'error');
+      return;
+    }
+    showToast('Administrator Verified', `${app.name} (${app.email}) has been verified and granted administrator access.`, 'success');
+    load();
+  };
+
+  const handleRejectAdmin = async (app: PendingAdminApplication) => {
+    setBusy(true);
+    const res = await cgaService.setAdminApproval(app.id, false);
+    setBusy(false);
+    if (!res.success) {
+      showToast('Rejection Error', res.error || 'Failed to reject administrator', 'error');
+      return;
+    }
+    showToast('Application Rejected', `Administrator application for ${app.name} has been rejected.`, 'info');
+    load();
+  };
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -123,6 +155,84 @@ export default function AdminAccessPage() {
         <p className="leading-relaxed">
           <strong>3. Automatic Verification:</strong> The database instantly checks this list. If matched, their account is granted the role immediately.
         </p>
+      </div>
+
+      {/* Pending Administrator Verification Section */}
+      <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-xs">
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-base font-extrabold text-[#0a0e2a] flex items-center gap-2">
+              <Clock className="w-5 h-5 text-amber-500" /> Pending Administrator Verification Queue
+            </h2>
+            {pendingAdmins.length > 0 && (
+              <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-extrabold text-xs">
+                {pendingAdmins.length} Awaiting Approval
+              </span>
+            )}
+          </div>
+        </div>
+
+        {pendingAdmins.length === 0 ? (
+          <div className="p-8 text-center text-slate-500 text-xs">
+            <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2 opacity-80" />
+            <p className="font-bold text-slate-700">No pending administrator applications.</p>
+            <p className="text-slate-400 mt-0.5">When new candidates register for administrator access, their requests will appear here for verification.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 border-b border-slate-100 text-slate-500 uppercase tracking-wider font-bold">
+                <tr>
+                  <th className="py-3 px-6">Applicant Name</th>
+                  <th className="py-3 px-6">Email Address</th>
+                  <th className="py-3 px-6">Mobile Number</th>
+                  <th className="py-3 px-6">Registered On</th>
+                  <th className="py-3 px-6 text-right">Verification Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-700">
+                {pendingAdmins.map((app) => (
+                  <tr key={app.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="py-4 px-6 font-bold text-slate-900">{app.name}</td>
+                    <td className="py-4 px-6 font-medium text-slate-800">
+                      <span className="inline-flex items-center gap-1.5">
+                        <Mail className="w-3.5 h-3.5 text-slate-400" />
+                        {app.email}
+                      </span>
+                    </td>
+                    <td className="py-4 px-6 font-medium text-slate-800">
+                      <span className="inline-flex items-center gap-1.5">
+                        <Phone className="w-3.5 h-3.5 text-slate-400" />
+                        {app.phone || '—'}
+                      </span>
+                    </td>
+                    <td className="py-4 px-6 text-slate-500">{app.createdAt}</td>
+                    <td className="py-4 px-6 text-right">
+                      <div className="inline-flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleApproveAdmin(app)}
+                          disabled={busy}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer disabled:opacity-50"
+                        >
+                          <UserCheck className="w-3.5 h-3.5" /> Verify &amp; Approve
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRejectAdmin(app)}
+                          disabled={busy}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 font-bold text-xs cursor-pointer disabled:opacity-50"
+                        >
+                          <UserX className="w-3.5 h-3.5" /> Reject
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Add New Entry Form */}

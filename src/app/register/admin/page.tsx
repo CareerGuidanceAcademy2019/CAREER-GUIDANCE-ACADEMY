@@ -21,6 +21,7 @@ export default function AdminActivatePage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [confirmSent, setConfirmSent] = useState(false);
+  const [pendingApproval, setPendingApproval] = useState(false);
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -28,7 +29,7 @@ export default function AdminActivatePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (form.name.trim().length < 3) return setError('Please enter your full name.');
+    if (form.name.trim().length < 3) return setError('Please enter your full name (minimum 3 characters).');
     if (!isEmail(form.email)) return setError('Please enter a valid email address.');
     if (!/^[6-9]\d{9}$/.test(normalizePhone(form.phone))) return setError('Please enter a valid 10-digit mobile number.');
     if (form.password.length < 8) return setError('Password must be at least 8 characters long.');
@@ -43,10 +44,15 @@ export default function AdminActivatePage() {
       password: form.password,
     });
     setBusy(false);
-    if (!res.success) return setError(res.error || 'Could not activate admin access.');
+
+    if (!res.success) return setError(res.error || 'Could not submit administrator registration.');
+    if (res.pendingApproval) {
+      setPendingApproval(true);
+      return;
+    }
     if (res.session?.role === 'ADMIN') return router.push('/admin/dashboard');
     if (res.needsEmailConfirmation) return setConfirmSent(true);
-    setError('Account created, but administrator access was not granted. Please contact the institute owner.');
+    setPendingApproval(true);
   };
 
   return (
@@ -56,18 +62,32 @@ export default function AdminActivatePage() {
         <div className="max-w-lg w-full bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
           <div className="bg-[#0a0e2a] text-white p-7">
             <ShieldCheck className="w-10 h-10 text-amber-400" />
-            <h1 className="text-2xl font-extrabold mt-3">Activate Administrator Access</h1>
+            <h1 className="text-2xl font-extrabold mt-3">Register for Administrator Access</h1>
             <p className="text-xs text-blue-100 mt-1 leading-relaxed">
-              Only people whose email or mobile number is on the C.G.A <strong>admin access list</strong> can
-              activate an admin account. Use the same email / mobile the institute registered for you.
+              Submit your registration for C.G.A administrative access. All new administrator registrations require verification and approval from the institute management before login is permitted.
             </p>
           </div>
 
-          {confirmSent ? (
+          {pendingApproval ? (
+            <div className="p-8 text-center space-y-4">
+              <CheckCircle2 className="w-12 h-12 text-emerald-600 mx-auto" />
+              <h2 className="text-xl font-extrabold text-[#0a0e2a]">Application Submitted for Verification</h2>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                Your administrator registration has been recorded with status <strong>Pending Verification</strong>.
+                An existing administrator must review and approve your account before you can log in.
+              </p>
+              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900 text-left">
+                <strong>Verification Notice:</strong> Please contact the institute director or senior administrator at the Udaipur center to verify your request. Once verified, you will be able to log in directly with your email or mobile.
+              </div>
+              <Link href="/login?as=admin" className="inline-block w-full py-3 rounded-xl bg-[#0a0e2a] text-white font-bold text-sm">
+                Go to Admin Login
+              </Link>
+            </div>
+          ) : confirmSent ? (
             <div className="p-8 text-center space-y-4">
               <CheckCircle2 className="w-12 h-12 text-emerald-600 mx-auto" />
               <p className="text-sm text-slate-600">
-                We sent a confirmation link to <strong>{form.email}</strong>. Open it, then sign in on the Admin tab.
+                We sent a confirmation link to <strong>{form.email}</strong>. Open it to confirm your email, then wait for administrator approval.
               </p>
               <Link href="/login?as=admin" className="inline-block w-full py-3 rounded-xl bg-[#0a0e2a] text-white font-bold text-sm">
                 Go to Admin Login
@@ -172,13 +192,13 @@ export default function AdminActivatePage() {
                 type="submit"
                 disabled={busy}
                 className="w-full py-3.5 rounded-xl bg-[#0a0e2a] hover:bg-[#1e2a5a] disabled:opacity-60 text-white font-bold text-sm shadow-md inline-flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0a0e2a]"
-                aria-label="Create Password and Enter Admin Panel"
+                aria-label="Submit Administrator Registration"
               >
                 <KeyRound className="w-4 h-4" />
-                {busy ? 'Activating…' : 'Create Password & Enter Admin Panel'}
+                {busy ? 'Submitting Application…' : 'Submit Administrator Registration'}
               </button>
               <p className="text-center text-xs text-slate-600">
-                Already activated?{' '}
+                Already verified?{' '}
                 <Link href="/login?as=admin" className="font-extrabold text-[#0056b3] hover:underline">
                   Sign in on the Admin tab
                 </Link>

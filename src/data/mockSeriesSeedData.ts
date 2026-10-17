@@ -65,6 +65,7 @@ export interface SeriesEnrollment {
   seriesId: string;
   paymentId?: string;
   enrolledAt: string;
+  accessValidUntil?: string;
 }
 
 export interface SeriesAttempt {

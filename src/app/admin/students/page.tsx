@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 import {
-  Users,
   Search,
   Plus,
   Download,
@@ -11,8 +10,7 @@ import {
   Power,
   Trash2,
   X,
-  CheckCircle2,
-  AlertCircle,
+  Clock,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
 import { StudentProfile } from '@/data/initialSeedData';
@@ -20,7 +18,14 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { MaskedData } from '@/components/ui/MaskedData';
 
 export default function AdminStudentsPage() {
-  const { db, saveStudent, toggleStudentStatus, deleteStudent, showToast } = useCga();
+  const {
+    db,
+    saveStudent,
+    toggleStudentStatus,
+    deleteStudent,
+    updateStudentEnrollmentDuration,
+    showToast,
+  } = useCga();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Active' | 'Inactive'>('All');
@@ -28,6 +33,9 @@ export default function AdminStudentsPage() {
   const [editingStudent, setEditingStudent] = useState<StudentProfile | null>(null);
   const [isNewStudent, setIsNewStudent] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<StudentProfile | null>(null);
+  const [updatingEnrollmentId, setUpdatingEnrollmentId] = useState<string | null>(null);
+  const [customValidityDates, setCustomValidityDates] = useState<Record<string, string>>({});
+  const [currentTime] = useState(() => Date.now());
 
   const filteredStudents = db.students.filter((s) => {
     const matchStatus = statusFilter === 'All' || s.status === statusFilter;
@@ -108,14 +116,100 @@ export default function AdminStudentsPage() {
     });
   };
 
+  const handleExtendStudentEnrollment = async (enrollmentId: string, monthsToAdd: number) => {
+    if (!enrollmentId) return;
+    setUpdatingEnrollmentId(enrollmentId);
+    try {
+      const targetDate = new Date();
+      targetDate.setMonth(targetDate.getMonth() + monthsToAdd);
+      const iso = targetDate.toISOString();
+      const ok = await updateStudentEnrollmentDuration(enrollmentId, iso);
+      if (ok && inspectingStudent) {
+        setInspectingStudent({
+          ...inspectingStudent,
+          enrollments: inspectingStudent.enrollments.map((enr) =>
+            enr.id === enrollmentId ? { ...enr, accessValidUntil: iso } : enr
+          ),
+        });
+      }
+    } finally {
+      setUpdatingEnrollmentId(null);
+    }
+  };
+
+  const handleSetCustomEnrollmentDate = async (enrollmentId: string) => {
+    const customDate = customValidityDates[enrollmentId];
+    if (!enrollmentId || !customDate) return;
+    setUpdatingEnrollmentId(enrollmentId);
+    try {
+      const targetDate = new Date(customDate);
+      const iso = targetDate.toISOString();
+      const ok = await updateStudentEnrollmentDuration(enrollmentId, iso);
+      if (ok && inspectingStudent) {
+        setInspectingStudent({
+          ...inspectingStudent,
+          enrollments: inspectingStudent.enrollments.map((enr) =>
+            enr.id === enrollmentId ? { ...enr, accessValidUntil: iso } : enr
+          ),
+        });
+      }
+    } finally {
+      setUpdatingEnrollmentId(null);
+    }
+  };
+
   const handleSaveStudentForm = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingStudent || !editingStudent.name.trim() || !editingStudent.email.trim()) return;
-    const result = await saveStudent(editingStudent, isNewStudent);
+    if (!editingStudent) return;
+
+    if (!editingStudent.name || editingStudent.name.trim().length < 3) {
+      showToast('Validation Error', 'Full name must be at least 3 characters.', 'error');
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!editingStudent.email || !emailRegex.test(editingStudent.email.trim())) {
+      showToast('Validation Error', 'A valid email address is required.', 'error');
+      return;
+    }
+    const cleanPhone = (editingStudent.phone || '').replace(/\D/g, '');
+    if (cleanPhone.length < 10) {
+      showToast('Validation Error', 'A valid 10-digit mobile number is required.', 'error');
+      return;
+    }
+    if (!editingStudent.guardianName || editingStudent.guardianName.trim().length < 3) {
+      showToast('Validation Error', "Parent's / Guardian's name is required (at least 3 characters).", 'error');
+      return;
+    }
+    if (!editingStudent.qualification || editingStudent.qualification.trim().length < 2) {
+      showToast('Validation Error', 'Educational qualification is required.', 'error');
+      return;
+    }
+    if (!editingStudent.targetExam || editingStudent.targetExam.trim().length < 2) {
+      showToast('Validation Error', 'Target examination is required.', 'error');
+      return;
+    }
+    if (!editingStudent.address || editingStudent.address.trim().length < 5) {
+      showToast('Validation Error', 'Present residential address must be at least 5 characters.', 'error');
+      return;
+    }
+
+    const payload: StudentProfile = {
+      ...editingStudent,
+      name: editingStudent.name.trim(),
+      email: editingStudent.email.trim().toLowerCase(),
+      phone: editingStudent.phone.trim(),
+      guardianName: editingStudent.guardianName.trim(),
+      qualification: editingStudent.qualification.trim(),
+      targetExam: editingStudent.targetExam.trim(),
+      address: editingStudent.address.trim(),
+      permanentAddress: (editingStudent.permanentAddress || editingStudent.address).trim(),
+    };
+
+    const result = await saveStudent(payload, isNewStudent);
     setEditingStudent(null);
     if (result.tempPassword) {
       window.prompt(
-        `Account created for ${editingStudent.email}.\nShare this ONE-TIME temporary password securely (copy it now; it is not shown again). The student should change it via "Forgot Password".`,
+        `Account created for ${payload.email}.\nShare this ONE-TIME temporary password securely (copy it now; it is not shown again). The student should change it via "Forgot Password".`,
         result.tempPassword
       );
     }
@@ -416,33 +510,129 @@ export default function AdminStudentsPage() {
               {inspectingStudent.enrollments.length === 0 ? (
                 <p className="text-xs text-slate-500">No courses enrolled.</p>
               ) : (
-                <div className="space-y-2">
-                  {inspectingStudent.enrollments.map((e) => (
-                    <div
-                      key={e.courseId}
-                      className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs"
-                    >
-                      <div>
-                        <p className="font-extrabold text-slate-900">{e.courseName}</p>
-                        <p className="text-slate-500">
-                          Batch: {e.batchName} • Progress: {e.progress}%
-                        </p>
+                <div className="space-y-3">
+                  {inspectingStudent.enrollments.map((e) => {
+                    const isExp = e.accessValidUntil
+                      ? new Date(e.accessValidUntil).getTime() < currentTime
+                      : false;
+                    const dateFormatted = e.accessValidUntil
+                      ? new Date(e.accessValidUntil).toLocaleDateString('en-IN', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        })
+                      : 'Standard Default (6 Months)';
+
+                    return (
+                      <div
+                        key={e.courseId}
+                        className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 text-xs"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="font-extrabold text-slate-900 text-sm">{e.courseName}</p>
+                            <p className="text-slate-500">
+                              Batch: <strong className="text-slate-800">{e.batchName}</strong> • Progress: {e.progress}%
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-emerald-700 font-bold block">
+                              Paid: ₹{e.paidAmount.toLocaleString('en-IN')} / ₹{e.totalFee.toLocaleString('en-IN')}
+                            </span>
+                            <span
+                              className={
+                                e.dueAmount > 0 ? 'text-[#dc2626] font-extrabold' : 'text-slate-400'
+                              }
+                            >
+                              Due: ₹{e.dueAmount.toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Admin Duration Access Controls */}
+                        <div className="pt-2 border-t border-slate-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 bg-white p-3 rounded-xl border border-slate-100">
+                          <div className="flex items-center gap-2">
+                            <Clock className="w-4 h-4 text-[#0056b3]" />
+                            <div>
+                              <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                                Course & Mock Test Access Duration
+                              </span>
+                              <span
+                                className={`font-bold ${
+                                  isExp ? 'text-red-600' : 'text-emerald-700'
+                                }`}
+                              >
+                                {isExp ? `Expired on ${dateFormatted}` : `Active till ${dateFormatted}`}
+                              </span>
+                            </div>
+                          </div>
+
+                          {e.id && (
+                            <div className="flex flex-wrap items-center gap-1.5 self-end sm:self-auto">
+                              <span className="text-[10px] text-slate-400 font-bold uppercase mr-1">
+                                Extend:
+                              </span>
+                              <button
+                                type="button"
+                                disabled={updatingEnrollmentId === e.id}
+                                onClick={() => handleExtendStudentEnrollment(e.id!, 1)}
+                                className="px-2 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-[#0056b3] font-bold text-[11px] cursor-pointer"
+                              >
+                                +1M
+                              </button>
+                              <button
+                                type="button"
+                                disabled={updatingEnrollmentId === e.id}
+                                onClick={() => handleExtendStudentEnrollment(e.id!, 3)}
+                                className="px-2 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-[#0056b3] font-bold text-[11px] cursor-pointer"
+                              >
+                                +3M
+                              </button>
+                              <button
+                                type="button"
+                                disabled={updatingEnrollmentId === e.id}
+                                onClick={() => handleExtendStudentEnrollment(e.id!, 6)}
+                                className="px-2 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-[#0056b3] font-bold text-[11px] cursor-pointer"
+                              >
+                                +6M
+                              </button>
+                              <button
+                                type="button"
+                                disabled={updatingEnrollmentId === e.id}
+                                onClick={() => handleExtendStudentEnrollment(e.id!, 12)}
+                                className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-[11px] cursor-pointer"
+                              >
+                                +1Y
+                              </button>
+                              <div className="flex items-center gap-1 ml-1">
+                                <input
+                                  type="date"
+                                  value={customValidityDates[e.id] || ''}
+                                  onChange={(evt) =>
+                                    setCustomValidityDates({
+                                      ...customValidityDates,
+                                      [e.id!]: evt.target.value,
+                                    })
+                                  }
+                                  className="px-2 py-1 border border-slate-200 rounded-lg text-[11px]"
+                                />
+                                <button
+                                  type="button"
+                                  disabled={
+                                    updatingEnrollmentId === e.id || !customValidityDates[e.id]
+                                  }
+                                  onClick={() => handleSetCustomEnrollmentDate(e.id!)}
+                                  className="px-2.5 py-1 rounded-lg bg-[#0056b3] text-white font-bold text-[11px] disabled:opacity-40 cursor-pointer"
+                                >
+                                  Set
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <span className="text-emerald-700 font-bold block">
-                          Paid: ₹{e.paidAmount.toLocaleString('en-IN')} / ₹
-                          {e.totalFee.toLocaleString('en-IN')}
-                        </span>
-                        <span
-                          className={
-                            e.dueAmount > 0 ? 'text-[#dc2626] font-extrabold' : 'text-slate-400'
-                          }
-                        >
-                          Due: ₹{e.dueAmount.toLocaleString('en-IN')}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -550,18 +740,21 @@ export default function AdminStudentsPage() {
                 />
               </div>
               <div>
-                <label className="font-bold text-slate-700 block mb-1">Phone</label>
+                <label className="font-bold text-slate-700 block mb-1">Phone (10-Digit Mobile) *</label>
                 <input
-                  type="text"
+                  type="tel"
+                  required
+                  placeholder="+91 9876543210"
                   value={editingStudent.phone}
                   onChange={(e) => setEditingStudent({ ...editingStudent, phone: e.target.value })}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200"
                 />
               </div>
               <div>
-                <label className="font-bold text-slate-700 block mb-1">Guardian Name</label>
+                <label className="font-bold text-slate-700 block mb-1">Guardian Name *</label>
                 <input
                   type="text"
+                  required
                   value={editingStudent.guardianName}
                   onChange={(e) =>
                     setEditingStudent({ ...editingStudent, guardianName: e.target.value })
@@ -570,9 +763,10 @@ export default function AdminStudentsPage() {
                 />
               </div>
               <div>
-                <label className="font-bold text-slate-700 block mb-1">Qualification</label>
+                <label className="font-bold text-slate-700 block mb-1">Qualification *</label>
                 <input
                   type="text"
+                  required
                   value={editingStudent.qualification}
                   onChange={(e) =>
                     setEditingStudent({ ...editingStudent, qualification: e.target.value })
@@ -581,9 +775,10 @@ export default function AdminStudentsPage() {
                 />
               </div>
               <div>
-                <label className="font-bold text-slate-700 block mb-1">Target Exam</label>
+                <label className="font-bold text-slate-700 block mb-1">Target Exam *</label>
                 <input
                   type="text"
+                  required
                   value={editingStudent.targetExam}
                   onChange={(e) =>
                     setEditingStudent({ ...editingStudent, targetExam: e.target.value })
@@ -592,9 +787,10 @@ export default function AdminStudentsPage() {
                 />
               </div>
               <div>
-                <label className="font-bold text-slate-700 block mb-1">Present Address</label>
+                <label className="font-bold text-slate-700 block mb-1">Present Address *</label>
                 <input
                   type="text"
+                  required
                   value={editingStudent.address}
                   onChange={(e) =>
                     setEditingStudent({ ...editingStudent, address: e.target.value })

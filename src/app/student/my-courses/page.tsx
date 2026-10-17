@@ -1,13 +1,11 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import {
-  GraduationCap,
   FileText,
   ClipboardCheck,
   Clock,
-  Calendar,
   CheckCircle2,
   BookOpen,
 } from 'lucide-react';
@@ -15,6 +13,7 @@ import { useCga } from '@/context/CgaContext';
 
 export default function StudentMyCoursesPage() {
   const { db, currentStudent } = useCga();
+  const [currentTime] = useState(() => Date.now());
 
   if (!currentStudent) return null;
 
@@ -102,21 +101,56 @@ export default function StudentMyCoursesPage() {
                       />
                     </div>
                   </div>
+                  {/* Access Validity Badge */}
+                  <div className="flex items-center justify-between text-xs p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                    <span className="text-slate-500 font-medium flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-[#0056b3]" /> Access Validity:
+                    </span>
+                    {enr.accessValidUntil && new Date(enr.accessValidUntil).getTime() < currentTime ? (
+                      <span className="px-2.5 py-0.5 rounded-full bg-red-100 text-red-700 font-bold border border-red-200">
+                        Expired on {new Date(enr.accessValidUntil).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </span>
+                    ) : enr.accessValidUntil ? (
+                      <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold border border-blue-200">
+                        Active till {new Date(enr.accessValidUntil).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </span>
+                    ) : (
+                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold border border-emerald-200">
+                        Active
+                      </span>
+                    )}
+                  </div>
                 </div>
 
-                <div className="px-6 py-4 bg-slate-50 border-t border-slate-200/80 flex flex-wrap items-center justify-between gap-3">
-                  <Link
-                    href="/student/materials"
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#0056b3] text-white text-xs font-bold hover:bg-[#1e3a8a]"
-                  >
-                    <FileText className="w-3.5 h-3.5" /> Study PDFs ({courseMaterials.length})
-                  </Link>
-                  <Link
-                    href="/student/tests"
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-50 text-[#ea580c] border border-amber-200 text-xs font-bold hover:bg-amber-100"
-                  >
-                    <ClipboardCheck className="w-3.5 h-3.5" /> Mock Tests ({courseTests.length})
-                  </Link>
+                <div className="px-6 py-4 bg-slate-50 border-t border-slate-200/80">
+                  {enr.accessValidUntil && new Date(enr.accessValidUntil).getTime() < currentTime ? (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-2 p-2 rounded-xl bg-red-50 border border-red-200 text-xs">
+                      <span className="text-red-700 font-bold">
+                        Batch duration expired. Contact Academy Admin to renew.
+                      </span>
+                      <a
+                        href="tel:7005929189"
+                        className="px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold"
+                      >
+                        Helpdesk
+                      </a>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <Link
+                        href="/student/materials"
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#0056b3] text-white text-xs font-bold hover:bg-[#1e3a8a]"
+                      >
+                        <FileText className="w-3.5 h-3.5" /> Study PDFs ({courseMaterials.length})
+                      </Link>
+                      <Link
+                        href="/student/tests"
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-50 text-[#ea580c] border border-amber-200 text-xs font-bold hover:bg-amber-100"
+                      >
+                        <ClipboardCheck className="w-3.5 h-3.5" /> Mock Tests ({courseTests.length})
+                      </Link>
+                    </div>
+                  )}
                 </div>
               </div>
             );

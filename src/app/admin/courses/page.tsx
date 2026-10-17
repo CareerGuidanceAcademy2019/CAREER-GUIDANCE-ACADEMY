@@ -10,24 +10,33 @@ import {
   Unlock,
   X,
   Search,
-  CheckCircle2,
   Eye,
   EyeOff,
   Award,
-  FileCheck,
-  ShieldCheck,
+  Clock,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
 import { Course, CourseCategory, CourseMode, StandalonePackage } from '@/data/initialSeedData';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 export default function AdminCoursesAndBatchesPage() {
-  const { db, saveCourse, deleteCourse, updateBatchStatus, updateSiteContent } = useCga();
+  const {
+    db,
+    saveCourse,
+    deleteCourse,
+    updateBatchStatus,
+    updateBatchDuration,
+    extendBatchDuration,
+    updateSiteContent,
+    showToast,
+  } = useCga();
   const [search, setSearch] = useState('');
   const [modeFilter, setModeFilter] = useState<'All' | CourseMode>('All');
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [batchModalCourse, setBatchModalCourse] = useState<Course | null>(null);
+  const [batchValidUntil, setBatchValidUntil] = useState('');
+  const [busyDuration, setBusyDuration] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Course | null>(null);
 
   // Standalone Package State
@@ -48,6 +57,27 @@ export default function AdminCoursesAndBatchesPage() {
       c.batchName.toLowerCase().includes(q);
     return matchMode && matchSearch;
   });
+
+  const handleOpenBatchModal = (course: Course) => {
+    setBatchModalCourse({ ...course });
+    const targetDate = new Date();
+    targetDate.setMonth(targetDate.getMonth() + 6);
+    setBatchValidUntil(targetDate.toISOString().split('T')[0]);
+  };
+
+  const handleExtendBatchMonths = async (months: number) => {
+    if (!batchModalCourse) return;
+    setBusyDuration(true);
+    await extendBatchDuration(batchModalCourse.id, months);
+    setBusyDuration(false);
+  };
+
+  const handleSetBatchDate = async () => {
+    if (!batchModalCourse || !batchValidUntil) return;
+    setBusyDuration(true);
+    await updateBatchDuration(batchModalCourse.id, new Date(batchValidUntil).toISOString());
+    setBusyDuration(false);
+  };
 
   const handleOpenAdd = () => {
     setIsNew(true);
@@ -295,11 +325,11 @@ export default function AdminCoursesAndBatchesPage() {
                       <div className="inline-flex items-center gap-1.5">
                         <button
                           type="button"
-                          onClick={() => setBatchModalCourse({ ...course })}
+                          onClick={() => handleOpenBatchModal(course)}
                           className="px-2.5 py-1.5 rounded-xl bg-amber-50 text-[#ea580c] border border-amber-200 font-bold inline-flex items-center gap-1 hover:bg-amber-100 cursor-pointer whitespace-nowrap"
-                          title="Configure Batch Seats & Waiting List"
+                          title="Configure Batch Seats, Capacity & Access Duration"
                         >
-                          <Sliders className="w-3.5 h-3.5 shrink-0" /> Seats
+                          <Sliders className="w-3.5 h-3.5 shrink-0" /> Batch &amp; Access
                         </button>
                         <button
                           type="button"
@@ -537,6 +567,83 @@ export default function AdminCoursesAndBatchesPage() {
                     }
                     className="w-full px-3 py-2 rounded-xl border border-slate-200"
                   />
+                </div>
+              </div>
+            </div>
+
+            {/* Batch Access Validity & Duration Control */}
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-extrabold text-[#0056b3] flex items-center gap-1.5 text-xs">
+                  <Clock className="w-4 h-4 text-[#0056b3]" /> Batch Access Duration Control
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-blue-100 text-[#0056b3] font-bold text-[10px]">
+                  {db.students.filter((s) => s.enrollments.some((e) => e.courseId === batchModalCourse.id)).length} Enrolled
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-600 leading-relaxed">
+                Only academy administrators can set and extend the active duration for this batch. Students can access class materials, CBT mock tests, and syllabus notes strictly until their active validity period.
+              </p>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1.5">
+                  Quick Batch Extension (All Enrolled Students)
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={busyDuration}
+                    onClick={() => handleExtendBatchMonths(1)}
+                    className="px-2.5 py-1 rounded-lg bg-white border border-blue-200 hover:bg-blue-100 text-[#0056b3] font-bold text-[11px] cursor-pointer disabled:opacity-50"
+                  >
+                    +1 Month
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busyDuration}
+                    onClick={() => handleExtendBatchMonths(3)}
+                    className="px-2.5 py-1 rounded-lg bg-white border border-blue-200 hover:bg-blue-100 text-[#0056b3] font-bold text-[11px] cursor-pointer disabled:opacity-50"
+                  >
+                    +3 Months
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busyDuration}
+                    onClick={() => handleExtendBatchMonths(6)}
+                    className="px-2.5 py-1 rounded-lg bg-white border border-blue-200 hover:bg-blue-100 text-[#0056b3] font-bold text-[11px] cursor-pointer disabled:opacity-50"
+                  >
+                    +6 Months
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busyDuration}
+                    onClick={() => handleExtendBatchMonths(12)}
+                    className="px-2.5 py-1 rounded-lg bg-white border border-blue-200 hover:bg-blue-100 text-[#0056b3] font-bold text-[11px] cursor-pointer disabled:opacity-50"
+                  >
+                    +1 Year
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-blue-200/60">
+                <label className="text-[11px] font-bold text-slate-700 block mb-1.5">
+                  Set Specific Batch Expiration Date
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={batchValidUntil}
+                    onChange={(e) => setBatchValidUntil(e.target.value)}
+                    className="flex-1 px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                  />
+                  <button
+                    type="button"
+                    disabled={busyDuration || !batchValidUntil}
+                    onClick={handleSetBatchDate}
+                    className="px-3.5 py-1.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white font-bold text-xs cursor-pointer shadow-xs disabled:opacity-50 whitespace-nowrap"
+                  >
+                    {busyDuration ? 'Updating…' : 'Set Expiration'}
+                  </button>
                 </div>
               </div>
             </div>

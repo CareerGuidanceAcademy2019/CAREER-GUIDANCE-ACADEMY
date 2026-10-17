@@ -10,7 +10,6 @@ import {
   Flag,
   RotateCcw,
   Sparkles,
-  Calendar,
   Languages,
   Check,
   BookOpen,
@@ -39,6 +38,7 @@ export default function StudentMockTestsPage() {
   const [langView, setLangView] = useState<'both' | 'en' | 'bn'>('both');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [enrollingSeriesId, setEnrollingSeriesId] = useState<string | null>(null);
+  const [currentTime] = useState(() => Date.now());
   const submittingRef = useRef(false);
 
   const formatTime = (secs: number) => {
@@ -109,6 +109,18 @@ export default function StudentMockTestsPage() {
   if (!currentStudent) return null;
 
   const startTest = (test: MockTest) => {
+    const matchingEnrollment = currentStudent.enrollments.find((e) => e.courseId === test.courseId);
+    if (
+      matchingEnrollment?.accessValidUntil &&
+      new Date(matchingEnrollment.accessValidUntil).getTime() < currentTime
+    ) {
+      showToast(
+        'Access Expired',
+        'Your batch access duration for this course has expired. Please contact admin to renew.',
+        'error'
+      );
+      return;
+    }
     setCompletedAttempt(null);
     setActiveTest(test);
     setCurrentQIndex(0);
@@ -949,6 +961,11 @@ export default function StudentMockTestsPage() {
             {filteredTests.map((test) => {
               const langMode = getTestLanguageMode(test);
               const existingAttempt = myPastAttempts.find((a) => a.testId === test.id);
+              const matchingEnrollment = currentStudent.enrollments.find((e) => e.courseId === test.courseId);
+              const isExpired = Boolean(
+                matchingEnrollment?.accessValidUntil &&
+                  new Date(matchingEnrollment.accessValidUntil).getTime() < currentTime
+              );
 
               return (
                 <div
@@ -977,6 +994,11 @@ export default function StudentMockTestsPage() {
                           Bilingual (English and Bengali)
                         </span>
                       )}
+                      {isExpired && (
+                        <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200 text-[10px] font-bold">
+                          Access Expired
+                        </span>
+                      )}
                     </div>
 
                     <h3 className="text-base font-extrabold text-[#0a0e2a] leading-snug">
@@ -1002,16 +1024,37 @@ export default function StudentMockTestsPage() {
                         </span>
                       </div>
                       <div>
-                        <span className="text-slate-400 block text-[11px]">Scheduled Launch</span>
-                        <span className="font-bold text-[#0056b3] whitespace-nowrap block flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          {test.scheduledDate || 'Active'}
-                        </span>
+                        <span className="text-slate-400 block text-[11px]">Access Status</span>
+                        {isExpired ? (
+                          <span className="font-bold text-red-600 block text-[11px]">
+                            Expired ({new Date(matchingEnrollment!.accessValidUntil!).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })})
+                          </span>
+                        ) : matchingEnrollment?.accessValidUntil ? (
+                          <span className="font-bold text-emerald-600 block text-[11px]">
+                            Valid ({new Date(matchingEnrollment.accessValidUntil).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })})
+                          </span>
+                        ) : (
+                          <span className="font-bold text-[#0056b3] block text-[11px]">
+                            {test.scheduledDate || 'Active'}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
 
-                  {existingAttempt ? (
+                  {isExpired ? (
+                    <div className="space-y-2 pt-2 border-t border-slate-100">
+                      <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-center text-xs text-red-700 font-semibold">
+                        Batch duration ended on {new Date(matchingEnrollment!.accessValidUntil!).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </div>
+                      <a
+                        href="tel:7005929189"
+                        className="w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold inline-flex items-center justify-center gap-1.5"
+                      >
+                        Contact Admin to Renew
+                      </a>
+                    </div>
+                  ) : existingAttempt ? (
                     <div className="space-y-2 pt-2 border-t border-slate-100">
                       <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs">
                         <span className="font-extrabold text-emerald-800 flex items-center gap-1.5">

@@ -310,6 +310,38 @@ This file tracks progress across all phases with timestamps and validation resul
   - Zero emojis in codebase and UI.
   - All 5 required report files created and updated.
 
+---
+
+## [Phase 10: Authenticated Student Hardening, Enrollment Duration Control & Admin Verification Workflow]
+- **Date & Time:** 2026-10-17T18:30:00+05:30
+- **1. Demo Student & Payment Purge:**
+  - Removed all mock demo students (`stu-1` to `stu-5`) and demo payments (`pay-1` to `pay-7`) from `src/data/initialSeedData.ts`.
+  - Updated `cgaService.getData()` and student directory loaders to exclusively display real authenticated student records from PostgreSQL.
+  - Retained candidate filtering strictly enforcing presence of verified email, 10-digit mobile, and complete mandatory registration profiles.
+- **2. Mandatory Candidate Registration Information Enforcement:**
+  - Updated database trigger `handle_new_user()` in `supabase/migrations/0013_enrollment_duration_and_admin_approval.sql` to require `name` (>=3 chars), `phone` (10-digit), `guardian_name` (>=3 chars), `address` (>=5 chars), `qualification`, and `target_exam`.
+  - Hardened registration forms in `src/app/register/page.tsx` and admin student directory forms in `src/app/admin/students/page.tsx` with HTML5 `required` constraints, regex phone checks, and custom error toasts.
+- **3. Course & Mock Test Access Duration Control:**
+  - Added `access_valid_until timestamptz not null default (now() + interval '6 months')` to `public.enrollments` and `public.series_enrollments`.
+  - Hardened Postgres RLS functions `is_enrolled(p_course_id)` and `is_series_enrolled(p_series_id)` to check `access_valid_until > now()`.
+  - Created admin management RPCs: `cga_update_batch_duration`, `cga_extend_batch_duration_months`, `cga_update_student_enrollment_duration`, and `cga_update_series_enrollment_duration`.
+  - Added Batch Access Duration controls in `src/app/admin/courses/page.tsx` with +1M, +3M, +6M, +1Y extensions and custom date picker.
+  - Added Individual Student Validity controls in `src/app/admin/students/page.tsx`.
+  - Enforced portal-side access gating:
+    - `/student/my-courses`: Shows active/expired badge; locks class materials and mock tests with expired renewal notice when batch validity ends.
+    - `/student/materials`: Locks study PDFs for expired batch enrollments with admin contact CTA.
+    - `/student/tests`: Disables "Start Timed Mock Test" and marks tests locked for students whose batch validity has expired.
+- **4. New Admin Registration & Approval Queue:**
+  - Added self-service administrator application at `/register/admin`. Accounts are created with `role = 'admin'` and `status = 'Pending'`.
+  - Pending administrators are blocked from sign-in (`public.is_admin()` requires `status = 'Active'`).
+  - Built Pending Administrator Verification Queue in `src/app/admin/access/page.tsx` with real-time approval/rejection RPCs (`cga_approve_admin`, `cga_reject_admin`).
+- **Verification:**
+  - `npx tsc --noEmit`: PASSED with 0 errors.
+  - `npm run lint`: PASSED with 0 errors on modified files.
+  - Automated security abuse suite: PASSED 27/27 (100%).
+  - Automated payments test suite: PASSED 12/12 (100%).
+
+
 
 
 

@@ -7,8 +7,6 @@ import {
   Lock,
   Unlock,
   Eye,
-  BookOpen,
-  ShieldAlert,
   ShieldCheck,
   X,
   ArrowRight,
@@ -24,15 +22,26 @@ export default function StudentStudyMaterialsPage() {
   const [filterType, setFilterType] = useState<'All' | 'Unlocked' | 'Locked'>('All');
   const [viewingMaterial, setViewingMaterial] = useState<StudyMaterial | null>(null);
   const [payTarget, setPayTarget] = useState<PayManualTarget | null>(null);
+  const [currentTime] = useState(() => Date.now());
 
   if (!currentStudent) return null;
 
-  const enrolledCourseIds = currentStudent.enrollments.map((e) => e.courseId);
-
-  const materialsWithAccess = db.studyMaterials.map((mat) => ({
-    ...mat,
-    isUnlocked: enrolledCourseIds.includes(mat.courseId),
-  }));
+  const materialsWithAccess = db.studyMaterials.map((mat) => {
+    const matchingEnrollment = currentStudent.enrollments.find((e) => e.courseId === mat.courseId);
+    const isEnrolled = !!matchingEnrollment;
+    const isExpired = Boolean(
+      matchingEnrollment?.accessValidUntil &&
+        new Date(matchingEnrollment.accessValidUntil).getTime() < currentTime
+    );
+    const isUnlocked = isEnrolled && !isExpired;
+    return {
+      ...mat,
+      isEnrolled,
+      isExpired,
+      isUnlocked,
+      validUntil: matchingEnrollment?.accessValidUntil,
+    };
+  });
 
   const filtered = materialsWithAccess.filter((m) => {
     if (filterType === 'Unlocked') return m.isUnlocked;
@@ -123,8 +132,12 @@ export default function StudentStudyMaterialsPage() {
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
                       <Unlock className="w-3 h-3" /> Unlocked
                     </span>
-                  ) : (
+                  ) : mat.isExpired ? (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-red-50 text-[#dc2626] border border-red-200 text-[11px] font-bold">
+                      <Lock className="w-3 h-3" /> Access Expired
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-[#ea580c] border border-amber-200 text-[11px] font-bold">
                       <Lock className="w-3 h-3" /> Enrol to Unlock
                     </span>
                   )}
@@ -154,7 +167,7 @@ export default function StudentStudyMaterialsPage() {
             {/* Action Footer */}
             <div className="px-6 py-4 bg-slate-50 border-t border-slate-200/80">
               {mat.isUnlocked ? (
-                <div className="flex items-center gap-2.5">
+                <div className="space-y-1.5">
                   <button
                     type="button"
                     onClick={() => setViewingMaterial(mat)}
@@ -162,6 +175,23 @@ export default function StudentStudyMaterialsPage() {
                   >
                     <Eye className="w-3.5 h-3.5" /> Read Online (View-Only)
                   </button>
+                  {mat.validUntil && (
+                    <p className="text-[10px] text-center text-slate-500 font-medium">
+                      Batch access active till {new Date(mat.validUntil).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </p>
+                  )}
+                </div>
+              ) : mat.isExpired ? (
+                <div className="space-y-2">
+                  <div className="p-2 rounded-xl bg-red-50 border border-red-200 text-[11px] text-red-700 font-semibold text-center">
+                    Access expired on {new Date(mat.validUntil!).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </div>
+                  <a
+                    href="tel:7005929189"
+                    className="w-full py-2 px-3 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold inline-flex items-center justify-center gap-1.5"
+                  >
+                    Contact Admin to Renew
+                  </a>
                 </div>
               ) : (
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">

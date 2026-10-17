@@ -57,7 +57,7 @@ interface CgaContextType {
   ) => Promise<{ success: boolean; error?: string; needsEmailConfirmation?: boolean; session?: AuthSession }>;
   registerAdmin: (
     payload: AdminRegisterPayload
-  ) => Promise<{ success: boolean; error?: string; needsEmailConfirmation?: boolean; session?: AuthSession }>;
+  ) => Promise<{ success: boolean; error?: string; needsEmailConfirmation?: boolean; session?: AuthSession; pendingApproval?: boolean }>;
   logout: () => Promise<void>;
 
   // Public actions
@@ -108,6 +108,9 @@ interface CgaContextType {
       waitingListCount: number;
     }
   ) => Promise<void>;
+  updateBatchDuration: (courseId: string, newValidUntil: string) => Promise<boolean>;
+  extendBatchDuration: (courseId: string, months: number) => Promise<boolean>;
+  updateStudentEnrollmentDuration: (enrollmentId: string, newValidUntil: string) => Promise<boolean>;
   saveStudent: (student: StudentProfile, isNew: boolean) => Promise<{ tempPassword?: string }>;
   toggleStudentStatus: (studentId: string) => Promise<void>;
   deleteStudent: (studentId: string) => Promise<void>;
@@ -275,6 +278,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         error: res.error,
         needsEmailConfirmation: res.needsEmailConfirmation,
         session: res.session,
+        pendingApproval: (res as any).pendingApproval,
       };
     },
     [applySession, showToast]
@@ -623,6 +627,56 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
       });
     },
     [run]
+  );
+
+  const updateBatchDuration = useCallback<CgaContextType['updateBatchDuration']>(
+    async (courseId, newValidUntil) => {
+      const res = await cgaService.updateBatchDuration(courseId, newValidUntil);
+      if (!res.success) {
+        showToast('Batch Duration Error', res.error, 'error');
+        return false;
+      }
+      await refresh();
+      showToast(
+        'Batch Duration Updated',
+        `Access validity updated for ${res.updatedCount ?? 0} enrolled students.`,
+        'success'
+      );
+      return true;
+    },
+    [refresh, showToast]
+  );
+
+  const extendBatchDuration = useCallback<CgaContextType['extendBatchDuration']>(
+    async (courseId, months) => {
+      const res = await cgaService.extendBatchDuration(courseId, months);
+      if (!res.success) {
+        showToast('Batch Extension Error', res.error, 'error');
+        return false;
+      }
+      await refresh();
+      showToast(
+        'Batch Duration Extended',
+        `Access validity extended by ${months} months for ${res.updatedCount ?? 0} enrolled students.`,
+        'success'
+      );
+      return true;
+    },
+    [refresh, showToast]
+  );
+
+  const updateStudentEnrollmentDuration = useCallback<CgaContextType['updateStudentEnrollmentDuration']>(
+    async (enrollmentId, newValidUntil) => {
+      const res = await cgaService.updateStudentEnrollmentDuration(enrollmentId, newValidUntil);
+      if (!res.success) {
+        showToast('Enrollment Duration Error', res.error, 'error');
+        return false;
+      }
+      await refresh();
+      showToast('Access Validity Updated', 'Student enrollment access duration updated.', 'success');
+      return true;
+    },
+    [refresh, showToast]
   );
 
   const saveStudent = useCallback(
@@ -1023,6 +1077,9 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         saveCourse,
         deleteCourse,
         updateBatchStatus,
+        updateBatchDuration,
+        extendBatchDuration,
+        updateStudentEnrollmentDuration,
         saveStudent,
         toggleStudentStatus,
         deleteStudent,

@@ -68,6 +68,14 @@ export default function RegisterPage() {
       setError('Please enter your permanent address.');
       return;
     }
+    if (!qualification.trim() || qualification.trim().length < 2) {
+      setError('Please enter your educational qualification or current standard.');
+      return;
+    }
+    if (!targetExam.trim() || targetExam.trim().length < 2) {
+      setError('Please select or specify your target competitive examination.');
+      return;
+    }
     const pwCheck = evaluatePasswordStrength(password);
     if (!pwCheck.isValid) {
       setError(pwCheck.feedback[0] || 'Password must be at least 10 characters and not easily guessable.');
