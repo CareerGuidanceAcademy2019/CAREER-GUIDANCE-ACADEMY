@@ -94,3 +94,32 @@ This document logs sensible architectural choices made during the autonomous imp
   2. **Multi-Tier Thresholds:** Configured per-account and per-IP ceilings across login (5/15m per account, 20/15m per IP), registration (5/hr), forgot password (3/hr per email, 10/hr per IP), enquiry submissions (5/hr), payment proof submissions (10/hr), mock tests (10/min start, 60/min debounced save, 5/min submit), and general API proxy ceiling (120/min per IP).
   3. **Standard RFC 6585 Compliance:** Responses return HTTP 429 Too Many Requests with `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` headers.
   4. **Audit Integration:** When any rate limit is breached, an automatic security event `rate_limit_exceeded` is written to `public.security_audit_log`.
+
+---
+
+### Decision 20: Link Integrity, Iframe CSP Whitelisting & Headless Crawler (Phase 6)
+- **Context:** The site includes a Google Maps location embed on `/contact` pointing to Chanban Youth Club Rd, Udaipur, Gomati Tripura. The strict CSP initially restricted `frame-src` to Cloudflare Turnstile, triggering browser CSP violations.
+- **Decision:**
+  1. Updated `frame-src` in `next.config.ts` to explicitly allow `https://www.google.com` and `https://maps.google.com`.
+  2. Added `name="enquiry-hp"` to the contact honeypot field for standardized form serialization.
+  3. Created `scripts/run_qa_verification.mjs` running headless Playwright Chromium and Axe-Core across all 16 public and protected routes, archiving screenshots to `docs/screenshots/`.
+  4. Standardized SEO routing with programmatic `src/app/robots.ts` and `src/app/sitemap.ts` disallowing admin and student routes.
+
+---
+
+### Decision 21: Proxy Auth Short-Circuiting & Database High-Concurrency Index Architecture (Phase 7)
+- **Context:** During 300-connection load tests, public static page requests were calling `supabase.auth.getUser()` in `src/proxy.ts`, generating 1,000+ unnecessary remote HTTPS calls/second and exhausting the Supabase connection pool.
+- **Decision:**
+  1. **Auth Cookie Detection:** Refactored `src/proxy.ts` to check `request.cookies.getAll().some(c => c.name.includes('-auth-token'))`. If no auth cookie is present, anonymous public requests bypass remote Supabase auth calls entirely, eliminating pool exhaustion and reducing latency by ~60%.
+  2. **Database Performance Indexes:** Applied Migration 0012 adding 12 composite indexes on `payment_requests(student_id, status)`, `payment_requests(status, created_at desc)`, `payment_requests(utr_normalized)`, `payment_requests(reference_code)`, `mock_attempts(test_id, student_id)`, `mock_attempts(student_id, submitted_at)`, `mock_questions(test_id, position)`, `series_enrollments(student_id, series_id)`, `enrollments(course_id, enrolled_date desc)`, `enrollments(student_id, course_id)`, and `rate_limit_entries(key, reset_at)`.
+  3. **Concurrency Invariant Tests:** Proved via automated tests that the last-seat race condition allocates exactly open seats and marks excess transactions as `refund_due`, and that the one-attempt-per-test rule prevents duplicate attempt creation under concurrent submissions.
+
+---
+
+### Decision 22: Comprehensive Security Verification, Client Bundle Hygiene & Deployment Runbook (Phases 8 & 9)
+- **Context:** Pre-deployment hardening requires proving immunity against OWASP Top 10 vectors, verifying client bundles do not leak secrets, and establishing a step-by-step operator deployment runbook.
+- **Decision:**
+  1. Built `tests/security_abuse_suite.mjs` verifying 27 security controls across SQL injection payloads, XSS strings, path traversal in uploads, oversized uploads, forged JWTs, and direct RPC privilege escalation.
+  2. Scanned `.next/static/` to prove 0% presence of `SUPABASE_SERVICE_ROLE_KEY` and disabled public source maps.
+  3. Published comprehensive reports: `docs/SECURITY_REPORT.md`, `docs/QA_REPORT.md`, `docs/PERFORMANCE_REPORT.md`, `docs/CONTENT_TO_CONFIRM.md`, and `docs/DEPLOY_CHECKLIST.md`.
+

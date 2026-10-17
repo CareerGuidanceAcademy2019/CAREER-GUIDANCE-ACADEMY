@@ -652,8 +652,9 @@ export const cgaService = {
   },
 
   async requestPasswordReset(email: string): Promise<ServiceResult> {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://careerguidanceacademy.in';
     const { error } = await this.client().auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: `${origin}/reset-password`,
     });
     // Do not reveal whether the email exists.
     if (error && error.status === 429) {

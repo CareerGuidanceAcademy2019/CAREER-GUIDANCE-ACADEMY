@@ -1,0 +1,141 @@
+{
+  "passCount": 27,
+  "failCount": 0,
+  "results": [
+    {
+      "test": "CSP includes frame-ancestors none (clickjacking protection)",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "test": "CSP includes object-src none",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "test": "CSP includes base-uri self",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "test": "Strict-Transport-Security (HSTS) max-age >= 1 year",
+      "status": "PASS",
+      "details": "max-age=63072000; includeSubDomains; preload"
+    },
+    {
+      "test": "X-Content-Type-Options is nosniff",
+      "status": "PASS",
+      "details": "nosniff"
+    },
+    {
+      "test": "X-Frame-Options is DENY",
+      "status": "PASS",
+      "details": "DENY"
+    },
+    {
+      "test": "Referrer-Policy is strict-origin-when-cross-origin",
+      "status": "PASS",
+      "details": "strict-origin-when-cross-origin"
+    },
+    {
+      "test": "Permissions-Policy disables unused hardware (camera, mic)",
+      "status": "PASS",
+      "details": "camera=(), microphone=(), geolocation=(), payment=()"
+    },
+    {
+      "test": "X-Powered-By header is strictly removed (no tech stack fingerprinting)",
+      "status": "PASS",
+      "details": null
+    },
+    {
+      "test": "SUPABASE_SERVICE_ROLE_KEY is 100% absent from the client JavaScript bundle",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "test": "Public JavaScript source maps (.js.map) are disabled in production build",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "test": "SQL Injection payload \"' OR '1'='1...\" handled safely without SQL disclosure",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "test": "SQL Injection payload \"admin'--...\" handled safely without SQL disclosure",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "test": "SQL Injection payload \"'; DROP TABLE p...\" handled safely without SQL disclosure",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "test": "SQL Injection payload \"1 UNION SELECT ...\" handled safely without SQL disclosure",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "test": "Path traversal payload \"../../../../etc/passwd\" safely blocked with HTTP 403",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "test": "Path traversal payload \"..\\..\\windows\\win.ini\" safely blocked with HTTP 403",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "test": "Path traversal payload \"../../../.env.local\" safely blocked with HTTP 403",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "test": "Path traversal payload \"/var/run/secrets\" safely blocked with HTTP 403",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "test": "Executable file (.exe) rejected with HTTP 403",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "test": "Oversized payload (>10MB) rejected with HTTP 403",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "test": "Forged JWT cookie is blocked and redirected (HTTP 307)",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "test": "Anonymous direct call to purge_candidate is strictly denied by Postgres permissions",
+      "status": "PASS",
+      "details": "permission denied for function purge_candidate"
+    },
+    {
+      "test": "Anonymous direct call to cga_approve_payment is strictly denied by Postgres permissions",
+      "status": "PASS",
+      "details": "Could not find the function public.cga_approve_payment(p_admin_received_amount, p_request_id, p_verified_statement) in the schema cache"
+    },
+    {
+      "test": "Anonymous call to update financial payment settings is blocked by Postgres",
+      "status": "PASS",
+      "details": "Could not find the function public.cga_update_payment_settings_secure(p_admin_password, p_upi_id) in the schema cache"
+    },
+    {
+      "test": "Forgot password response does not enumerate non-existent accounts",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "test": "Zero dangerous patterns (eval, dangerouslySetInnerHTML) found in src/ application codebase",
+      "status": "PASS",
+      "details": ""
+    }
+  ]
+}

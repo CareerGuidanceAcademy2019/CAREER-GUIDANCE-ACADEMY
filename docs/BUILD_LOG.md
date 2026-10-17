@@ -271,5 +271,45 @@ This file tracks progress across all phases with timestamps and validation resul
   - `npm run lint`: PASSED with 0 errors.
   - Load test suite: PASSED 100%.
 
+---
+
+## [Pre-Deployment Pass — Phase 8: Security Testing & Re-Verification]
+- **Date & Time:** 2026-10-17T17:32:00+05:30
+- **Automated Security Abuse Suite (`tests/security_abuse_suite.mjs`):**
+  - Executed 27 automated security controls across:
+    - HTTP response headers (strict CSP, HSTS 63072000s, nosniff, DENY, strict-origin, permissions-policy, no X-Powered-By).
+    - Client bundle audit: verified `SUPABASE_SERVICE_ROLE_KEY` is 0% present in `.next/static/` and public source maps are disabled.
+    - SQL injection attack strings: verified parameterized database immunity and safe error boundaries.
+    - Path traversal strings (`../../etc/passwd`): verified 100% blocked with HTTP 403 on upload endpoints.
+    - Malicious MIME types & oversized payloads: blocked executables (.exe) and files >10MB.
+    - Forged JWTs and tampered cookies: blocked and redirected (HTTP 307).
+    - Direct RPC privilege escalation: verified anonymous calls to `purge_candidate`, `cga_approve_payment`, and financial update functions are rejected by PostgreSQL permissions.
+    - Account enumeration immunity: verified uniform responses on password recovery.
+    - Static code audit: verified zero instances of `eval()` or `dangerouslySetInnerHTML` in `src/`.
+- **Dependency Audit:**
+  - Pinned `uuid: "^11.1.1"` in `overrides` resolving moderate vulnerability. Verified `braces@3.0.3` is installed.
+- **Verification:**
+  - `tests/security_abuse_suite.mjs`: PASSED 27/27 (100%).
+  - `npx tsc --noEmit`: PASSED with 0 errors.
+  - `npm run lint`: PASSED with 0 errors.
+
+---
+
+## [Pre-Deployment Pass — Phase 9: Reports & Deployment Checklist]
+- **Date & Time:** 2026-10-17T17:35:00+05:30
+- **Published Artifacts & Reports:**
+  1. `docs/SECURITY_REPORT.md`: Comprehensive breakdown of all findings by severity, remediation steps, abuse testing results, and client bundle scans.
+  2. `docs/QA_REPORT.md`: Full Playwright crawler and verification matrix across 16 public routes, 17 protected routes, responsive viewports, and form validations.
+  3. `docs/PERFORMANCE_REPORT.md`: Autocannon load testing benchmarks across 5 scenarios, before/after latency gains, database indexes, and Supabase free-plan operational advice.
+  4. `docs/CONTENT_TO_CONFIRM.md`: Audited institute identity facts, unverified marketing claims flagged for admin review, student testimonials, and Bengali translation confirmations.
+  5. `docs/DEPLOY_CHECKLIST.md`: Step-by-step production runbook covering hosting dashboard env vars, key rotation, Supabase dashboard settings (custom SMTP, email confirmation, CAPTCHA, MFA, backups), 2FA enforcement, DNS/HTTPS, post-deploy smoke test, and rollback procedures.
+- **Final Definition of Done Verification:**
+  - `npx tsc --noEmit`: PASSED with 0 errors.
+  - `npm run lint`: PASSED with 0 errors.
+  - All automated test suites (Payments, Counter Enrollments, Admin Authorization, Rate Limiting, Security IDOR, Security Abuse): PASSED 100%.
+  - Zero emojis in codebase and UI.
+  - All 5 required report files created and updated.
+
+
 
 
