@@ -16,9 +16,20 @@ import {
   Phone,
   MapPin,
   Flame,
+  ExternalLink,
+  Lock,
+  Copy,
+  Download,
+  Layers,
 } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 import { useCga } from '@/context/CgaContext';
-import { MockTest, TestAttempt } from '@/data/initialSeedData';
+import { MockTest, TestAttempt, MockSubjectPost, MockQuestionOption, getOptionText, getOptionImage } from '@/data/initialSeedData';
+import { MOCK_SERIES_INITIAL, MOCK_SUBJECTS_INITIAL, getSubjectLanguageMode } from '@/data/mockSeriesSeedData';
+import { PayManualModal, type PayManualTarget } from '@/components/payment/PayManualModal';
+import { MathText } from '@/components/ui/MathText';
+import { MockQuestionImage } from '@/components/mock-tests/MockQuestionImage';
+import { AppearTestButton } from '@/components/mock-tests/AppearTestButton';
 import {
   CustomCheckSvg,
   CustomCrossSvg,
@@ -27,9 +38,11 @@ import {
 } from '@/components/ui/CustomIcons';
 
 export default function StudentMockTestsPage() {
+  const searchParams = useSearchParams();
   const { db, currentStudent, submitMockTestAttempt, enrolInSeries, showToast } = useCga();
+  const [payManualTarget, setPayManualTarget] = useState<PayManualTarget | null>(null);
 
-  const [activeTest, setActiveTest] = useState<MockTest | null>(null);
+  const [activeTest, setActiveTest] = useState<any | null>(null);
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
   const [markedForReview, setMarkedForReview] = useState<Record<string, boolean>>({});
@@ -39,7 +52,59 @@ export default function StudentMockTestsPage() {
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [enrollingSeriesId, setEnrollingSeriesId] = useState<string | null>(null);
   const [currentTime] = useState(() => Date.now());
+
+  // Series, Subject, and Subsections Navigation
+  const [selectedSeriesId, setSelectedSeriesId] = useState<string>('series-ttet-paper1');
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>('all');
+  const [activeSubsection, setActiveSubsection] = useState<'tests' | 'papers'>('tests');
+  const [seriesPapers, setSeriesPapers] = useState<any[]>([]);
+  const [loadingPapers, setLoadingPapers] = useState(false);
   const submittingRef = useRef(false);
+
+  // Subject Question Posts state
+  const [selectedSubjectTab, setSelectedSubjectTab] = useState<string>('all');
+  const [copiedPostId, setCopiedPostId] = useState<string | null>(null);
+
+  const isStudentEnrolledInSeries = (seriesId: string) => {
+    if (!currentStudent) return false;
+    if (currentStudent.email === 'angatsaha825@gmail.com') return true;
+    const inSeries = db.seriesEnrollments?.some(
+      (se) => se.studentId === currentStudent.id && se.seriesId === seriesId
+    );
+    if (inSeries) return true;
+    const inCourse = currentStudent.enrollments.some((e) => e.courseId === seriesId);
+    if (inCourse) return true;
+    return false;
+  };
+
+  const isStudentEnrolledInPost = (post: MockSubjectPost) => {
+    return isStudentEnrolledInSeries(post.seriesId);
+  };
+
+  useEffect(() => {
+    const fetchSeriesPapers = async () => {
+      setLoadingPapers(true);
+      try {
+        const res = await fetch(`/api/mock-tests/papers?seriesId=${encodeURIComponent(selectedSeriesId)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setSeriesPapers(data.papers || []);
+        }
+      } catch {} finally {
+        setLoadingPapers(false);
+      }
+    };
+    fetchSeriesPapers();
+  }, [selectedSeriesId]);
+
+  const handleCopyDriveLink = (post: MockSubjectPost) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(post.driveLink);
+      setCopiedPostId(post.id);
+      showToast('Link Copied!', 'Google Drive link copied to clipboard.', 'success');
+      setTimeout(() => setCopiedPostId(null), 2500);
+    }
+  };
 
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
@@ -108,7 +173,7 @@ export default function StudentMockTestsPage() {
 
   if (!currentStudent) return null;
 
-  const startTest = (test: MockTest) => {
+  const startTest = async (test: any) => {
     const matchingEnrollment = currentStudent.enrollments.find((e) => e.courseId === test.courseId);
     if (
       matchingEnrollment?.accessValidUntil &&
@@ -121,28 +186,73 @@ export default function StudentMockTestsPage() {
       );
       return;
     }
+
+    try {
+      const res = await fetch('/api/mock-tests/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ testId: test.id }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const serverDuration = (data.durationMinutes || test.durationMinutes || 30) * 60;
+        let remaining = serverDuration;
+        if (data.startedAt && data.serverNow) {
+          const elapsed = Math.floor((new Date(data.serverNow).getTime() - new Date(data.startedAt).getTime()) / 1000);
+          remaining = Math.max(10, serverDuration - elapsed);
+        }
+
+        setCompletedAttempt(null);
+        setActiveTest({
+          ...test,
+          title: data.title || test.title,
+          durationMinutes: data.durationMinutes || test.durationMinutes,
+          totalMarks: data.totalMarks || test.totalMarks,
+          negativeMarking: data.negativeMarking ?? test.negativeMarking,
+          questionGroups: data.questionGroups || [],
+          questions: data.questions || test.questions || [],
+        });
+        setCurrentQIndex(0);
+        setSelectedAnswers(data.savedAnswers || {});
+        setMarkedForReview({});
+        setSecondsLeft(remaining);
+        setLangView('both');
+        return;
+      }
+    } catch {}
+
+    // Fallback to local test state
     setCompletedAttempt(null);
     setActiveTest(test);
     setCurrentQIndex(0);
     setSelectedAnswers({});
     setMarkedForReview({});
-    setSecondsLeft(test.durationMinutes * 60);
+    setSecondsLeft((test.durationMinutes || 30) * 60);
     setLangView('both');
   };
 
-  const handleQuickSeriesEnroll = async (seriesId: string) => {
-    setEnrollingSeriesId(seriesId);
-    try {
-      await enrolInSeries({
-        seriesId,
-        paymentMode: 'UPI',
-        paymentRef: `UPI-FESTIVAL-${Date.now().toString().slice(-6)}`,
-      });
-    } catch {
-      showToast('Enrolment Notice', 'Could not complete enrolment. Please contact academy office.', 'error');
-    } finally {
-      setEnrollingSeriesId(null);
+  // Auto-launch test if testId is in query params
+  useEffect(() => {
+    const testId = searchParams.get('testId');
+    if (testId && !activeTest) {
+      const match = db.mockTests.find((t) => t.id === testId);
+      if (match && match.status === 'Published') {
+        startTest(match);
+      }
     }
+  }, [searchParams, db.mockTests, activeTest]);
+
+  const handleOpenSeriesCheckout = (seriesId: string) => {
+    const s = db.mockSeries.find((item) => item.id === seriesId);
+    setPayManualTarget({
+      itemType: 'mock_series',
+      itemId: seriesId,
+      title: s?.name || 'Tripura TET Daily Online Mock Tests Series',
+      category: 'Tripura TET Mock Series',
+      fullAmount: s?.price || 499,
+      paymentType: 'full',
+    });
   };
 
   // ==================== 1. LIVE TIMED MCQ EXAM VIEW ====================
@@ -258,40 +368,86 @@ export default function StudentMockTestsPage() {
                 </div>
               </div>
 
-              {/* Question Statement (Rendered per Language Rule) */}
+              {/* Shared Passage Box (if linked) */}
+              {(() => {
+                const group = activeTest.questionGroups?.find((g: any) => g.id === currentQ.groupId);
+                if (!group) return null;
+                return (
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#0056b3] flex items-center gap-1.5">
+                      <Layers className="w-3.5 h-3.5" /> Shared Passage / Map / Table
+                    </span>
+                    {group.passageText && (
+                      <div className="text-xs sm:text-sm text-slate-800 leading-relaxed">
+                        <MathText text={group.passageText} />
+                      </div>
+                    )}
+                    {group.imagePath && (
+                      <div className="mt-2">
+                        <MockQuestionImage
+                          path={group.imagePath}
+                          alt={group.imageAlt || 'Shared passage diagram'}
+                          testId={activeTest.id}
+                          type="group"
+                          className="w-full max-h-72"
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Question Statement (Rendered with MathText & Diagram) */}
               <div className="space-y-3">
                 {showEnglishOnly && (
-                  <h2 className="text-base sm:text-lg font-bold text-slate-900 leading-relaxed">
-                    {currentQ.question}
-                  </h2>
+                  <div className="text-base sm:text-lg font-bold text-slate-900 leading-relaxed">
+                    <MathText text={currentQ.questionText || currentQ.question} />
+                  </div>
                 )}
                 {showBengaliOnly && (
-                  <h2 className="text-base sm:text-lg font-bold text-slate-900 leading-relaxed font-sans">
-                    {currentQ.questionBn || currentQ.question}
-                  </h2>
+                  <div className="text-base sm:text-lg font-bold text-slate-900 leading-relaxed font-sans">
+                    <MathText text={currentQ.questionTextBn || currentQ.questionBn || currentQ.questionText || currentQ.question} />
+                  </div>
                 )}
                 {showBoth && (
                   <div className="space-y-2">
-                    <h2 className="text-base sm:text-lg font-bold text-slate-900 leading-relaxed">
-                      {currentQ.question}
-                    </h2>
-                    {currentQ.questionBn && (
+                    <div className="text-base sm:text-lg font-bold text-slate-900 leading-relaxed">
+                      <MathText text={currentQ.questionText || currentQ.question} />
+                    </div>
+                    {(currentQ.questionTextBn || currentQ.questionBn) && (
                       <div className="p-3 rounded-2xl bg-blue-50/70 border border-blue-100 text-slate-800 text-sm sm:text-base font-semibold leading-relaxed">
                         <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#0056b3] block mb-0.5">
                           বাংলা অনুবাদ:
                         </span>
-                        {currentQ.questionBn}
+                        <MathText text={currentQ.questionTextBn || currentQ.questionBn} />
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* Question Diagram Image */}
+                {currentQ.imagePath && (
+                  <div className="pt-2">
+                    <MockQuestionImage
+                      path={currentQ.imagePath}
+                      alt={currentQ.imageAlt || `Diagram for question ${currentQIndex + 1}`}
+                      testId={activeTest.id}
+                      type="question"
+                      className="w-full max-h-80"
+                    />
                   </div>
                 )}
               </div>
 
               {/* Options List */}
               <div className="space-y-3">
-                {currentQ.options.map((opt, idx) => {
+                {currentQ.options.map((opt: MockQuestionOption, idx: number) => {
                   const isSelected = selectedAnswers[currentQ.id] === idx;
                   const optBn = currentQ.optionsBn?.[idx];
+                  const optImg = getOptionImage(opt);
+                  const optText = getOptionText(opt);
+                  const optBnText = getOptionText(optBn);
+
                   return (
                     <button
                       key={idx}
@@ -314,21 +470,40 @@ export default function StudentMockTestsPage() {
                       >
                         {String.fromCharCode(65 + idx)}
                       </span>
-                      <div className="flex-1">
+                      <div className="flex-1 space-y-2">
                         {showEnglishOnly && (
-                          <span className="text-sm font-semibold text-slate-800">{opt}</span>
+                          <div className="text-sm font-semibold text-slate-800">
+                            <MathText text={optText} />
+                          </div>
                         )}
                         {showBengaliOnly && (
-                          <span className="text-sm font-semibold text-slate-800">
-                            {optBn || opt}
-                          </span>
+                          <div className="text-sm font-semibold text-slate-800">
+                            <MathText text={optBnText || optText} />
+                          </div>
                         )}
                         {showBoth && (
                           <div className="flex flex-col gap-0.5">
-                            <span className="text-sm font-semibold text-slate-900">{opt}</span>
-                            {optBn && (
-                              <span className="text-xs font-medium text-slate-600">{optBn}</span>
+                            <div className="text-sm font-semibold text-slate-900">
+                              <MathText text={optText} />
+                            </div>
+                            {optBnText && (
+                              <div className="text-xs font-medium text-slate-600">
+                                <MathText text={optBnText} />
+                              </div>
                             )}
+                          </div>
+                        )}
+
+                        {/* Option Diagram Image if present */}
+                        {optImg?.imagePath && (
+                          <div className="pt-1">
+                            <MockQuestionImage
+                              path={optImg.imagePath}
+                              alt={optImg.imageAlt || `Option ${String.fromCharCode(65 + idx)} diagram`}
+                              testId={activeTest.id}
+                              type="option"
+                              className="w-48 h-32"
+                            />
                           </div>
                         )}
                       </div>
@@ -413,7 +588,7 @@ export default function StudentMockTestsPage() {
                 Question Palette
               </h3>
               <div className="grid grid-cols-5 sm:grid-cols-6 gap-2">
-                {activeTest.questions.map((q, idx) => {
+                {activeTest.questions.map((q: any, idx: number) => {
                   const isCurrent = idx === currentQIndex;
                   const isAnswered = selectedAnswers[q.id] !== undefined;
                   const isMarked = markedForReview[q.id];
@@ -596,8 +771,8 @@ export default function StudentMockTestsPage() {
                     <CustomCheckSvg className="w-3.5 h-3.5 shrink-0" />
                     <span>
                       Correct Answer: ({String.fromCharCode(65 + q.correctOptionIndex)}){' '}
-                      {q.options[q.correctOptionIndex]}
-                      {q.optionsBn?.[q.correctOptionIndex] && langMode !== 'english_only' ? ` • ${q.optionsBn[q.correctOptionIndex]}` : ''}
+                      {getOptionText(q.options[q.correctOptionIndex])}
+                      {q.optionsBn?.[q.correctOptionIndex] && langMode !== 'english_only' ? ` • ${getOptionText(q.optionsBn[q.correctOptionIndex])}` : ''}
                     </span>
                   </p>
 
@@ -606,8 +781,8 @@ export default function StudentMockTestsPage() {
                       <CustomCrossSvg className="w-3.5 h-3.5 shrink-0" />
                       <span>
                         Your Answer: ({String.fromCharCode(65 + studentChoice)}){' '}
-                        {q.options[studentChoice]}
-                        {q.optionsBn?.[studentChoice] && langMode !== 'english_only' ? ` • ${q.optionsBn[studentChoice]}` : ''}
+                        {getOptionText(q.options[studentChoice])}
+                        {q.optionsBn?.[studentChoice] && langMode !== 'english_only' ? ` • ${getOptionText(q.optionsBn[studentChoice])}` : ''}
                       </span>
                     </p>
                   )}
@@ -737,12 +912,11 @@ export default function StudentMockTestsPage() {
             <div className="pt-5 mt-5 border-t border-white/15 relative z-10">
               <button
                 type="button"
-                onClick={() => handleQuickSeriesEnroll('series-ttet-paper1')}
-                disabled={enrollingSeriesId === 'series-ttet-paper1'}
+                onClick={() => handleOpenSeriesCheckout('series-ttet-paper1')}
                 className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer shadow-md transition-all flex items-center justify-center gap-1.5"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                {enrollingSeriesId === 'series-ttet-paper1' ? 'Enrolling...' : 'Enroll Now @ ₹399/-'}
+                Enroll Now @ ₹399/- (Pay via UPI / Bank)
               </button>
             </div>
           </div>
@@ -801,12 +975,11 @@ export default function StudentMockTestsPage() {
             <div className="pt-5 mt-5 border-t border-white/15 relative z-10">
               <button
                 type="button"
-                onClick={() => handleQuickSeriesEnroll('series-ttet-paper2-sci')}
-                disabled={enrollingSeriesId === 'series-ttet-paper2-sci'}
+                onClick={() => handleOpenSeriesCheckout('series-ttet-paper2-sci')}
                 className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer shadow-md transition-all flex items-center justify-center gap-1.5"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                {enrollingSeriesId === 'series-ttet-paper2-sci' ? 'Enrolling...' : 'Enroll Now @ ₹499/-'}
+                Enroll Now @ ₹499/- (Pay via UPI / Bank)
               </button>
             </div>
           </div>
@@ -865,243 +1038,485 @@ export default function StudentMockTestsPage() {
             <div className="pt-5 mt-5 border-t border-white/15 relative z-10">
               <button
                 type="button"
-                onClick={() => handleQuickSeriesEnroll('series-ttet-paper2-soc')}
-                disabled={enrollingSeriesId === 'series-ttet-paper2-soc'}
+                onClick={() => handleOpenSeriesCheckout('series-ttet-paper2-soc')}
                 className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer shadow-md transition-all flex items-center justify-center gap-1.5"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                {enrollingSeriesId === 'series-ttet-paper2-soc' ? 'Enrolling...' : 'Enroll Now @ ₹499/-'}
+                Enroll Now @ ₹499/- (Pay via UPI / Bank)
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ==================== SCHEDULED & SUBJECT-WISE MOCK TESTS ==================== */}
-      <div className="space-y-4 pt-4 border-t border-slate-200">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <h2 className="text-lg font-extrabold text-[#0a0e2a] flex items-center gap-2">
-            <ClipboardCheck className="w-5 h-5 text-[#0056b3]" /> Live Scheduled & Subject-Wise Mock Tests
-          </h2>
-
-          {/* Category Filter Pills */}
-          <div className="flex flex-wrap items-center gap-1.5 text-xs">
-            <button
-              type="button"
-              onClick={() => setFilterCategory('all')}
-              className={`px-3 py-1.5 rounded-xl font-bold cursor-pointer transition-all ${
-                filterCategory === 'all'
-                  ? 'bg-[#0056b3] text-white shadow-xs'
-                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-              }`}
-            >
-              All Tests ({publishedTests.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilterCategory('p1')}
-              className={`px-3 py-1.5 rounded-xl font-bold cursor-pointer transition-all ${
-                filterCategory === 'p1'
-                  ? 'bg-[#0056b3] text-white shadow-xs'
-                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-              }`}
-            >
-              Paper-I (₹399)
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilterCategory('p2sci')}
-              className={`px-3 py-1.5 rounded-xl font-bold cursor-pointer transition-all ${
-                filterCategory === 'p2sci'
-                  ? 'bg-[#0056b3] text-white shadow-xs'
-                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-              }`}
-            >
-              Paper-II Science (₹499)
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilterCategory('p2soc')}
-              className={`px-3 py-1.5 rounded-xl font-bold cursor-pointer transition-all ${
-                filterCategory === 'p2soc'
-                  ? 'bg-[#0056b3] text-white shadow-xs'
-                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-              }`}
-            >
-              Paper-II Social Studies (₹499)
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilterCategory('bilingual')}
-              className={`px-3 py-1.5 rounded-xl font-bold cursor-pointer transition-all ${
-                filterCategory === 'bilingual'
-                  ? 'bg-[#0056b3] text-white shadow-xs'
-                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-              }`}
-            >
-              Bilingual
-            </button>
+      {/* ==================== SERIES -> SUBJECT -> (A) MOCK TESTS & (B) QUESTION PAPERS ==================== */}
+      <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-sm space-y-6">
+        {/* Section Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-[#0056b3] text-xs font-bold border border-blue-200">
+              <Layers className="w-3.5 h-3.5" /> Official Syllabus Portal
+            </div>
+            <h2 className="text-xl font-extrabold text-[#0a0e2a] flex items-center gap-2">
+              <ClipboardCheck className="w-5 h-5 text-[#0056b3]" />
+              Mock Tests Series &amp; Question Papers
+            </h2>
+            <p className="text-xs text-slate-600 max-w-3xl leading-relaxed">
+              Select your examination series below. Each series contains dedicated subject sections, including sectional mock tests with our 5-state CBT Appear engine and watermarked soft-copy question papers.
+            </p>
           </div>
         </div>
 
-        {filteredTests.length === 0 ? (
-          <div className="bg-slate-50 rounded-3xl border border-slate-200 p-8 text-center text-slate-500">
-            <BookOpen className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-            <p className="font-bold text-sm">No tests found in this category.</p>
-            <button
-              type="button"
-              onClick={() => setFilterCategory('all')}
-              className="mt-3 px-4 py-2 rounded-xl bg-[#0056b3] text-white text-xs font-bold"
-            >
-              Reset Filter
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredTests.map((test) => {
-              const langMode = getTestLanguageMode(test);
-              const existingAttempt = myPastAttempts.find((a) => a.testId === test.id);
-              const matchingEnrollment = currentStudent.enrollments.find((e) => e.courseId === test.courseId);
-              const isExpired = Boolean(
-                matchingEnrollment?.accessValidUntil &&
-                  new Date(matchingEnrollment.accessValidUntil).getTime() < currentTime
-              );
+        {/* 1. Series Selector */}
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
+            Select Examination Series
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {MOCK_SERIES_INITIAL.map((s) => {
+              const isSelected = selectedSeriesId === s.id;
+              const isEnrolled = isStudentEnrolledInSeries(s.id);
 
               return (
-                <div
-                  key={test.id}
-                  className="bg-white rounded-3xl border border-slate-200 p-6 shadow-2xs flex flex-col justify-between space-y-4 cga-card-hover"
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedSeriesId(s.id);
+                    setSelectedSubjectId('all');
+                  }}
+                  className={`p-4 rounded-2xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
+                    isSelected
+                      ? 'border-[#0056b3] bg-blue-50/70 ring-2 ring-[#0056b3]/20 shadow-xs'
+                      : 'border-slate-200 hover:bg-slate-50'
+                  }`}
                 >
-                  <div className="space-y-2.5">
-                    <div className="flex flex-wrap items-center justify-between gap-1.5">
-                      <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-[#0056b3] border border-blue-200 text-[11px] font-extrabold truncate">
-                        {test.batchName}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        {s.classRange}
                       </span>
-
-                      {/* Language Mode Badge */}
-                      {langMode === 'english_only' && (
-                        <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-bold">
-                          English Only
+                      {isEnrolled ? (
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold inline-flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Enrolled
                         </span>
-                      )}
-                      {langMode === 'bengali_only' && (
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold font-sans">
-                          বাংলা পত্র (Bengali Only)
-                        </span>
-                      )}
-                      {langMode === 'bilingual' && (
-                        <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-bold">
-                          Bilingual (English and Bengali)
-                        </span>
-                      )}
-                      {isExpired && (
-                        <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200 text-[10px] font-bold">
-                          Access Expired
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-extrabold inline-flex items-center gap-1">
+                          <Lock className="w-3 h-3 text-amber-600" /> Locked
                         </span>
                       )}
                     </div>
-
-                    <h3 className="text-base font-extrabold text-[#0a0e2a] leading-snug">
-                      {test.title}
+                    <h3 className="text-sm font-extrabold text-[#0a0e2a] leading-snug line-clamp-2">
+                      {s.name}
                     </h3>
-                    <p className="text-xs text-slate-500">{test.courseName}</p>
-
-                    <div className="grid grid-cols-2 gap-2 pt-2 text-xs bg-slate-50 p-3 rounded-2xl border border-slate-100">
-                      <div>
-                        <span className="text-slate-400 block text-[11px]">Duration</span>
-                        <span className="font-bold text-slate-800">{test.durationMinutes} Mins</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[11px]">Total Marks</span>
-                        <span className="font-bold text-slate-800">
-                          {test.totalMarks} ({test.questions.length} Qs)
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[11px]">Marking Scheme</span>
-                        <span className="font-bold text-slate-800">
-                          +{test.marksPerQuestion} / -{test.negativeMarking}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[11px]">Access Status</span>
-                        {isExpired ? (
-                          <span className="font-bold text-red-600 block text-[11px]">
-                            Expired ({new Date(matchingEnrollment!.accessValidUntil!).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })})
-                          </span>
-                        ) : matchingEnrollment?.accessValidUntil ? (
-                          <span className="font-bold text-emerald-600 block text-[11px]">
-                            Valid ({new Date(matchingEnrollment.accessValidUntil).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })})
-                          </span>
-                        ) : (
-                          <span className="font-bold text-[#0056b3] block text-[11px]">
-                            {test.scheduledDate || 'Active'}
-                          </span>
-                        )}
-                      </div>
-                    </div>
                   </div>
 
-                  {isExpired ? (
-                    <div className="space-y-2 pt-2 border-t border-slate-100">
-                      <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-center text-xs text-red-700 font-semibold">
-                        Batch duration ended on {new Date(matchingEnrollment!.accessValidUntil!).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                      </div>
-                      <a
-                        href="tel:7005929189"
-                        className="w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold inline-flex items-center justify-center gap-1.5"
-                      >
-                        Contact Admin to Renew
-                      </a>
-                    </div>
-                  ) : existingAttempt ? (
-                    <div className="space-y-2 pt-2 border-t border-slate-100">
-                      <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs">
-                        <span className="font-extrabold text-emerald-800 flex items-center gap-1.5">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                          <span>Submitted</span>
-                        </span>
-                        <span className="font-extrabold text-[#0056b3]">
-                          Score: {existingAttempt.score} / {existingAttempt.totalMarks}
-                        </span>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCompletedAttempt(existingAttempt);
-                            if (typeof window !== 'undefined') {
-                              window.scrollTo({ top: 0, behavior: 'smooth' });
-                            }
-                          }}
-                          className="flex-1 py-2.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-extrabold inline-flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
-                        >
-                          <Trophy className="w-3.5 h-3.5 text-amber-300" /> View Result & Solutions
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => startTest(test)}
-                          className="px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold inline-flex items-center justify-center cursor-pointer"
-                          title="Retake Practice Test"
-                        >
-                          <RotateCcw className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => startTest(test)}
-                      className="w-full py-3 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-extrabold inline-flex items-center justify-center gap-2 shadow-sm cursor-pointer"
-                    >
-                      <Play className="w-3.5 h-3.5 fill-current" /> Start Timed Mock Test
-                    </button>
-                  )}
-                </div>
+                  <div className="pt-3 mt-3 border-t border-slate-200/60 flex items-center justify-between text-xs">
+                    <span className="font-extrabold text-[#0056b3]">₹{s.price}/-</span>
+                    <span className="text-[11px] font-semibold text-slate-500">{s.batchLabel}</span>
+                  </div>
+                </button>
               );
             })}
           </div>
-        )}
+        </div>
+
+        {/* 2. Subject Tabs (Including Full-Length Mocks as its own section) */}
+        {(() => {
+          const subjectsForSeries = MOCK_SUBJECTS_INITIAL.filter((s) => s.seriesId === selectedSeriesId);
+          const isEnrolled = isStudentEnrolledInSeries(selectedSeriesId);
+
+          return (
+            <div className="space-y-4 pt-4 border-t border-slate-100">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-bold text-slate-500 mr-1">Subject Section:</span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSubjectId('all')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      selectedSubjectId === 'all'
+                        ? 'bg-[#0056b3] text-white shadow-xs'
+                        : 'bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    All Sections
+                  </button>
+                  {subjectsForSeries.map((subj) => (
+                    <button
+                      key={subj.id}
+                      type="button"
+                      onClick={() => setSelectedSubjectId(subj.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        selectedSubjectId === subj.id
+                          ? 'bg-[#0056b3] text-white shadow-xs'
+                          : 'bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {subj.name}
+                    </button>
+                  ))}
+                  {/* Full-Length Mocks Section */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSubjectId('full-length')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                      selectedSubjectId === 'full-length'
+                        ? 'bg-amber-500 text-slate-950 shadow-xs'
+                        : 'bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100'
+                    }`}
+                  >
+                    Full-Length Mocks (Full Syllabus)
+                  </button>
+                </div>
+
+                {/* Subsections Toggle: (a) Mock Tests vs (b) Question Papers */}
+                <div className="inline-flex rounded-xl bg-slate-100 p-1 border border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => setActiveSubsection('tests')}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-extrabold inline-flex items-center gap-1.5 transition-all cursor-pointer ${
+                      activeSubsection === 'tests'
+                        ? 'bg-white text-[#0056b3] shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <ClipboardCheck className="w-3.5 h-3.5" />
+                    <span>Mock Tests</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveSubsection('papers')}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-extrabold inline-flex items-center gap-1.5 transition-all cursor-pointer ${
+                      activeSubsection === 'papers'
+                        ? 'bg-white text-[#0056b3] shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <BookOpen className="w-3.5 h-3.5" />
+                    <span>Question Papers (PDF)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Banner if student is not enrolled in this series */}
+              {!isEnrolled && (
+                <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2 text-amber-900 font-bold">
+                    <Lock className="w-4 h-4 text-[#ea580c] shrink-0" />
+                    <span>
+                      Enrolment required for this series to appear in CBT tests and download watermarked question papers.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenSeriesCheckout(selectedSeriesId)}
+                    className="px-4 py-2 rounded-xl bg-[#0056b3] hover:bg-blue-700 text-white font-black shrink-0 cursor-pointer shadow-xs"
+                  >
+                    Enrol Now
+                  </button>
+                </div>
+              )}
+
+              {/* SUBSECTION (A): MOCK TESTS */}
+              {activeSubsection === 'tests' && (() => {
+                const allAvailableTests: any[] = [
+                  ...(db.seriesTests || []),
+                  ...(db.mockTests || []).map((mt) => ({
+                    ...mt,
+                    seriesId: mt.courseId || 'series-ttet-paper1',
+                    subjectId: mt.subject || null,
+                    testType: mt.title.toLowerCase().includes('full') ? 'full' : 'sectional',
+                  })),
+                ];
+
+                const filtered = allAvailableTests.filter((t) => {
+                  if (t.seriesId && t.seriesId !== selectedSeriesId) return false;
+                  if (selectedSubjectId === 'full-length') {
+                    return t.testType === 'full' || !t.subjectId || String(t.title).toLowerCase().includes('full');
+                  }
+                  if (selectedSubjectId !== 'all') {
+                    return t.subjectId === selectedSubjectId || (t.subject && t.subject.toLowerCase().includes(selectedSubjectId.toLowerCase()));
+                  }
+                  return true;
+                });
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="bg-slate-50 rounded-2xl p-8 text-center text-slate-500 space-y-2 border border-slate-200">
+                      <ClipboardCheck className="w-8 h-8 text-slate-400 mx-auto" />
+                      <p className="font-bold text-sm">No mock tests found for this section.</p>
+                      <p className="text-xs text-slate-400">Scheduled tests for this subject will appear here prior to launch.</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {filtered.map((test) => {
+                      const langMode = getTestLanguageMode(test);
+                      const existingAttempt = myPastAttempts.find((a) => a.testId === test.id);
+
+                      return (
+                        <div
+                          key={test.id}
+                          className="bg-white rounded-3xl border border-slate-200 p-6 shadow-2xs flex flex-col justify-between space-y-4 hover:border-blue-200 transition-all"
+                        >
+                          <div className="space-y-2.5">
+                            <div className="flex flex-wrap items-center justify-between gap-1.5">
+                              <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-[#0056b3] border border-blue-200 text-[11px] font-extrabold truncate">
+                                {test.testType === 'full' ? 'Full Length Mock' : 'Sectional Mock'}
+                              </span>
+
+                              {langMode === 'english_only' && (
+                                <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-bold">
+                                  English Only
+                                </span>
+                              )}
+                              {langMode === 'bengali_only' && (
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold font-sans">
+                                  বাংলা পত্র (Bengali Only)
+                                </span>
+                              )}
+                              {langMode === 'bilingual' && (
+                                <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-bold">
+                                  Bilingual
+                                </span>
+                              )}
+                            </div>
+
+                            <h3 className="text-base font-extrabold text-[#0a0e2a] leading-snug">
+                              {test.title}
+                            </h3>
+                            <p className="text-xs text-slate-500">
+                              {test.subject || test.courseName || 'Tripura TET 2026 Examination'}
+                            </p>
+
+                            <div className="grid grid-cols-2 gap-2 pt-2 text-xs bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                              <div>
+                                <span className="text-slate-400 block text-[11px]">Duration</span>
+                                <span className="font-bold text-slate-800">{test.durationMinutes} Mins</span>
+                              </div>
+                              <div>
+                                <span className="text-slate-400 block text-[11px]">Questions</span>
+                                <span className="font-bold text-slate-800">
+                                  {test.questionCount || test.questions?.length || 30} Qs
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-slate-400 block text-[11px]">Marking Scheme</span>
+                                <span className="font-bold text-slate-800">
+                                  +{test.marksPerQuestion ?? 1} / -{test.negativeMarking ?? 0}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-slate-400 block text-[11px]">Total Marks</span>
+                                <span className="font-bold text-slate-800">
+                                  {test.totalMarks ?? 30}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* 5-State Appear Test Button */}
+                          <div className="pt-2 border-t border-slate-100">
+                            <AppearTestButton
+                              test={test}
+                              isEnrolled={isEnrolled}
+                              attempt={existingAttempt ? {
+                                id: existingAttempt.id,
+                                score: existingAttempt.score,
+                                totalMarks: existingAttempt.totalMarks,
+                                accuracy: existingAttempt.accuracy,
+                                submittedAt: existingAttempt.submittedAt,
+                              } : null}
+                              onAppear={() => startTest(test)}
+                              onEnrol={() => handleOpenSeriesCheckout(selectedSeriesId)}
+                              onViewSolutions={() => {
+                                if (existingAttempt) {
+                                  setCompletedAttempt(existingAttempt);
+                                  if (typeof window !== 'undefined') {
+                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                  }
+                                }
+                              }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+
+              {/* SUBSECTION (B): QUESTION PAPERS */}
+              {activeSubsection === 'papers' && (() => {
+                const papers = (seriesPapers || []).filter((p) => {
+                  if (selectedSubjectId === 'full-length') {
+                    return !p.subject_id || String(p.title).toLowerCase().includes('full');
+                  }
+                  if (selectedSubjectId !== 'all') {
+                    return p.subject_id === selectedSubjectId;
+                  }
+                  return true;
+                });
+
+                const posts = (db.mockSubjectPosts || []).filter((p) => {
+                  if (p.seriesId !== selectedSeriesId) return false;
+                  if (selectedSubjectId === 'full-length') return String(p.title).toLowerCase().includes('full');
+                  if (selectedSubjectId !== 'all') {
+                    const subj = subjectsForSeries.find((s) => s.id === selectedSubjectId);
+                    return subj && p.subjectName.toLowerCase().includes(subj.name.toLowerCase());
+                  }
+                  return true;
+                });
+
+                if (papers.length === 0 && posts.length === 0) {
+                  return (
+                    <div className="bg-slate-50 rounded-2xl p-8 text-center text-slate-500 space-y-2 border border-slate-200">
+                      <BookOpen className="w-8 h-8 text-slate-400 mx-auto" />
+                      <p className="font-bold text-sm">No question papers uploaded for this section yet.</p>
+                      <p className="text-xs text-slate-400">Our faculty uploads soft-copy PDFs and OMR practice sheets regularly.</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {/* Watermarked Soft-Copy PDFs from Supabase Storage */}
+                    {papers.map((paper) => {
+                      const sizeKb = paper.file_size_bytes ? Math.round(paper.file_size_bytes / 1024) : null;
+                      const sizeLabel = sizeKb ? (sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`) : 'PDF';
+
+                      return (
+                        <div
+                          key={paper.id}
+                          className="bg-white rounded-3xl border border-slate-200 p-6 shadow-2xs flex flex-col justify-between space-y-4 hover:border-blue-200 transition-all"
+                        >
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-extrabold uppercase tracking-wider">
+                                Soft-Copy Question Booklet
+                              </span>
+                              <span className="text-[11px] font-bold text-slate-400">{sizeLabel}</span>
+                            </div>
+
+                            <div>
+                              <h3 className="text-base font-extrabold text-[#0a0e2a] leading-snug">
+                                {paper.title}
+                              </h3>
+                              <p className="text-xs text-slate-500 mt-1">
+                                Official printable question paper with anti-tamper watermark.
+                              </p>
+                            </div>
+
+                            <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100 text-xs text-slate-600 space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[11px] text-slate-400">Security:</span>
+                                <span className="font-bold text-emerald-700">Dynamic Watermark</span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span className="text-[11px] text-slate-400">Format:</span>
+                                <span className="font-bold text-slate-700">A4 High-Res PDF</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="pt-2 border-t border-slate-100">
+                            {isEnrolled ? (
+                              <a
+                                href={`/api/mock-tests/papers/${paper.id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="w-full py-2.5 px-4 rounded-xl bg-[#0056b3] hover:bg-blue-700 text-white font-extrabold text-xs inline-flex items-center justify-center gap-2 shadow-sm cursor-pointer transition-all"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                                <span>Download Watermarked PDF</span>
+                              </a>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenSeriesCheckout(selectedSeriesId)}
+                                className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-amber-50 text-slate-700 hover:text-amber-900 border border-slate-200 hover:border-amber-300 text-xs font-bold inline-flex items-center justify-center gap-2 cursor-pointer transition-all"
+                              >
+                                <Lock className="w-3.5 h-3.5 text-amber-600" />
+                                <span>Enrol in Series to Download</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {/* Faculty Drive Link Announcements */}
+                    {posts.map((post) => (
+                      <div
+                        key={post.id}
+                        className="bg-white rounded-3xl border border-slate-200 p-6 shadow-2xs flex flex-col justify-between space-y-4 hover:border-blue-200 transition-all"
+                      >
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-[#0056b3] border border-blue-200 text-[10px] font-extrabold uppercase tracking-wider">
+                              Faculty Drive Announcement
+                            </span>
+                            <span className="text-[11px] font-bold text-slate-400">{post.postedDate}</span>
+                          </div>
+
+                          <div>
+                            <h3 className="text-base font-extrabold text-[#0a0e2a] leading-snug">
+                              {post.title}
+                            </h3>
+                            {post.instructions && (
+                              <p className="text-xs text-slate-600 mt-1 line-clamp-3 leading-relaxed">
+                                {post.instructions}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-100">
+                          {isEnrolled ? (
+                            <div className="flex items-center gap-2">
+                              <a
+                                href={post.driveLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex-1 py-2.5 px-4 rounded-xl bg-[#0056b3] hover:bg-blue-700 text-white font-extrabold text-xs inline-flex items-center justify-center gap-1.5 shadow-sm cursor-pointer transition-all"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" /> Open Google Drive
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyDriveLink(post)}
+                                className="p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 cursor-pointer"
+                                title="Copy Link"
+                              >
+                                {copiedPostId === post.id ? (
+                                  <Check className="w-4 h-4 text-emerald-600" />
+                                ) : (
+                                  <Copy className="w-4 h-4" />
+                                )}
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenSeriesCheckout(selectedSeriesId)}
+                              className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-amber-50 text-slate-700 hover:text-amber-900 border border-slate-200 hover:border-amber-300 text-xs font-bold inline-flex items-center justify-center gap-2 cursor-pointer transition-all"
+                            >
+                              <Lock className="w-3.5 h-3.5 text-amber-600" />
+                              <span>Enrol to Access Link</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Past Attempts History Table */}
@@ -1180,6 +1595,22 @@ export default function StudentMockTestsPage() {
           </div>
         )}
       </div>
+
+      {/* PayManualModal for Mock Series checkout */}
+      {payManualTarget && (
+        <PayManualModal
+          target={payManualTarget}
+          onClose={() => setPayManualTarget(null)}
+          onSuccess={(refCode) => {
+            showToast(
+              'Enrolment Submitted',
+              `Your payment reference ${refCode} has been verified and your mock series is activated!`,
+              'success'
+            );
+            setPayManualTarget(null);
+          }}
+        />
+      )}
     </div>
   );
 }

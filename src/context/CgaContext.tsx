@@ -19,6 +19,7 @@ import {
   SeriesAttempt,
   SeriesQuestion,
   MockSeries,
+  MockSubjectPost,
 } from '@/data/initialSeedData';
 import {
   cgaService,
@@ -65,6 +66,10 @@ interface CgaContextType {
 
   // Student actions
   updateStudentProfile: (studentId: string, updates: Partial<StudentProfile>) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
+  changeEmail: (currentPassword: string, newEmail: string) => Promise<{ success: boolean; error?: string; needsConfirmation?: boolean }>;
+  changePhone: (currentPassword: string, newPhone: string) => Promise<{ success: boolean; error?: string }>;
+  verifyCurrentPassword: (password: string) => Promise<boolean>;
   enrolInCourse: (params: {
     studentId?: string;
     courseId: string;
@@ -126,6 +131,8 @@ interface CgaContextType {
   deleteAnnouncement: (announcementId: string) => Promise<void>;
   updateSiteContent: (content: SiteContent) => Promise<void>;
   updateMockSeries: (series: MockSeries) => Promise<void>;
+  saveMockSubjectPost: (post: MockSubjectPost, isNew: boolean) => Promise<void>;
+  deleteMockSubjectPost: (postId: string) => Promise<void>;
 
   // Mock Series actions
   enrolInSeries: (params: {
@@ -322,6 +329,63 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
       }
     },
     [run]
+  );
+
+  const changePassword = useCallback(
+    async (currentPassword: string, newPassword: string) => {
+      const res = await cgaService.changePassword(currentPassword, newPassword);
+      if (!res.success) {
+        showToast('Password Update Failed', res.error || 'Could not update password.', 'error');
+        return { success: false, error: res.error };
+      }
+      showToast('Password Updated Successfully', 'Your account credentials have been updated securely.', 'success');
+      return { success: true };
+    },
+    [showToast]
+  );
+
+  const changeEmail = useCallback(
+    async (currentPassword: string, newEmail: string) => {
+      const res = await cgaService.changeEmail(currentPassword, newEmail);
+      if (!res.success) {
+        showToast('Email Update Failed', res.error || 'Could not update email.', 'error');
+        return { success: false, error: res.error };
+      }
+      if (sessionRef.current) {
+        const next = { ...sessionRef.current, email: newEmail.trim().toLowerCase() };
+        sessionRef.current = next;
+        setSession(next);
+      }
+      await refresh();
+      showToast(
+        'Email Verification Sent',
+        `A verification link has been sent to ${newEmail}. Please confirm your new email.`,
+        'success'
+      );
+      return { success: true, needsConfirmation: true };
+    },
+    [refresh, showToast]
+  );
+
+  const changePhone = useCallback(
+    async (currentPassword: string, newPhone: string) => {
+      const res = await cgaService.changePhone(currentPassword, newPhone);
+      if (!res.success) {
+        showToast('Mobile Update Failed', res.error || 'Could not update mobile number.', 'error');
+        return { success: false, error: res.error };
+      }
+      await refresh();
+      showToast('Mobile Number Verified & Updated', 'Your registered mobile number has been updated.', 'success');
+      return { success: true };
+    },
+    [refresh, showToast]
+  );
+
+  const verifyCurrentPassword = useCallback(
+    async (password: string) => {
+      return cgaService.verifyCurrentPassword(password);
+    },
+    []
   );
 
   const enrolInCourse = useCallback<CgaContextType['enrolInCourse']>(
@@ -846,6 +910,40 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
     [showToast]
   );
 
+  const saveMockSubjectPost = useCallback(
+    async (post: MockSubjectPost, isNew: boolean) => {
+      await cgaService.upsertMockSubjectPost(post);
+      setDb((prev) => {
+        const list = [...(prev.mockSubjectPosts || [])];
+        const idx = list.findIndex((p) => p.id === post.id);
+        if (idx >= 0) {
+          list[idx] = post;
+        } else {
+          list.unshift(post);
+        }
+        return { ...prev, mockSubjectPosts: list };
+      });
+      showToast(
+        isNew ? 'Question Paper Drive Link Posted!' : 'Subject Drive Post Updated',
+        `Shared for ${post.subjectName} (Enrolled Students Only).`,
+        'success'
+      );
+    },
+    [showToast]
+  );
+
+  const deleteMockSubjectPost = useCallback(
+    async (id: string) => {
+      await cgaService.deleteMockSubjectPost(id);
+      setDb((prev) => ({
+        ...prev,
+        mockSubjectPosts: (prev.mockSubjectPosts || []).filter((p) => p.id !== id),
+      }));
+      showToast('Post Removed', 'Mock test question drive post removed.', 'info');
+    },
+    [showToast]
+  );
+
   // ============ MOCK SERIES ACTIONS ============
   const enrolInSeries = useCallback<CgaContextType['enrolInSeries']>(
     async (params) => {
@@ -1067,6 +1165,10 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         logout,
         submitEnquiry,
         updateStudentProfile,
+        changePassword,
+        changeEmail,
+        changePhone,
+        verifyCurrentPassword,
         enrolInCourse,
         joinWaitingList,
         payCourseDue,
@@ -1095,6 +1197,8 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         deleteAnnouncement,
         updateSiteContent,
         updateMockSeries,
+        saveMockSubjectPost,
+        deleteMockSubjectPost,
         enrolInSeries,
         saveSeriesTest,
         deleteSeriesTest,
