@@ -18,24 +18,46 @@ import {
   Flame,
   Phone,
   Check,
+  BookOpen,
+  ExternalLink,
+  Copy,
+  FileText,
+  Lock,
+  Image as ImageIcon,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useCga } from '@/context/CgaContext';
-import { MockTest, MCQQuestion } from '@/data/initialSeedData';
+import { MockTest, MCQQuestion, MockSubjectPost, getOptionText } from '@/data/initialSeedData';
 import { MockSeries, getSubjectLanguageMode } from '@/data/mockSeriesSeedData';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { CustomCheckSvg, CustomCrossSvg } from '@/components/ui/CustomIcons';
 import { parseRawQuestionsText } from '@/lib/mcqParser';
 
 export default function AdminMockTestsPage() {
-  const { db, saveMockTest, deleteMockTest, updateMockSeries, showToast } = useCga();
+  const {
+    db,
+    saveMockTest,
+    deleteMockTest,
+    updateMockSeries,
+    saveMockSubjectPost,
+    deleteMockSubjectPost,
+    showToast,
+  } = useCga();
+  const router = useRouter();
 
-  const [activeAdminTab, setActiveAdminTab] = useState<'tests' | 'series'>('tests');
+  const [activeAdminTab, setActiveAdminTab] = useState<'tests' | 'series' | 'subject_posts'>('tests');
   const [editingTest, setEditingTest] = useState<MockTest | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<MockTest | null>(null);
   const [selectedTestForRanks, setSelectedTestForRanks] = useState<string>(
     db.mockTests[0]?.id || ''
   );
+
+  // Subject Question Posts state
+  const [editingPost, setEditingPost] = useState<MockSubjectPost | null>(null);
+  const [isNewPost, setIsNewPost] = useState(false);
+  const [deletePostTarget, setDeletePostTarget] = useState<MockSubjectPost | null>(null);
+  const [filterPostSubject, setFilterPostSubject] = useState<string>('all');
 
   // Series Packages editing state
   const [editingSeries, setEditingSeries] = useState<MockSeries | null>(null);
@@ -84,6 +106,48 @@ export default function AdminMockTestsPage() {
       status: 'Published',
       questions: [],
     });
+  };
+
+  const openCreatePostModal = (defaultSubj?: string, defaultSeriesId?: string) => {
+    setIsNewPost(true);
+    const series = db.mockSeries.find((s) => s.id === defaultSeriesId) || db.mockSeries[0] || {
+      id: 'series-ttet-paper1',
+      name: 'Tripura TET: Paper-I 2026',
+    };
+    const subject = defaultSubj
+      ? db.mockSubjects.find((s) => s.name.toLowerCase().includes(defaultSubj.toLowerCase()))
+      : db.mockSubjects.find((s) => s.seriesId === series.id) || db.mockSubjects[0];
+
+    setEditingPost({
+      id: `post-${Date.now()}`,
+      seriesId: series.id,
+      seriesName: series.name,
+      subjectId: subject?.id || 'subj-p1-cdp',
+      subjectName: subject?.name || 'Child Development & Pedagogy',
+      testId: null,
+      testTitle: null,
+      title: '',
+      driveLink: '',
+      instructions: 'Exclusive for Enrolled Candidates: Download the question paper PDF from the Google Drive link. Complete all questions within the scheduled time. Detailed answer key analysis will be discussed in class.',
+      postedDate: new Date().toISOString().split('T')[0],
+      author: 'Academic Director (C.G.A)',
+      isEnrolledOnly: true,
+    });
+  };
+
+  const handleSaveSubjectPost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPost) return;
+    if (!editingPost.title.trim()) {
+      showToast('Title Required', 'Please enter a title for the mock test question post.', 'error');
+      return;
+    }
+    if (!editingPost.driveLink.trim() || !editingPost.driveLink.startsWith('http')) {
+      showToast('Valid Link Required', 'Please enter a valid Google Drive or HTTP web link.', 'error');
+      return;
+    }
+    await saveMockSubjectPost(editingPost, isNewPost);
+    setEditingPost(null);
   };
 
   // 1. Bulk PDF or Document File Upload Handler
@@ -362,17 +426,29 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={openCreateModal}
-          className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-bold cursor-pointer self-start shadow-sm transition-all"
-        >
-          <Plus className="w-4 h-4" /> Create & Upload Mock Test
-        </button>
+        <div className="flex items-center gap-2 self-start">
+          {activeAdminTab === 'subject_posts' ? (
+            <button
+              type="button"
+              onClick={() => openCreatePostModal()}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-bold cursor-pointer shadow-sm transition-all"
+            >
+              <Plus className="w-4 h-4" /> Post Question Drive Link
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={openCreateModal}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-bold cursor-pointer shadow-sm transition-all"
+            >
+              <Plus className="w-4 h-4" /> Create & Upload Mock Test
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Admin Tab Switcher */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
         <button
           type="button"
           onClick={() => setActiveAdminTab('tests')}
@@ -394,6 +470,17 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
           }`}
         >
           <Flame className="w-4 h-4 text-amber-300" /> T-TET Daily Series Packages ({db.mockSeries.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveAdminTab('subject_posts')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+            activeAdminTab === 'subject_posts'
+              ? 'bg-[#0056b3] text-white shadow-sm'
+              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+          }`}
+        >
+          <BookOpen className="w-4 h-4 text-amber-300" /> Subject Question Drive Links ({db.mockSubjectPosts?.length || 0})
         </button>
       </div>
 
@@ -479,7 +566,14 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                         }}
                         className="px-3 py-1.5 rounded-xl bg-blue-50 text-[#0056b3] hover:bg-blue-100 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
                       >
-                        <Edit2 className="w-3.5 h-3.5" /> Edit / Qs
+                        <Edit2 className="w-3.5 h-3.5" /> Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/admin/mock-tests/${test.id}/questions`)}
+                        className="px-3 py-1.5 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <ImageIcon className="w-3.5 h-3.5" /> Diagrams & Review
                       </button>
                       <button
                         type="button"
@@ -717,6 +811,184 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
         </div>
       )}
 
+      {/* ==================== TAB 3: SUBJECT QUESTION DRIVE LINKS & ANNOUNCEMENTS ==================== */}
+      {activeAdminTab === 'subject_posts' && (
+        <div className="space-y-6">
+          {/* Action Header Banner */}
+          <div className="p-6 rounded-3xl bg-gradient-to-r from-blue-900 via-indigo-900 to-[#0056b3] text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
+            <div className="space-y-1.5 max-w-2xl">
+              <span className="px-3 py-1 rounded-full bg-amber-400 text-slate-950 font-black text-[10px] uppercase tracking-wider inline-flex items-center gap-1.5">
+                <Lock className="w-3 h-3" /> Enrolled Students Exclusive Portal
+              </span>
+              <h2 className="text-xl font-extrabold text-white">
+                Mock Test Subject Question Papers &amp; Google Drive Announcements
+              </h2>
+              <p className="text-xs text-blue-100 leading-relaxed">
+                Post question paper PDFs, OMR worksheets, and examination instructions inside each specific mock test subject. Only enrolled students in that mock test package can access the Google Drive links.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => openCreatePostModal()}
+              className="px-5 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs inline-flex items-center gap-2 cursor-pointer shadow-lg shrink-0 transition-all"
+            >
+              <Plus className="w-4 h-4" /> Post New Question Drive Link
+            </button>
+          </div>
+
+          {/* Subject Filter Bar */}
+          <div className="flex flex-wrap items-center gap-2 pt-2">
+            <span className="text-xs font-bold text-slate-500 mr-1">Filter by Subject:</span>
+            {[
+              'all',
+              'Child Development & Pedagogy',
+              'Language – I (English)',
+              'Language – II (Bengali)',
+              'Mathematics',
+              'Environmental Studies (EVS)',
+              'Science',
+              'History',
+            ].map((sub) => (
+              <button
+                key={sub}
+                type="button"
+                onClick={() => setFilterPostSubject(sub)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  filterPostSubject === sub
+                    ? 'bg-[#0056b3] text-white shadow-xs'
+                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                {sub === 'all' ? 'All Subjects' : sub}
+              </button>
+            ))}
+          </div>
+
+          {/* Posts Grid */}
+          {(() => {
+            const posts = (db.mockSubjectPosts || []).filter((p) => {
+              if (filterPostSubject === 'all') return true;
+              return p.subjectName.toLowerCase().includes(filterPostSubject.toLowerCase());
+            });
+
+            if (posts.length === 0) {
+              return (
+                <div className="bg-white rounded-3xl border border-dashed border-slate-300 p-12 text-center space-y-3">
+                  <BookOpen className="w-10 h-10 text-slate-300 mx-auto" />
+                  <p className="font-extrabold text-sm text-slate-700">No question papers posted for this subject yet.</p>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto">
+                    Click the button below to share a Google Drive link and instructions for enrolled candidates.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => openCreatePostModal()}
+                    className="px-4 py-2 rounded-xl bg-[#0056b3] text-white font-bold text-xs cursor-pointer shadow-sm"
+                  >
+                    Post First Question Paper
+                  </button>
+                </div>
+              );
+            }
+
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {posts.map((post) => (
+                  <div
+                    key={post.id}
+                    className="bg-white rounded-3xl border border-slate-200 p-6 shadow-2xs flex flex-col justify-between space-y-4 hover:shadow-md transition-all border-t-4 border-t-[#0056b3]"
+                  >
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-[#0056b3] border border-blue-200 text-[11px] font-extrabold">
+                          {post.subjectName}
+                        </span>
+                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-extrabold inline-flex items-center gap-1">
+                          <Lock className="w-3 h-3" /> Enrolled Only
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                          {post.seriesName || 'Tripura TET Package'}
+                          {post.testTitle ? ` • ${post.testTitle}` : ''}
+                        </span>
+                        <h3 className="text-base font-extrabold text-[#0a0e2a] mt-0.5 leading-snug">
+                          {post.title}
+                        </h3>
+                      </div>
+
+                      {/* Google Drive Link Box */}
+                      <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200/80 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-black text-amber-900 inline-flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                            Google Drive Question Paper Link:
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            readOnly
+                            value={post.driveLink}
+                            className="flex-1 px-3 py-1.5 rounded-xl bg-white border border-amber-200 text-slate-600 text-[11px] font-mono truncate focus:outline-none"
+                          />
+                          <a
+                            href={post.driveLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-1.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-[11px] font-bold inline-flex items-center gap-1 shrink-0 shadow-xs"
+                          >
+                            <ExternalLink className="w-3 h-3" /> Open
+                          </a>
+                        </div>
+                      </div>
+
+                      {/* Exam Instructions */}
+                      {post.instructions && (
+                        <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100 text-xs text-slate-600 space-y-1">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">
+                            Instructions for Enrolled Students:
+                          </span>
+                          <p className="leading-relaxed line-clamp-3">{post.instructions}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                      <div>
+                        <span className="font-bold text-slate-700 block">{post.author}</span>
+                        <span>Posted on {post.postedDate}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsNewPost(false);
+                            setEditingPost({ ...post });
+                          }}
+                          className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer transition-all"
+                          title="Edit Post"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeletePostTarget(post)}
+                          className="p-2 rounded-xl bg-red-50 hover:bg-red-100 text-[#dc2626] cursor-pointer transition-all"
+                          title="Delete Post"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
       {/* ==================== CREATE / EDIT MOCK TEST MODAL ==================== */}
       {editingTest && (
         <div
@@ -796,6 +1068,24 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                   onChange={(e) => setEditingTest({ ...editingTest, scheduledDate: e.target.value })}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-semibold"
                 />
+              </div>
+
+              {/* Question Paper Google Drive Link */}
+              <div className="sm:col-span-2">
+                <label className="font-bold text-slate-700 block mb-1 flex items-center justify-between">
+                  <span>Question Paper Google Drive Link (Optional)</span>
+                  <span className="text-[10px] text-emerald-700 font-semibold">Enrolled Students Only</span>
+                </label>
+                <input
+                  type="url"
+                  value={editingTest.driveLink || ''}
+                  onChange={(e) => setEditingTest({ ...editingTest, driveLink: e.target.value })}
+                  placeholder="https://drive.google.com/file/d/... or folder link"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  When published, enrolled students can view the official question paper PDF directly from their student portal. If left empty, the student portal indicates the Drive link will be published by admin before exam time.
+                </p>
               </div>
 
               {/* Language Rule Banner Indicator */}
@@ -1201,10 +1491,10 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                                 {String.fromCharCode(65 + oIdx)}
                               </span>
                               <div className="truncate flex-1">
-                                <span className="truncate block text-xs">{opt}</span>
+                                <span className="truncate block text-xs">{getOptionText(opt)}</span>
                                 {optBn && (
                                   <span className="truncate block text-[10px] text-slate-500">
-                                    {optBn}
+                                    {getOptionText(optBn)}
                                   </span>
                                 )}
                               </div>
@@ -1270,6 +1560,233 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
           }
         }}
         onCancel={() => setDeleteTarget(null)}
+      />
+
+      {/* ==================== CREATE / EDIT SUBJECT QUESTION POST MODAL ==================== */}
+      {editingPost && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/65 p-4 overflow-y-auto"
+          role="dialog"
+          aria-modal="true"
+        >
+          <form
+            onSubmit={handleSaveSubjectPost}
+            className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 space-y-5 shadow-2xl border border-slate-200 text-xs my-8 max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-[#0056b3] text-white flex items-center justify-center shrink-0">
+                  <BookOpen className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm sm:text-base text-slate-900">
+                    {isNewPost ? 'Post Mock Test Question / Drive Link' : 'Edit Subject Question Post'}
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Share question booklet PDFs with enrolled candidates for this mock test subject.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingPost(null)}
+                className="p-2 rounded-xl hover:bg-slate-100 text-slate-400 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Target Series & Subject Selection */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Select Mock Test Series Package <span className="text-[#dc2626]">*</span>
+                </label>
+                <select
+                  value={editingPost.seriesId}
+                  onChange={(e) => {
+                    const ser = db.mockSeries.find((s) => s.id === e.target.value);
+                    const defaultSub = db.mockSubjects.find((sub) => sub.seriesId === e.target.value) || db.mockSubjects[0];
+                    setEditingPost({
+                      ...editingPost,
+                      seriesId: e.target.value,
+                      seriesName: ser?.name || '',
+                      subjectId: defaultSub?.id || editingPost.subjectId,
+                      subjectName: defaultSub?.name || editingPost.subjectName,
+                    });
+                  }}
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-300 font-semibold text-xs bg-white"
+                >
+                  {db.mockSeries.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                  <option value="all">All Packages / General Mock Tests</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Specific Mock Test Subject <span className="text-[#dc2626]">*</span>
+                </label>
+                <select
+                  value={editingPost.subjectName}
+                  onChange={(e) => {
+                    const found = db.mockSubjects.find((s) => s.name === e.target.value);
+                    setEditingPost({
+                      ...editingPost,
+                      subjectName: e.target.value,
+                      subjectId: found?.id || editingPost.subjectId,
+                    });
+                  }}
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-300 font-semibold text-xs bg-white"
+                >
+                  {Array.from(new Set(db.mockSubjects.map((s) => s.name))).map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Optional Specific Mock Test */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Target Specific Mock Test (Optional)
+              </label>
+              <select
+                value={editingPost.testId || ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const t = db.mockTests.find((x) => x.id === val);
+                  setEditingPost({
+                    ...editingPost,
+                    testId: val || null,
+                    testTitle: t?.title || null,
+                  });
+                }}
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-300 font-semibold text-xs bg-white"
+              >
+                <option value="">Apply to Entire Subject (All Mock Tests in Subject)</option>
+                {db.mockTests.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.title} ({t.batchName})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Post Title */}
+            <div>
+              <label htmlFor="drive-post-title" className="block text-xs font-bold text-slate-700 mb-1.5">
+                Question Paper Title / Announcement Heading <span className="text-[#dc2626]">*</span>
+              </label>
+              <input
+                id="drive-post-title"
+                type="text"
+                required
+                value={editingPost.title}
+                onChange={(e) => setEditingPost({ ...editingPost, title: e.target.value })}
+                placeholder="e.g. Tripura TET 2026: CDP Sectional Mock 1 Question Booklet PDF"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 font-medium text-xs focus:ring-2 focus:ring-[#0056b3]"
+              />
+            </div>
+
+            {/* Google Drive Link */}
+            <div>
+              <label htmlFor="drive-post-url" className="block text-xs font-bold text-slate-700 mb-1.5">
+                Google Drive Link (URL) <span className="text-[#dc2626]">*</span>
+              </label>
+              <input
+                id="drive-post-url"
+                type="url"
+                required
+                value={editingPost.driveLink}
+                onChange={(e) => setEditingPost({ ...editingPost, driveLink: e.target.value })}
+                placeholder="https://drive.google.com/file/d/..."
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 font-mono text-xs focus:ring-2 focus:ring-[#0056b3]"
+              />
+              <p className="text-[11px] text-slate-500 mt-1">
+                Make sure sharing permissions on Google Drive are set to &apos;Anyone with the link&apos; or restricted to enrolled candidate accounts.
+              </p>
+            </div>
+
+            {/* Instructions */}
+            <div>
+              <label htmlFor="drive-post-instructions" className="block text-xs font-bold text-slate-700 mb-1.5">
+                Exam Guidelines &amp; Instructions for Students
+              </label>
+              <textarea
+                id="drive-post-instructions"
+                rows={3}
+                value={editingPost.instructions}
+                onChange={(e) => setEditingPost({ ...editingPost, instructions: e.target.value })}
+                placeholder="e.g. Download the 30-MCQ booklet, attempt in 30 minutes, submit your OMR response..."
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 font-medium text-xs focus:ring-2 focus:ring-[#0056b3]"
+              />
+            </div>
+
+            {/* Enrolled Only Checkbox & Author */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center p-3 rounded-2xl bg-slate-50 border border-slate-200">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editingPost.isEnrolledOnly}
+                  onChange={(e) => setEditingPost({ ...editingPost, isEnrolledOnly: e.target.checked })}
+                  className="w-4 h-4 rounded text-[#0056b3] border-slate-300"
+                />
+                <span className="text-xs font-bold text-slate-800">
+                  Restrict to Enrolled Students Only 🔒
+                </span>
+              </label>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">Author Name / Department</label>
+                <input
+                  type="text"
+                  value={editingPost.author}
+                  onChange={(e) => setEditingPost({ ...editingPost, author: e.target.value })}
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 font-medium text-xs bg-white"
+                />
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setEditingPost(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                id="drive-post-submit-btn"
+                type="submit"
+                className="px-5 py-2.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white font-extrabold cursor-pointer shadow-md inline-flex items-center gap-1.5"
+              >
+                <Save className="w-3.5 h-3.5" /> Save &amp; Share Question Paper
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Delete Subject Post Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={!!deletePostTarget}
+        title="Delete Question Paper Post?"
+        message={`Are you sure you want to remove "${deletePostTarget?.title}"? Enrolled students will no longer be able to access this Drive link.`}
+        confirmLabel="Yes, Delete Post"
+        onConfirm={() => {
+          if (deletePostTarget) {
+            deleteMockSubjectPost(deletePostTarget.id);
+            setDeletePostTarget(null);
+          }
+        }}
+        onCancel={() => setDeletePostTarget(null)}
       />
     </div>
   );
