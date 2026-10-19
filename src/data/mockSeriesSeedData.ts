@@ -19,6 +19,8 @@ export interface MockSubject {
   sortOrder: number;
 }
 
+import type { MockQuestionOption, MockQuestionGroup } from '@/data/initialSeedData';
+
 export interface SeriesMockTest {
   id: string;
   seriesId: string;
@@ -39,7 +41,42 @@ export interface SeriesMockTest {
   windowHours?: number | null;
   showSolutions: 'after_submit' | 'after_window';
   shuffle: boolean;
+  driveLink?: string;
   questions?: SeriesQuestion[];
+  questionGroups?: MockQuestionGroup[];
+  contentStatus?: 'draft' | 'active' | 'expired' | 'purged';
+  purgeAfter?: string | null;
+  retentionDays?: number;
+  archiveDownloadedAt?: string | null;
+  purgeRequiresArchive?: boolean;
+}
+
+export interface MockQuestionPaper {
+  id: string;
+  seriesId: string;
+  subjectId: string | null;
+  testId?: string | null;
+  title: string;
+  filePath: string;
+  fileSizeBytes: number;
+  status: 'draft' | 'published' | 'unpublished';
+  publishAt?: string | null;
+  publishedAt?: string | null;
+  expireAt?: string | null;
+  allowDownload: boolean;
+  watermark: boolean;
+  createdBy?: string | null;
+  createdAt: string;
+}
+
+export interface MockTestQuestionStat {
+  testId: string;
+  position: number;
+  subjectTag: string;
+  attemptedCount: number;
+  correctCount: number;
+  wrongCount: number;
+  averageTimeSeconds: number;
 }
 
 export interface SeriesQuestion {
@@ -47,9 +84,14 @@ export interface SeriesQuestion {
   testId: string;
   position: number;
   questionText: string;
-  options: [string, string, string, string];
+  options: [MockQuestionOption, MockQuestionOption, MockQuestionOption, MockQuestionOption] | MockQuestionOption[];
   questionTextBn?: string;
-  optionsBn?: [string, string, string, string];
+  optionsBn?: [MockQuestionOption, MockQuestionOption, MockQuestionOption, MockQuestionOption] | MockQuestionOption[];
+  groupId?: string | null;
+  imagePath?: string | null;
+  imageAlt?: string | null;
+  imageWidth?: number | null;
+  imageHeight?: number | null;
 }
 
 export interface SeriesQuestionKey {
@@ -57,6 +99,8 @@ export interface SeriesQuestionKey {
   correctOption: number;
   explanation: string;
   explanationBn?: string;
+  explanationImagePath?: string | null;
+  explanationImageAlt?: string | null;
 }
 
 export interface SeriesEnrollment {
@@ -95,6 +139,22 @@ export interface MockLaunchLog {
   windowStart?: string | null;
   windowEnd?: string | null;
   createdAt: string;
+}
+
+export interface MockSubjectPost {
+  id: string;
+  seriesId: string;
+  seriesName?: string;
+  subjectId: string;
+  subjectName: string;
+  testId?: string | null;
+  testTitle?: string | null;
+  title: string;
+  driveLink: string;
+  instructions: string;
+  postedDate: string;
+  author: string;
+  isEnrolledOnly: boolean;
 }
 
 /**
@@ -554,3 +614,111 @@ export const SAMPLE_QUESTIONS_P1_LANG2_1: { questions: SeriesQuestion[]; keys: S
     }
   ]
 };
+
+export const INITIAL_MOCK_SUBJECT_POSTS: MockSubjectPost[] = [
+  {
+    id: 'post-cdp-p1-01',
+    seriesId: 'series-ttet-paper1',
+    seriesName: 'Tripura TET: Paper-I 2026',
+    subjectId: 'subj-p1-cdp',
+    subjectName: 'Child Development & Pedagogy',
+    testId: 'test-subj-p1-cdp-1',
+    testTitle: 'Child Development & Pedagogy - Mock 1',
+    title: 'Tripura TET Paper-I: CDP Mock Test 1 Question Booklet PDF',
+    driveLink: 'https://drive.google.com/file/d/1CGA_TET_CDP_Mock01_Question_Booklet_2026/view?usp=sharing',
+    instructions: 'Exclusive for Enrolled Candidates: Download and print the 30-MCQ bilingual question booklet. Attempt under a strict 30-minute timer using the C.G.A practice OMR sheet. Detailed answer key analysis will be discussed in class.',
+    postedDate: '2026-10-18',
+    author: 'Academic Director (C.G.A)',
+    isEnrolledOnly: true,
+  },
+  {
+    id: 'post-lang1-p1-01',
+    seriesId: 'series-ttet-paper1',
+    seriesName: 'Tripura TET: Paper-I 2026',
+    subjectId: 'subj-p1-lang1',
+    subjectName: 'Language – I (English)',
+    testId: 'test-subj-p1-lang1-1',
+    testTitle: 'Language – I (English) - Mock 1',
+    title: 'English Language Sectional Mock 1: Question Paper & Grammar Worksheets',
+    driveLink: 'https://drive.google.com/file/d/1CGA_TET_ENG_Mock01_Worksheet_2026/view?usp=sharing',
+    instructions: 'English Subject Question Paper (English Only). Contains Reading Comprehension, Error Spotting, and Pedagogy of Language Development. Exclusively for enrolled Paper-I students.',
+    postedDate: '2026-10-17',
+    author: 'English Faculty Head',
+    isEnrolledOnly: true,
+  },
+  {
+    id: 'post-lang2-p1-01',
+    seriesId: 'series-ttet-paper1',
+    seriesName: 'Tripura TET: Paper-I 2026',
+    subjectId: 'subj-p1-lang2',
+    subjectName: 'Language – II (Bengali)',
+    testId: 'test-subj-p1-lang2-1',
+    testTitle: 'Language – II (Bengali) - Mock 1',
+    title: 'বাংলা ভাষা ও সাহিত্য মক টেস্ট ১: প্রশ্নপত্র ও ব্যাকরণ অনুশীলন ড্রাইভ লিংক',
+    driveLink: 'https://drive.google.com/file/d/1CGA_TET_BEN_Mock01_Question_Paper_2026/view?usp=sharing',
+    instructions: 'শুধুমাত্র নথিভুক্ত শিক্ষার্থীদের জন্য: বাংলা ব্যাকরণ (সন্ধি, সমাস, প্রত্যয়) এবং সাহিত্য বোধপরীক্ষণের পূর্ণাঙ্গ প্রশ্নপত্র ড্রাইভ থেকে ডাউনলোড করে পরীক্ষা দিন।',
+    postedDate: '2026-10-16',
+    author: 'Bengali Faculty Department',
+    isEnrolledOnly: true,
+  },
+  {
+    id: 'post-math-p1-01',
+    seriesId: 'series-ttet-paper1',
+    seriesName: 'Tripura TET: Paper-I 2026',
+    subjectId: 'subj-p1-math',
+    subjectName: 'Mathematics (Content & Pedagogy)',
+    testId: 'test-subj-p1-math-1',
+    testTitle: 'Mathematics (Content & Pedagogy) - Mock 1',
+    title: 'Mathematics Sectional Mock 1: Formula Sheet & Question Booklet',
+    driveLink: 'https://drive.google.com/file/d/1CGA_TET_MATH_Mock01_Questions_2026/view?usp=sharing',
+    instructions: 'Bilingual Mathematics question booklet (30 Marks). Solve geometry, arithmetic, and mathematical pedagogical issues step-by-step. Access restricted to enrolled students.',
+    postedDate: '2026-10-15',
+    author: 'Mathematics & Science Faculty',
+    isEnrolledOnly: true,
+  },
+  {
+    id: 'post-evs-p1-01',
+    seriesId: 'series-ttet-paper1',
+    seriesName: 'Tripura TET: Paper-I 2026',
+    subjectId: 'subj-p1-evs',
+    subjectName: 'Environmental Studies (EVS)',
+    testId: 'test-subj-p1-evs-1',
+    testTitle: 'Environmental Studies (EVS) - Mock 1',
+    title: 'EVS Sectional Mock 1: Tripura Ecology & Biodiversity Question Paper',
+    driveLink: 'https://drive.google.com/file/d/1CGA_TET_EVS_Mock01_Booklet_2026/view?usp=sharing',
+    instructions: 'Special focus on North-East Flora, Fauna, Tripura Forest Resources, and EVS Pedagogy. Enrolled students only.',
+    postedDate: '2026-10-14',
+    author: 'EVS Specialist (C.G.A)',
+    isEnrolledOnly: true,
+  },
+  {
+    id: 'post-sci-p2-01',
+    seriesId: 'series-ttet-paper2-sci',
+    seriesName: 'Tripura TET: Paper-II (Science) 2026',
+    subjectId: 'subj-p2s-sci',
+    subjectName: 'Science (Physics, Chemistry & Biology)',
+    testId: null,
+    testTitle: null,
+    title: 'Paper-II Science (PCB) Combined Question Bank & Mock Test Papers',
+    driveLink: 'https://drive.google.com/file/d/1CGA_TET_P2_SCI_QuestionBank_2026/view?usp=sharing',
+    instructions: 'Comprehensive NCERT & SCERT Tripura aligned question collection covering Mechanics, Chemical Reactions, Cell Biology, and Science Teaching Methods. Enrolled students exclusive.',
+    postedDate: '2026-10-13',
+    author: 'Senior Science Faculty',
+    isEnrolledOnly: true,
+  },
+  {
+    id: 'post-soc-p2-01',
+    seriesId: 'series-ttet-paper2-soc',
+    seriesName: 'Tripura TET: Paper-II (Social Studies) 2026',
+    subjectId: 'subj-p2ss-hist',
+    subjectName: 'History & Pedagogical Issues',
+    testId: null,
+    testTitle: null,
+    title: 'Paper-II Social Studies: Tripura History & Indian Freedom Struggle Mock Papers',
+    driveLink: 'https://drive.google.com/file/d/1CGA_TET_P2_SOC_Hist_Mock_2026/view?usp=sharing',
+    instructions: 'Deep dive into Ancient, Medieval, Modern Indian History, Manikya Dynasty of Tripura, and Social Sciences pedagogy. Access unlocked for enrolled candidates.',
+    postedDate: '2026-10-12',
+    author: 'Social Studies Faculty',
+    isEnrolledOnly: true,
+  },
+];

@@ -4,11 +4,13 @@ import {
   MOCK_SERIES_INITIAL,
   MOCK_SUBJECTS_INITIAL,
   MOCK_SERIES_TESTS_INITIAL,
+  INITIAL_MOCK_SUBJECT_POSTS,
   MockSeries,
   MockSubject,
   SeriesMockTest,
   SeriesEnrollment,
   SeriesAttempt,
+  MockSubjectPost,
 } from './mockSeriesSeedData';
 
 export type CourseCategory =
@@ -105,22 +107,67 @@ export interface StudyMaterial {
   }[];
 }
 
+export interface MockQuestionOptionObject {
+  key?: 'A' | 'B' | 'C' | 'D' | string;
+  text: string;
+  image_path?: string | null;
+  image_alt?: string | null;
+  imagePath?: string | null;
+  imageAlt?: string | null;
+}
+
+export type MockQuestionOption = string | MockQuestionOptionObject;
+
+export function getOptionText(opt: MockQuestionOption | undefined): string {
+  if (!opt) return '';
+  if (typeof opt === 'string') return opt;
+  return opt.text || '';
+}
+
+export function getOptionImage(opt: MockQuestionOption | undefined): { imagePath?: string; imageAlt?: string } | null {
+  if (!opt || typeof opt === 'string') return null;
+  const path = opt.imagePath || opt.image_path;
+  if (!path) return null;
+  return {
+    imagePath: path,
+    imageAlt: opt.imageAlt || opt.image_alt || undefined,
+  };
+}
+
+export interface MockQuestionGroup {
+  id: string;
+  testId: string;
+  position: number;
+  passageText?: string | null;
+  imagePath?: string | null;
+  imageAlt?: string | null;
+  createdAt?: string;
+}
+
 export interface MCQQuestion {
   id: string;
   question: string;
-  options: [string, string, string, string];
+  options: [MockQuestionOption, MockQuestionOption, MockQuestionOption, MockQuestionOption] | MockQuestionOption[];
   correctOptionIndex: number;
   explanation: string;
   questionBn?: string;
-  optionsBn?: [string, string, string, string];
+  optionsBn?: [MockQuestionOption, MockQuestionOption, MockQuestionOption, MockQuestionOption] | MockQuestionOption[];
   explanationBn?: string;
   subject?: string;
+  groupId?: string | null;
+  imagePath?: string | null;
+  imageAlt?: string | null;
+  imageWidth?: number | null;
+  imageHeight?: number | null;
+  explanationImagePath?: string | null;
+  explanationImageAlt?: string | null;
 }
 
 export interface MockTest {
   id: string;
   title: string;
   subject?: string;
+  driveLink?: string;
   languageMode?: 'english_only' | 'bengali_only' | 'bilingual';
   courseId: string;
   courseName: string;
@@ -132,6 +179,7 @@ export interface MockTest {
   scheduledDate: string;
   status: 'Published' | 'Draft';
   questions: MCQQuestion[];
+  questionGroups?: MockQuestionGroup[];
 }
 
 export interface TestAttempt {
@@ -289,6 +337,7 @@ export interface CgaDatabase {
   seriesTests: SeriesMockTest[];
   seriesEnrollments: SeriesEnrollment[];
   seriesAttempts: SeriesAttempt[];
+  mockSubjectPosts: MockSubjectPost[];
 }
 
 export const INITIAL_SEED_DATA: CgaDatabase = {
@@ -2614,4 +2663,5 @@ export const INITIAL_SEED_DATA: CgaDatabase = {
   seriesTests: MOCK_SERIES_TESTS_INITIAL,
   seriesEnrollments: [],
   seriesAttempts: [],
+  mockSubjectPosts: INITIAL_MOCK_SUBJECT_POSTS,
 };

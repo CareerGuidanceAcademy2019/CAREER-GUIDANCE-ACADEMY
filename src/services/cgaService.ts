@@ -20,9 +20,10 @@ import {
   SeriesMockTest,
   SeriesQuestion,
   SeriesAttempt,
+  MockSubjectPost,
 } from '@/data/initialSeedData';
 import { getSupabase } from '@/lib/supabase/client';
-import { parseIdentifier, getFacultyAvatarUrl, normalizePhone } from '@/lib/names';
+import { parseIdentifier, getFacultyAvatarUrl, normalizePhone, isEmail } from '@/lib/names';
 import { PAYMENT_SETTINGS } from '@/config/paymentSettings';
 
 export type PortalRole = 'STUDENT' | 'FACULTY' | 'ADMIN';
@@ -93,6 +94,7 @@ export interface FacultyAccount {
   experience: string;
   achievements: string;
   workAbility: string;
+  subject?: string;
   status: 'Active' | 'Inactive' | 'Pending';
   approvalStatus: 'Pending' | 'Approved' | 'Rejected';
   createdAt: string;
@@ -148,6 +150,7 @@ export const EMPTY_DATABASE: CgaDatabase = {
   seriesTests: [],
   seriesEnrollments: [],
   seriesAttempts: [],
+  mockSubjectPosts: [],
 };
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -272,6 +275,8 @@ const toTest = (r: Row, courseName: string, isStudent = false, hasSubmitted = fa
     negativeMarking: Number(r.negative_marking),
     scheduledDate: r.scheduled_date,
     status: r.status,
+    subject: r.subject ?? undefined,
+    driveLink: r.drive_link ?? undefined,
     questions,
   };
 };
@@ -353,6 +358,12 @@ const toSeriesMockTest = (r: Row): SeriesMockTest => ({
   windowHours: r.window_hours ? Number(r.window_hours) : null,
   showSolutions: r.show_solutions ?? 'after_window',
   shuffle: !!r.shuffle,
+  driveLink: r.drive_link ?? undefined,
+  contentStatus: r.content_status ?? 'draft',
+  purgeAfter: r.purge_after ?? null,
+  retentionDays: r.retention_days ? Number(r.retention_days) : 7,
+  archiveDownloadedAt: r.archive_downloaded_at ?? null,
+  purgeRequiresArchive: r.purge_requires_archive ?? true,
 });
 
 const toSeriesAttempt = (r: Row, studentName: string, studentCode: string, studentPhone: string): SeriesAttempt => ({
@@ -470,13 +481,30 @@ export const cgaService = {
     }
 
     try {
+      let role: string | undefined;
+      let status: string | undefined;
+
       const { data: state } = await sb.rpc('my_account_state');
       const row = (Array.isArray(state) ? state[0] : state) as { role?: string; status?: string } | null;
-      if (row?.status === 'Pending') {
+      if (row) {
+        role = row.role;
+        status = row.status;
+      } else {
+        const u = (await sb.auth.getUser()).data.user;
+        if (u) {
+          const { data: p } = await sb.from('profiles').select('role, status').eq('id', u.id).maybeSingle();
+          if (p) {
+            role = p.role;
+            status = p.status;
+          }
+        }
+      }
+
+      if (status === 'Pending') {
         await sb.auth.signOut();
         const pendingMsg =
-          row.role === 'admin'
-            ? 'Your administrator registration is awaiting verification and approval from an existing C.G.A administrator. You can sign in once verified.'
+          role === 'admin'
+            ? 'Your administrator registration is awaiting verification and approval from an existing C.G.A administrator. You will be able to log in and use the site in the admin portal once approved.'
             : 'Your faculty registration is awaiting approval from the C.G.A administrator. You can sign in once it is approved.';
         return {
           success: false,
@@ -496,9 +524,25 @@ export const cgaService = {
   },
 
   async isPhoneAvailable(phone: string): Promise<boolean> {
-    const { data, error } = await this.client().rpc('phone_available', { p_phone: phone });
-    // If the check itself fails (e.g. migration not yet applied) let the signup proceed.
-    return error ? true : data !== false;
+    try {
+      const cleanPhone = normalizePhone(phone);
+      if (!cleanPhone) return true;
+      const { data, error } = await this.client().rpc('phone_available', { p_phone: cleanPhone });
+      return error ? true : data !== false;
+    } catch {
+      return true;
+    }
+  },
+
+  async isEmailAvailable(email: string): Promise<boolean> {
+    try {
+      const cleanEmail = email.trim().toLowerCase();
+      if (!cleanEmail) return true;
+      const { data, error } = await this.client().rpc('email_available', { p_email: cleanEmail });
+      return error ? true : data !== false;
+    } catch {
+      return true;
+    }
   },
 
   async signUpWithMeta(
@@ -507,21 +551,35 @@ export const cgaService = {
     meta: Record<string, string>
   ): Promise<ServiceResult<{ session: AuthSession; needsEmailConfirmation: boolean }>> {
     const sb = this.client();
+    const cleanEmail = email.trim().toLowerCase();
     const { data, error } = await sb.auth.signUp({
-      email: email.trim().toLowerCase(),
+      email: cleanEmail,
       password,
       options: { emailRedirectTo: `${window.location.origin}/login`, data: meta },
     });
     if (error) {
-      const dbError = /database error/i.test(error.message);
-      return {
-        success: false,
-        error: dbError
-          ? meta.account_type === 'admin'
-            ? 'Could not register administrator account. Please verify that your email and 10-digit mobile number are valid.'
-            : 'Could not create the account. This phone number may already be registered.'
-          : error.message,
-      };
+      const msg = error.message || '';
+      if (/user already registered/i.test(msg) || /already exists/i.test(msg) || /identity/i.test(msg)) {
+        return { success: false, error: 'An account with this email address already exists. Please sign in.' };
+      }
+      if (/database error/i.test(msg)) {
+        const phone = meta.phone ? normalizePhone(meta.phone) : '';
+        const phoneTaken = phone ? !(await this.isPhoneAvailable(phone)) : false;
+        const emailTaken = !(await this.isEmailAvailable(cleanEmail));
+        if (emailTaken) {
+          return { success: false, error: 'An account with this email address already exists. Please sign in.' };
+        }
+        if (phoneTaken) {
+          return { success: false, error: 'An account with this phone number already exists. Please sign in or use another number.' };
+        }
+        return {
+          success: false,
+          error: meta.account_type === 'admin'
+            ? 'Could not register administrator account. Please verify that all required fields are filled.'
+            : 'Could not create account. Please ensure all mandatory fields are provided and your mobile number is correct.',
+        };
+      }
+      return { success: false, error: msg };
     }
     // Supabase returns an obfuscated user with no identities when the email already exists.
     if (data.user && data.user.identities?.length === 0) {
@@ -538,7 +596,8 @@ export const cgaService = {
     if (!payload.name?.trim() || payload.name.trim().length < 3) {
       return { success: false, error: 'Full candidate name (minimum 3 characters) is required.' };
     }
-    if (!payload.phone || !/^[6-9]\d{9}$/.test(normalizePhone(payload.phone))) {
+    const cleanPhone = normalizePhone(payload.phone);
+    if (!cleanPhone || !/^[6-9]\d{9}$/.test(cleanPhone)) {
       return { success: false, error: 'A valid 10-digit mobile number is required.' };
     }
     if (!payload.guardianName?.trim() || payload.guardianName.trim().length < 3) {
@@ -553,13 +612,18 @@ export const cgaService = {
     if (!payload.targetExam?.trim() || payload.targetExam.trim().length < 2) {
       return { success: false, error: 'Target competitive examination is required.' };
     }
-    if (!(await this.isPhoneAvailable(payload.phone))) {
-      return { success: false, error: 'An account with this phone number already exists. Please sign in.' };
+    const emailAvailable = await this.isEmailAvailable(payload.email);
+    if (!emailAvailable) {
+      return { success: false, error: 'An account with this email address already exists. Please sign in.' };
+    }
+    const phoneAvailable = await this.isPhoneAvailable(cleanPhone);
+    if (!phoneAvailable) {
+      return { success: false, error: 'An account with this phone number already exists. Please sign in or use another number.' };
     }
     return this.signUpWithMeta(payload.email, payload.password, {
       account_type: 'student',
       name: payload.name.trim(),
-      phone: payload.phone.trim(),
+      phone: cleanPhone,
       guardian_name: payload.guardianName.trim(),
       address: payload.address.trim(),
       permanent_address: (payload.permanentAddress ?? payload.address).trim(),
@@ -672,6 +736,7 @@ export const cgaService = {
       experience: r.experience ?? '',
       achievements: r.achievements ?? '',
       workAbility: r.work_ability ?? '',
+      subject: r.subject ?? '',
       status: r.status,
       approvalStatus: r.approval_status ?? 'Pending',
       createdAt: formatStamp(r.created_at),
@@ -684,6 +749,33 @@ export const cgaService = {
       p_approve: approve,
     });
     return error ? { success: false, error: msg(error, 'Could not update faculty.') } : { success: true };
+  },
+
+  async updateFacultyAccount(payload: {
+    profileId: string;
+    name: string;
+    phone: string;
+    designation: string;
+    qualification: string;
+    experience: string;
+    workAbility: string;
+    achievements: string;
+    subject?: string;
+    status?: 'Active' | 'Pending' | 'Inactive';
+  }): Promise<ServiceResult> {
+    const { error } = await this.client().rpc('cga_admin_update_faculty_account', {
+      p_profile_id: payload.profileId,
+      p_name: payload.name.trim(),
+      p_phone: payload.phone.trim(),
+      p_designation: payload.designation.trim(),
+      p_qualification: payload.qualification.trim(),
+      p_experience: payload.experience.trim(),
+      p_work_ability: payload.workAbility.trim() || 'Online & Offline',
+      p_achievements: payload.achievements.trim(),
+      p_subject: (payload.subject || '').trim(),
+      p_status: payload.status || null,
+    });
+    return error ? { success: false, error: msg(error, 'Could not update faculty details.') } : { success: true };
   },
 
   // ============ ADMIN: PENDING ADMINISTRATOR VERIFICATION ============
@@ -862,19 +954,16 @@ export const cgaService = {
     const allMasterTests = Array.from(mergedTestsMap.values());
 
     // Only authentic students who have registered and possess phone, email, and required details
+    // angatsaha825@gmail.com is granted multi-role access across Admin, Student, and Faculty
     const studentRows = profiles.filter(
       (p) =>
-        p.role === 'student' &&
+        (p.role === 'student' || p.email === 'angatsaha825@gmail.com') &&
         Boolean(p.name?.trim() && p.name.trim().length >= 3) &&
         Boolean(p.email?.trim()) &&
-        Boolean(p.phone?.trim()) &&
-        Boolean(p.guardian_name?.trim()) &&
-        Boolean(p.address?.trim()) &&
-        Boolean(p.qualification?.trim()) &&
-        Boolean(p.target_exam?.trim())
+        Boolean(p.phone?.trim())
     );
     const students: StudentProfile[] = studentRows.map((p) => {
-      const enr: StudentEnrollment[] = enrollments
+      let enr: StudentEnrollment[] = enrollments
         .filter((e) => e.student_id === p.id)
         .map((e) => {
           const c = courseList.find((x) => x.id === e.course_id);
@@ -893,6 +982,22 @@ export const cgaService = {
             accessValidUntil: e.access_valid_until ?? undefined,
           };
         });
+
+      if (p.email === 'angatsaha825@gmail.com' && enr.length === 0) {
+        enr = courseList.map((c) => ({
+          id: `enr-angat-${c.id}`,
+          courseId: c.id,
+          courseName: c.name,
+          batchName: c.batchName,
+          facultyName: c.facultyName,
+          enrolledDate: new Date().toISOString().slice(0, 10),
+          progress: 100,
+          totalFee: c.price,
+          paidAmount: c.price,
+          dueAmount: 0,
+        }));
+      }
+
       return {
         id: p.id,
         studentCode: p.student_code ?? '',
@@ -1051,6 +1156,15 @@ export const cgaService = {
       seriesAttempts: seriesAttemptsRaw.map((a: Row) =>
         toSeriesAttempt(a, studentName(a.student_id), studentCode(a.student_id), studentPhone(a.student_id))
       ),
+      mockSubjectPosts: (() => {
+        if (typeof window !== 'undefined') {
+          try {
+            const stored = localStorage.getItem('cga_mock_subject_posts');
+            if (stored) return JSON.parse(stored);
+          } catch {}
+        }
+        return INITIAL_SEED_DATA.mockSubjectPosts || [];
+      })(),
     };
   },
 
@@ -1095,6 +1209,137 @@ export const cgaService = {
       })
       .eq('id', id);
     return error ? { success: false, error: msg(error, 'Update failed.') } : { success: true };
+  },
+
+  /** Security verification: verify current password for critical credential changes */
+  async verifyCurrentPassword(password: string): Promise<boolean> {
+    const sb = this.client();
+    const { data: userRes } = await sb.auth.getUser();
+    if (!userRes.user?.email) return false;
+    const { error } = await sb.auth.signInWithPassword({
+      email: userRes.user.email,
+      password,
+    });
+    return !error;
+  },
+
+  /** Change user password with strict current password verification */
+  async changePassword(currentPassword: string, newPassword: string): Promise<ServiceResult> {
+    const sb = this.client();
+    const { data: userRes } = await sb.auth.getUser();
+    if (!userRes.user?.email) return { success: false, error: 'User session not found. Please log in again.' };
+
+    if (!newPassword || newPassword.length < 8) {
+      return { success: false, error: 'New password must be at least 8 characters long.' };
+    }
+
+    // 1. Verify current password
+    const { error: verifyErr } = await sb.auth.signInWithPassword({
+      email: userRes.user.email,
+      password: currentPassword,
+    });
+    if (verifyErr) {
+      return { success: false, error: 'Current password verification failed. Please enter your correct current password.' };
+    }
+
+    // 2. Update password in Supabase Auth
+    const { error: updateErr } = await sb.auth.updateUser({ password: newPassword });
+    if (updateErr) {
+      return { success: false, error: msg(updateErr, 'Could not update password.') };
+    }
+
+    await this.logSecurityEvent('PASSWORD_CHANGED', { email: userRes.user.email });
+    return { success: true };
+  },
+
+  /** Change user email address with current password verification and confirmation flow */
+  async changeEmail(currentPassword: string, newEmail: string): Promise<ServiceResult<{ needsConfirmation: boolean }>> {
+    const sb = this.client();
+    const { data: userRes } = await sb.auth.getUser();
+    if (!userRes.user?.email) return { success: false, error: 'User session not found. Please log in again.' };
+
+    const cleanEmail = newEmail.trim().toLowerCase();
+    if (!isEmail(cleanEmail)) {
+      return { success: false, error: 'Please enter a valid email address.' };
+    }
+    if (cleanEmail === userRes.user.email.toLowerCase()) {
+      return { success: false, error: 'New email address must be different from your current email.' };
+    }
+
+    // 1. Verify current password
+    const { error: verifyErr } = await sb.auth.signInWithPassword({
+      email: userRes.user.email,
+      password: currentPassword,
+    });
+    if (verifyErr) {
+      return { success: false, error: 'Current password verification failed. Please enter your correct current password.' };
+    }
+
+    // 2. Dispatch email change in Supabase Auth
+    const redirectUrl = typeof window !== 'undefined' ? `${window.location.origin}/login` : 'http://localhost:3000/login';
+    const { error: updateErr } = await sb.auth.updateUser(
+      { email: cleanEmail },
+      { emailRedirectTo: redirectUrl }
+    );
+    if (updateErr) {
+      return { success: false, error: msg(updateErr, 'Could not initiate email update.') };
+    }
+
+    // 3. Sync profile email and access_allowlist
+    await sb.from('profiles').update({ email: cleanEmail }).eq('id', userRes.user.id);
+    await sb.from('access_allowlist').update({ identifier: cleanEmail }).eq('identifier', userRes.user.email);
+
+    await this.logSecurityEvent('EMAIL_CHANGE_REQUESTED', { oldEmail: userRes.user.email, newEmail: cleanEmail });
+    return { success: true, needsConfirmation: true };
+  },
+
+  /** Change user mobile number with current password verification and duplicate check */
+  async changePhone(currentPassword: string, newPhone: string): Promise<ServiceResult> {
+    const sb = this.client();
+    const { data: userRes } = await sb.auth.getUser();
+    if (!userRes.user?.email) return { success: false, error: 'User session not found. Please log in again.' };
+
+    const cleanPhone = normalizePhone(newPhone);
+    if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
+      return { success: false, error: 'Please enter a valid 10-digit Indian mobile number.' };
+    }
+
+    // 1. Verify current password
+    const { error: verifyErr } = await sb.auth.signInWithPassword({
+      email: userRes.user.email,
+      password: currentPassword,
+    });
+    if (verifyErr) {
+      return { success: false, error: 'Current password verification failed. Please enter your correct current password.' };
+    }
+
+    // 2. Verify phone availability
+    const available = await this.isPhoneAvailable(cleanPhone);
+    if (!available) {
+      return { success: false, error: 'This mobile number is already registered to another user account.' };
+    }
+
+    // 3. Update auth metadata and profile
+    await sb.auth.updateUser({
+      data: { phone: cleanPhone },
+    });
+
+    const { error: profErr } = await sb
+      .from('profiles')
+      .update({ phone: cleanPhone })
+      .eq('id', userRes.user.id);
+
+    if (profErr) {
+      return { success: false, error: msg(profErr, 'Could not update mobile number in profile.') };
+    }
+
+    const oldPhone = userRes.user.user_metadata?.phone;
+    if (oldPhone) {
+      await sb.from('access_allowlist').update({ identifier: cleanPhone }).eq('identifier', oldPhone);
+    }
+
+    await this.logSecurityEvent('PHONE_CHANGED', { email: userRes.user.email, newPhone: cleanPhone });
+    return { success: true };
   },
 
   async enrol(p: {
@@ -1165,8 +1410,8 @@ export const cgaService = {
     };
 
     try {
-      await sb.from('fee_payments').insert({
-        id: newPayment.id,
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(newPayment.id);
+      const insertPayload: Record<string, unknown> = {
         receipt_no: newPayment.receiptNo,
         student_id: newPayment.studentId,
         course_id: newPayment.courseId,
@@ -1177,7 +1422,16 @@ export const cgaService = {
         status: 'Pending',
         utr: p.utr,
         screenshot_url: p.screenshotUrl || null,
-      });
+      };
+      if (isUuid) insertPayload.id = newPayment.id;
+      const { data: inserted } = await sb
+        .from('fee_payments')
+        .insert(insertPayload)
+        .select()
+        .single();
+      if (inserted && (inserted as { id?: string }).id) {
+        newPayment.id = (inserted as { id: string }).id;
+      }
     } catch {}
 
     try {
@@ -1394,14 +1648,29 @@ export const cgaService = {
     const { error } = await this.client().from('faculty').upsert({
       id: f.id,
       name: f.name,
+      designation: f.designation || null,
       subject: f.subject,
       qualification: f.qualification,
       experience: f.experience,
       photo: f.photo,
       bio: f.bio,
-      specialization_tags: f.specializationTags,
+      specialization_tags: f.specializationTags || [],
+      achievements: f.achievements || '',
+      work_ability: f.workAbility || 'Online & Offline',
     });
-    return error ? { success: false, error: msg(error, 'Save failed.') } : { success: true };
+    if (error) return { success: false, error: msg(error, 'Save failed.') };
+
+    try {
+      const { data: current } = await this.client().from('faculty').select('profile_id').eq('id', f.id).maybeSingle();
+      if (current?.profile_id) {
+        await this.client().from('profiles').update({
+          name: f.name,
+          qualification: f.qualification,
+        }).eq('id', current.profile_id);
+      }
+    } catch {}
+
+    return { success: true };
   },
   async deleteFaculty(id: string) {
     const { error } = await this.client().from('faculty').delete().eq('id', id);
@@ -1433,6 +1702,8 @@ export const cgaService = {
       await this.client().from('mock_tests').upsert({
         id: t.id,
         title: t.title,
+        subject: t.subject ?? null,
+        drive_link: t.driveLink ?? null,
         course_id: t.courseId,
         batch_name: t.batchName,
         duration_minutes: t.durationMinutes,
@@ -1520,6 +1791,39 @@ export const cgaService = {
   async deleteAnnouncement(id: string) {
     const { error } = await this.client().from('announcements').delete().eq('id', id);
     return error ? { success: false, error: msg(error, 'Delete failed.') } : { success: true };
+  },
+
+  async upsertMockSubjectPost(post: MockSubjectPost): Promise<ServiceResult> {
+    try {
+      if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem('cga_mock_subject_posts');
+        const list: MockSubjectPost[] = stored ? JSON.parse(stored) : [...(INITIAL_SEED_DATA.mockSubjectPosts || [])];
+        const idx = list.findIndex((p) => p.id === post.id);
+        if (idx >= 0) {
+          list[idx] = post;
+        } else {
+          list.unshift(post);
+        }
+        localStorage.setItem('cga_mock_subject_posts', JSON.stringify(list));
+      }
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Could not save mock subject question post' };
+    }
+    return { success: true };
+  },
+
+  async deleteMockSubjectPost(id: string): Promise<ServiceResult> {
+    try {
+      if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem('cga_mock_subject_posts');
+        const list: MockSubjectPost[] = stored ? JSON.parse(stored) : [...(INITIAL_SEED_DATA.mockSubjectPosts || [])];
+        const filtered = list.filter((p) => p.id !== id);
+        localStorage.setItem('cga_mock_subject_posts', JSON.stringify(filtered));
+      }
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Could not delete mock subject question post' };
+    }
+    return { success: true };
   },
 
   async saveSiteContent(content: SiteContent): Promise<ServiceResult> {
@@ -1698,6 +2002,11 @@ export const cgaService = {
       window_hours: test.windowHours || null,
       show_solutions: test.showSolutions,
       shuffle: test.shuffle,
+      content_status: test.contentStatus || 'draft',
+      purge_after: test.purgeAfter || null,
+      retention_days: test.retentionDays || 7,
+      archive_downloaded_at: test.archiveDownloadedAt || null,
+      purge_requires_archive: test.purgeRequiresArchive ?? true,
     };
     const { error } = await sb.from('mock_tests').upsert(payload);
     return error ? { success: false, error: msg(error, 'Failed to save test.') } : { success: true };
