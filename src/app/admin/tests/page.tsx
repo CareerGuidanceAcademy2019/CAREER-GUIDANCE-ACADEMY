@@ -24,6 +24,7 @@ import {
   FileText,
   Lock,
   Image as ImageIcon,
+  Eye,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCga } from '@/context/CgaContext';
@@ -574,6 +575,13 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                         className="px-3 py-1.5 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
                       >
                         <ImageIcon className="w-3.5 h-3.5" /> Diagrams & Review
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/admin/mock-tests/${test.id}/preview`)}
+                        className="px-3 py-1.5 rounded-xl bg-blue-50 text-[#0056b3] hover:bg-blue-100 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <Eye className="w-3.5 h-3.5" /> Preview &amp; Checklist
                       </button>
                       <button
                         type="button"

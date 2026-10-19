@@ -503,6 +503,14 @@ export default function AdminMockTestQuestionsPage() {
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
+            onClick={() => router.push(`/admin/mock-tests/${testId}/preview`)}
+            className="px-4 py-2.5 rounded-xl border border-blue-200 bg-blue-50 text-[#0056b3] hover:bg-blue-100 text-xs font-extrabold cursor-pointer inline-flex items-center gap-1.5"
+          >
+            <Eye className="w-4 h-4" /> Preview Test (CBT &amp; Checklist)
+          </button>
+
+          <button
+            type="button"
             onClick={() => router.push(`/admin/tests`)}
             className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-bold cursor-pointer inline-flex items-center gap-1.5"
           >
