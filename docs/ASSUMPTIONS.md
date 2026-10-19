@@ -123,3 +123,23 @@ This document logs sensible architectural choices made during the autonomous imp
   2. Scanned `.next/static/` to prove 0% presence of `SUPABASE_SERVICE_ROLE_KEY` and disabled public source maps.
   3. Published comprehensive reports: `docs/SECURITY_REPORT.md`, `docs/QA_REPORT.md`, `docs/PERFORMANCE_REPORT.md`, `docs/CONTENT_TO_CONFIRM.md`, and `docs/DEPLOY_CHECKLIST.md`.
 
+---
+
+### Decision 23: Diagram Architecture, Sharp Processing Pipeline, and Option Backward Compatibility
+- **Context:** Competitive examinations require diagrams, maps, circuits, and mathematical formulas across question statements, option choices, shared passages, and detailed explanations.
+- **Decision:**
+  1. **Schema & Storage:** Added `mock_question_groups` for shared reading comprehension passages and maps, altered `mock_questions` with `group_id`, `image_path`, `image_alt`, `image_width`, and `image_height`, and altered `mock_question_keys` with `explanation_image_path` and `explanation_image_alt`. Private bucket `mock-question-images` enforces student access strictly through ephemeral signed URLs.
+  2. **Zero-Breakage Backward Compatibility:** Options can be legacy plain strings (`string[]`) or modern rich objects `{ key: 'A', text: string, imagePath?: string, imageAlt?: string }`. Universal helper functions `getOptionText()` and `getOptionImage()` insulate all student CBT screens, review cards, and scoring engines from breaking changes.
+  3. **High-Security Sharp Pipeline (`src/lib/imageProcessor.ts`):** Enforces 8MB file ceiling, 40-megapixel decompression bomb defense, magic-byte inspection (rejecting masqueraded SVGs, HTML, and executables), EXIF metadata stripping, auto-orientation, and dual-mode WebP encoding (comparing 85% lossy vs. lossless and picking the smaller byte size). Maximum widths are clamped to 1200px for questions/passages and 900px for options. Storage paths are randomized UUIDs to prevent file overwrites.
+  4. **Multi-Input Ingestion & Manual Crop Tool:** Supports Paste (with separate answer sheet parser), structured CSV template generator, ZIP package extraction with Zip-Slip path normalization and 100MB decompression limit, Word `.docx` extraction with inline images via Mammoth, and an interactive HTML5 Canvas PDF crop tool with coordinate scaling and direct attachment.
+  5. **Review Screen Interaction:** Global clipboard listener (`Ctrl+V`), drag-and-drop zones across question statement, options A–D, and explanation, live KaTeX preview, diagram indicator heuristic with dismiss toggle, and storage meter showing percentage of 1GB quota with orphan cleanup action.
+
+---
+
+### Decision 24: Question Paper Storage, Lifecycle Auto-Purge & Aggregate Preservation
+- **Context:** Host storage limits (1 GB quota) necessitate timely purging of large mock test image assets after exams conclude, while retaining student attempt history and aggregate question analytics.
+- **Decision:**
+  1. **Lifecycle Management:** Added `content_status` (`draft`, `active`, `expired`, `purged`), `retention_days`, `purge_after`, and `archive_downloaded_at` to `mock_tests`. Tests support compute-on-read expiration fallback.
+  2. **Analytics Preservation:** Created `mock_test_question_stats` to store per-question aggregate metrics (attempts, correct rate, discrimination index, difficulty) before question rows and storage images are purged.
+  3. **Soft-Copy Question Papers:** Created `mock_question_papers` table and private bucket `mock-question-papers` (max 25MB, PDF only) with admin-only direct access, and student delivery through server-side watermarking.
+

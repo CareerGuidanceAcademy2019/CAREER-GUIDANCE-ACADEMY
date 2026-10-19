@@ -1,12 +1,16 @@
+import type { MockQuestionOption } from '@/data/initialSeedData';
+
 export interface ParsedMCQ {
   id: string;
   position: number;
   question: string;
-  options: [string, string, string, string] | string[];
+  options: [MockQuestionOption, MockQuestionOption, MockQuestionOption, MockQuestionOption] | MockQuestionOption[];
   correctOptionIndex: number;
   explanation: string;
+  explanationImagePath?: string | null;
+  explanationImageAlt?: string | null;
   questionBn?: string;
-  optionsBn?: [string, string, string, string] | string[];
+  optionsBn?: [MockQuestionOption, MockQuestionOption, MockQuestionOption, MockQuestionOption] | MockQuestionOption[];
   explanationBn?: string;
   groupId?: string | null;
   imagePath?: string | null;
@@ -272,7 +276,13 @@ export function validateParsedQuestions(
   let duplicateCount = 0;
 
   for (const q of questions) {
-    if (q.options.length !== 4 || q.options.some((o) => !o || !o.trim())) {
+    if (
+      q.options.length !== 4 ||
+      q.options.some((o) => {
+        const t = typeof o === 'string' ? o : o?.text;
+        return !t || !t.trim();
+      })
+    ) {
       invalidOptionsCount++;
     }
     if (q.needsDiagram && !q.imagePath) {
