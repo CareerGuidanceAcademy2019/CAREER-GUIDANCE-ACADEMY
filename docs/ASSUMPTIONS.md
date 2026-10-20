@@ -143,3 +143,35 @@ This document logs sensible architectural choices made during the autonomous imp
   2. **Analytics Preservation:** Created `mock_test_question_stats` to store per-question aggregate metrics (attempts, correct rate, discrimination index, difficulty) before question rows and storage images are purged.
   3. **Soft-Copy Question Papers:** Created `mock_question_papers` table and private bucket `mock-question-papers` (max 25MB, PDF only) with admin-only direct access, and student delivery through server-side watermarking.
 
+---
+
+### Decision 25: Admin Preview Engine, Zero DB Writes & Automated Pre-Launch Validation Checklist
+- **Context:** Administrators need to preview mock tests exactly as a student sees them before publishing, verify diagram rendering, KaTeX math typesetting, and mobile layouts without polluting database tables with dummy attempts.
+- **Decision:**
+  1. **Zero Database Writes:** Admin Preview mode renders the exact student CBT component in preview mode (`isPreview={true}`). Navigation, palette selection, option clicks, and timer countdown operate in local React state with zero database writes and zero attempt/score rows generated.
+  2. **Automated Validation Checklist:** An automated inspection engine scans the test prior to launch and displays a split-screen checklist:
+     - *Blocking Red Errors:* Missing answer key, duplicate options, option text matching question text, broken diagram path.
+     - *Advisory Amber Warnings:* Missing explanation, question flagged as containing diagram keywords but missing image attachment, missing Bengali translation for bilingual paper.
+     - Tests with blocking red errors are prevented from publishing until resolved (`/api/admin/mock-tests/status`).
+  3. **Multi-Viewport & Connection Simulation:** Toggleable viewport containers for Desktop (100%), Tablet (768px), and Mobile (375px), combined with an artificial 1.5-second network delay simulator to verify loading skeletons and layout stability.
+  4. **Offline Export Stylesheet:** Dedicated `@media print` print-friendly stylesheet for exporting question papers as clean paper booklets with formatted tables and high-contrast diagrams.
+
+---
+
+### Decision 26: Strict Series Enrolment Isolation, 5-State Appear Test Engine & Self-Contained Archive Backups
+- **Context:** The mock test portal organizes syllabus content into Series -> Subject sections -> (a) Mock Tests & (b) Question Papers. Enrolment in one series must strictly isolate access so that enrolling in Series A never unlocks Series B. Question assets must be archivable and restorable with cryptographic proof of integrity.
+- **Decision:**
+  1. **Strict Enrolment Isolation:** Enrolment verification checks exact `series_id` equality against `series_enrollments` or `enrollments(course_id)`. Direct access to storage buckets or streaming APIs without active enrollment and valid time window is blocked with HTTP 403.
+  2. **5-State "Appear Test" Button:** Built client and server state machine with 5 strict states:
+     - `Locked`: Not enrolled or draft status (greyed out with lock badge; clicking triggers package checkout modal).
+     - `Upcoming`: Enrolled but server clock < window_start (live countdown: "Starts in: 2d 4h 12m"; disabled).
+     - `Live`: Enrolled and within window (prominent green/blue CTA: "Appear Test" for initial start, or animated "Resume Test" with remaining server duration for ongoing attempts).
+     - `Attempted`: Already submitted (displays "Score: X/Y" and unlocks scorecard & faculty solutions).
+     - `Closed / Missed`: Window elapsed without submission (amber badge "Closed / Missed"; re-attempts strictly blocked; solutions unlocked if released).
+  3. **Server-Side Dynamic PDF Watermarking (`src/lib/pdfWatermark.ts`):** Question papers are streamed via `/api/mock-tests/papers/[paperId]` using `pdf-lib`. Every page receives a diagonal, semi-transparent watermark containing candidate full name, student code, and generation timestamp, plus a tamper-resistant security audit footer.
+  4. **Self-Contained Archive Backup (`/api/admin/mock-tests/archive`):** Generates a ZIP archive containing `manifest.json` (metadata + SHA-256 hashes of every file), `questions.json` (full questions, keys, and group passages), `images/` (all diagrams extracted from bucket), and `results_summary.csv` (student scores, ranks, and per-question accuracy stats).
+  5. **Atomic Purge & Integrity Restore (`/api/admin/mock-tests/purge`, `/api/admin/mock-tests/restore`):**
+     - Purge gate requires either an archive downloaded within 24 hours OR explicit typed test title confirmation to discard without archive. Aggregates question statistics into `mock_test_question_stats`, deletes diagram files and question rows, while permanently preserving student attempts and scorecard analytics.
+     - Restore engine verifies all SHA-256 checksums from `manifest.json`, re-uploads diagrams to storage, and restores question rows with status set to Draft for administrative review.
+
+
