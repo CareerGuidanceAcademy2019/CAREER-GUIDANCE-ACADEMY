@@ -277,6 +277,10 @@ const toTest = (r: Row, courseName: string, isStudent = false, hasSubmitted = fa
     status: r.status,
     subject: r.subject ?? undefined,
     driveLink: r.drive_link ?? undefined,
+    contentStatus: r.content_status ?? 'draft',
+    purgeAfter: r.purge_after ?? undefined,
+    retentionDays: r.retention_days ?? 7,
+    archiveDownloadedAt: r.archive_downloaded_at ?? undefined,
     questions,
   };
 };

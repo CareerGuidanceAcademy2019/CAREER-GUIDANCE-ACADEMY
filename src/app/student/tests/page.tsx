@@ -727,8 +727,8 @@ export default function StudentMockTestsPage() {
           </div>
         </div>
 
-        {/* Detailed Question-by-Question Answer Key & Explanation */}
-        {testObj && (
+        {/* Detailed Question-by-Question Answer Key & Explanation (Active Tests) */}
+        {testObj && testObj.questions && testObj.questions.length > 0 && testObj.contentStatus !== 'purged' && (
           <div className="space-y-4">
             <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-500">
               Correct Answers & Faculty Explanations ({langMode === 'english_only' ? 'English Only' : langMode === 'bengali_only' ? 'বাংলা পত্র' : 'Bilingual Analysis'})
@@ -800,6 +800,19 @@ export default function StudentMockTestsPage() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Purged / Archived Question Content Fallback */}
+        {(!testObj || !testObj.questions || testObj.questions.length === 0 || testObj.contentStatus === 'purged') && (
+          <div className="space-y-4">
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-1.5">
+              <span className="font-extrabold text-slate-900 text-sm block">Question Content Archived</span>
+              <p className="text-slate-600 leading-relaxed">
+                Question statements and diagram files for this examination session have been archived and purged in accordance with CGA storage lifecycle policies.
+                Your official score, batch rank, accuracy, and question difficulty statistics remain permanently preserved above.
+              </p>
+            </div>
           </div>
         )}
       </div>

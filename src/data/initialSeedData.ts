@@ -180,6 +180,11 @@ export interface MockTest {
   status: 'Published' | 'Draft';
   questions: MCQQuestion[];
   questionGroups?: MockQuestionGroup[];
+  contentStatus?: 'draft' | 'active' | 'expired' | 'purged';
+  purgeAfter?: string | null;
+  retentionDays?: number;
+  archiveDownloadedAt?: string | null;
+  purgeRequiresArchive?: boolean;
 }
 
 export interface TestAttempt {

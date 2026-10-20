@@ -25,6 +25,8 @@ import {
   Lock,
   Image as ImageIcon,
   Eye,
+  HardDrive,
+  Download,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCga } from '@/context/CgaContext';
@@ -33,6 +35,7 @@ import { MockSeries, getSubjectLanguageMode } from '@/data/mockSeriesSeedData';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { CustomCheckSvg, CustomCrossSvg } from '@/components/ui/CustomIcons';
 import { parseRawQuestionsText } from '@/lib/mcqParser';
+import { MockTestStorageMeter } from '@/components/admin/MockTestStorageMeter';
 
 export default function AdminMockTestsPage() {
   const {
@@ -46,7 +49,7 @@ export default function AdminMockTestsPage() {
   } = useCga();
   const router = useRouter();
 
-  const [activeAdminTab, setActiveAdminTab] = useState<'tests' | 'series' | 'subject_posts'>('tests');
+  const [activeAdminTab, setActiveAdminTab] = useState<'tests' | 'series' | 'subject_posts' | 'storage_meter'>('tests');
   const [editingTest, setEditingTest] = useState<MockTest | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<MockTest | null>(null);
@@ -483,6 +486,17 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
         >
           <BookOpen className="w-4 h-4 text-amber-300" /> Subject Question Drive Links ({db.mockSubjectPosts?.length || 0})
         </button>
+        <button
+          type="button"
+          onClick={() => setActiveAdminTab('storage_meter')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+            activeAdminTab === 'storage_meter'
+              ? 'bg-[#0056b3] text-white shadow-sm'
+              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+          }`}
+        >
+          <HardDrive className="w-4 h-4 text-purple-400" /> Storage Meter &amp; Lifecycle
+        </button>
       </div>
 
       {/* ==================== TAB 1: BATCH MOCK TESTS ==================== */}
@@ -582,6 +596,14 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                         className="px-3 py-1.5 rounded-xl bg-blue-50 text-[#0056b3] hover:bg-blue-100 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
                       >
                         <Eye className="w-3.5 h-3.5" /> Preview &amp; Checklist
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => window.open(`/api/admin/mock-tests/archive?testId=${encodeURIComponent(test.id)}`, '_blank')}
+                        className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
+                        title="Download self-contained ZIP archive"
+                      >
+                        <Download className="w-3.5 h-3.5" /> Archive (ZIP)
                       </button>
                       <button
                         type="button"
@@ -803,13 +825,23 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                         </button>
                       </div>
                     ) : (
-                      <button
-                        type="button"
-                        onClick={() => setEditingSeries({ ...series })}
-                        className="w-full py-2 rounded-xl bg-blue-50 text-[#0056b3] hover:bg-blue-100 text-xs font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" /> Edit Price & Details
-                      </button>
+                      <div className="flex items-center gap-2 w-full">
+                        <button
+                          type="button"
+                          onClick={() => setEditingSeries({ ...series })}
+                          className="flex-1 py-2 rounded-xl bg-blue-50 text-[#0056b3] hover:bg-blue-100 text-xs font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" /> Edit Price
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/admin/mock-tests/${series.id}/papers`)}
+                          className="px-3 py-2 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
+                          title="Manage soft-copy Question Paper PDFs"
+                        >
+                          <FileText className="w-3.5 h-3.5" /> Papers
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -995,6 +1027,11 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
             );
           })()}
         </div>
+      )}
+
+      {/* ==================== TAB 4: STORAGE METER & LIFECYCLE ==================== */}
+      {activeAdminTab === 'storage_meter' && (
+        <MockTestStorageMeter />
       )}
 
       {/* ==================== CREATE / EDIT MOCK TEST MODAL ==================== */}
