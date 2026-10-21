@@ -37,7 +37,7 @@ export async function GET(
     // 1. Fetch user profile
     const { data: profile } = await supabaseAdmin
       .from('profiles')
-      .select('id, full_name, student_code, role')
+      .select('id, name, student_code, role')
       .eq('id', user.id)
       .single();
 
@@ -108,7 +108,7 @@ export async function GET(
     const pdfBuffer = Buffer.from(arrayBuffer);
 
     // 6. Stamp dynamic student watermark
-    const studentName = profile?.full_name || 'Enrolled Student';
+    const studentName = profile?.name || 'Enrolled Student';
     const studentCode = profile?.student_code || user.id.slice(0, 8).toUpperCase();
     const watermarkedBytes = await watermarkPdf(pdfBuffer, {
       studentName,
