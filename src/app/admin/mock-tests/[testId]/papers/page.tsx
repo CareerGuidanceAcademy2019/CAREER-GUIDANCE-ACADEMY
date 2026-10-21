@@ -23,7 +23,7 @@ import { MOCK_SERIES_INITIAL, MOCK_SUBJECTS_INITIAL } from '@/data/mockSeriesSee
 export default function AdminSeriesQuestionPapersPage() {
   const params = useParams();
   const router = useRouter();
-  const seriesId = params?.seriesId as string;
+  const seriesId = (params?.testId || params?.seriesId) as string;
   const { showToast } = useCga();
 
   const [papers, setPapers] = useState<any[]>([]);
