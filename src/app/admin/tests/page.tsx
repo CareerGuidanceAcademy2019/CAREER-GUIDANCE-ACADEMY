@@ -31,7 +31,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { useCga } from '@/context/CgaContext';
 import { MockTest, MCQQuestion, MockSubjectPost, getOptionText } from '@/data/initialSeedData';
-import { MockSeries, getSubjectLanguageMode } from '@/data/mockSeriesSeedData';
+import { MockSeries, MOCK_SERIES_INITIAL, getSubjectLanguageMode } from '@/data/mockSeriesSeedData';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { CustomCheckSvg, CustomCrossSvg } from '@/components/ui/CustomIcons';
 import { parseRawQuestionsText } from '@/lib/mcqParser';
@@ -712,7 +712,7 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                 <Flame className="w-4 h-4 text-[#ea580c]" /> Tripura TET Daily Online Mock Tests Series Packages
               </h3>
               <p className="text-xs text-slate-600 mt-0.5">
-                Manage the festival offer prices (Paper-I: ₹399/-, Paper-II: ₹499/-) and launch schedules on demand.
+                Manage mock test series package pricing, student enrollment fees, and launch schedules live in the database.
               </p>
             </div>
             <div className="text-xs text-slate-600 font-bold flex items-center gap-2">
@@ -721,7 +721,7 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {db.mockSeries.map((series) => {
+            {(db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL).map((series) => {
               const isEditing = editingSeries?.id === series.id;
 
               return (
@@ -748,7 +748,7 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                     <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-slate-500 font-bold">Package Price:</span>
-                        {isEditing ? (
+                        {isEditing && editingSeries ? (
                           <div className="flex items-center gap-1">
                             <span className="text-sm font-black text-slate-800">₹</span>
                             <input
@@ -769,7 +769,7 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
 
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-slate-500">Launch Date:</span>
-                        {isEditing ? (
+                        {isEditing && editingSeries ? (
                           <input
                             type="text"
                             value={editingSeries.startsOn}
@@ -791,7 +791,7 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                         Features from Banner:
                       </span>
                       <ul className="text-xs text-slate-600 space-y-1">
-                        {series.highlights.slice(0, 5).map((h, i) => (
+                        {series.highlights.slice(0, 5).map((h: string, i: number) => (
                           <li key={i} className="flex items-center gap-1.5">
                             <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                             <span>{h}</span>

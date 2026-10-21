@@ -901,11 +901,16 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
 
   const updateMockSeries = useCallback(
     async (series: MockSeries) => {
+      const res = await cgaService.updateMockSeries(series);
+      if (!res.success) {
+        showToast('Update Failed', res.error || 'Could not update series in database.', 'error');
+        return;
+      }
       setDb((prev) => ({
         ...prev,
         mockSeries: prev.mockSeries.map((s) => (s.id === series.id ? series : s)),
       }));
-      showToast('Mock Test Series Updated', `${series.name} details and pricing updated.`, 'success');
+      showToast('Mock Test Series Updated', `${series.name} price updated to ₹${series.price}/-.`, 'success');
     },
     [showToast]
   );

@@ -165,7 +165,8 @@ export default function StudentPaymentsPage() {
       return mat ? mat.title : 'Study Material & Notes';
     }
     if (itemType === 'mock_series') {
-      return 'T-TET 2026 Test Series (15 Mocks)';
+      const s = db.mockSeries.find((series) => series.id === itemId);
+      return s ? s.name : 'Tripura TET 2026 Daily Online Mock Tests Series';
     }
     return itemId;
   };

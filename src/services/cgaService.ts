@@ -1853,6 +1853,63 @@ export const cgaService = {
     return { success: true };
   },
 
+  async updateMockSeries(series: MockSeries): Promise<ServiceResult<{ series?: MockSeries }>> {
+    try {
+      const res = await fetch('/api/admin/mock-tests/series', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: series.id,
+          price: series.price,
+          startsOn: series.startsOn,
+          status: series.status,
+          name: series.name,
+          description: series.description,
+          batchLabel: series.batchLabel,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        // Fallback to direct supabase client update if authenticated as admin in browser
+        const sb = this.client();
+        const { error: sbErr } = await sb
+          .from('mock_series')
+          .update({
+            price: Number(series.price),
+            starts_on: series.startsOn,
+            status: series.status,
+            name: series.name,
+            description: series.description,
+            batch_label: series.batchLabel,
+          })
+          .eq('id', series.id);
+        if (sbErr) {
+          return { success: false, error: data.error || sbErr.message };
+        }
+      }
+      return { success: true };
+    } catch (err: any) {
+      try {
+        const sb = this.client();
+        const { error: sbErr } = await sb
+          .from('mock_series')
+          .update({
+            price: Number(series.price),
+            starts_on: series.startsOn,
+            status: series.status,
+            name: series.name,
+            description: series.description,
+            batch_label: series.batchLabel,
+          })
+          .eq('id', series.id);
+        if (sbErr) return { success: false, error: sbErr.message };
+        return { success: true };
+      } catch (fallbackErr: any) {
+        return { success: false, error: fallbackErr?.message || 'Failed to update mock test series' };
+      }
+    }
+  },
+
   async saveSiteContent(content: SiteContent): Promise<ServiceResult> {
     const { error } = await this.client()
       .from('site_content')

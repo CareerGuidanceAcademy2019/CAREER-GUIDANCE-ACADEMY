@@ -244,7 +244,8 @@ export default function StudentMockTestsPage() {
   }, [searchParams, db.mockTests, activeTest]);
 
   const handleOpenSeriesCheckout = (seriesId: string) => {
-    const s = db.mockSeries.find((item) => item.id === seriesId);
+    const activeSeriesList = db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL;
+    const s = activeSeriesList.find((item) => item.id === seriesId);
     setPayManualTarget({
       itemType: 'mock_series',
       itemId: seriesId,
@@ -834,6 +835,11 @@ export default function StudentMockTestsPage() {
     return true;
   });
 
+  const activeSeriesList = db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL;
+  const paper1Series = activeSeriesList.find((s) => s.id === 'series-ttet-paper1') || MOCK_SERIES_INITIAL[0];
+  const paper2SciSeries = activeSeriesList.find((s) => s.id === 'series-ttet-paper2-sci') || MOCK_SERIES_INITIAL[1];
+  const paper2SocSeries = activeSeriesList.find((s) => s.id === 'series-ttet-paper2-soc') || MOCK_SERIES_INITIAL[2];
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -891,9 +897,9 @@ export default function StudentMockTestsPage() {
               {/* Price Tag */}
               <div className="pt-2">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-black text-amber-300">₹399/-</span>
+                  <span className="text-3xl font-black text-amber-300">₹{paper1Series.price}/-</span>
                   <span className="text-xs text-blue-200 font-bold uppercase">Only</span>
-                  <span className="text-xs text-blue-300 line-through">₹499</span>
+                  <span className="text-xs text-blue-300 line-through">₹{Math.max(499, paper1Series.price + 100)}</span>
                 </div>
               </div>
 
@@ -929,7 +935,7 @@ export default function StudentMockTestsPage() {
                 className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer shadow-md transition-all flex items-center justify-center gap-1.5"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                Enroll Now @ ₹399/- (Pay via UPI / Bank)
+                Enroll Now @ ₹{paper1Series.price}/- (Pay via UPI / Bank)
               </button>
             </div>
           </div>
@@ -954,9 +960,9 @@ export default function StudentMockTestsPage() {
               {/* Price Tag */}
               <div className="pt-2">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-black text-amber-300">₹499/-</span>
+                  <span className="text-3xl font-black text-amber-300">₹{paper2SciSeries.price}/-</span>
                   <span className="text-xs text-indigo-200 font-bold uppercase">Only</span>
-                  <span className="text-xs text-indigo-300 line-through">₹699</span>
+                  <span className="text-xs text-indigo-300 line-through">₹{Math.max(699, paper2SciSeries.price + 200)}</span>
                 </div>
               </div>
 
@@ -992,7 +998,7 @@ export default function StudentMockTestsPage() {
                 className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer shadow-md transition-all flex items-center justify-center gap-1.5"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                Enroll Now @ ₹499/- (Pay via UPI / Bank)
+                Enroll Now @ ₹{paper2SciSeries.price}/- (Pay via UPI / Bank)
               </button>
             </div>
           </div>
@@ -1017,9 +1023,9 @@ export default function StudentMockTestsPage() {
               {/* Price Tag */}
               <div className="pt-2">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-black text-amber-300">₹499/-</span>
+                  <span className="text-3xl font-black text-amber-300">₹{paper2SocSeries.price}/-</span>
                   <span className="text-xs text-slate-200 font-bold uppercase">Only</span>
-                  <span className="text-xs text-slate-400 line-through">₹699</span>
+                  <span className="text-xs text-slate-400 line-through">₹{Math.max(699, paper2SocSeries.price + 200)}</span>
                 </div>
               </div>
 
@@ -1055,7 +1061,7 @@ export default function StudentMockTestsPage() {
                 className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer shadow-md transition-all flex items-center justify-center gap-1.5"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                Enroll Now @ ₹499/- (Pay via UPI / Bank)
+                Enroll Now @ ₹{paper2SocSeries.price}/- (Pay via UPI / Bank)
               </button>
             </div>
           </div>
@@ -1086,7 +1092,7 @@ export default function StudentMockTestsPage() {
             Select Examination Series
           </label>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {MOCK_SERIES_INITIAL.map((s) => {
+            {activeSeriesList.map((s) => {
               const isSelected = selectedSeriesId === s.id;
               const isEnrolled = isStudentEnrolledInSeries(s.id);
 

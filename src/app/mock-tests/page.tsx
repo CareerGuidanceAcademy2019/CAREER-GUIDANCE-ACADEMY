@@ -38,6 +38,10 @@ export default function MockTestsLandingPage() {
         (currentStudent as any).seriesEnrolled)
   );
 
+  const primarySeries = db.mockSeries?.[0];
+  const displayPrice = primarySeries?.price || 499;
+  const seriesTitle = primarySeries?.name || 'T-TET 2026 Mock Test Series (15 Full-Length Mocks)';
+
   const handleEnrolClick = () => {
     if (!session || !currentStudent) {
       router.push('/login?redirect=/mock-tests');
@@ -46,9 +50,9 @@ export default function MockTestsLandingPage() {
 
     setPayTarget({
       itemType: 'mock_series',
-      itemId: 'ttet-2026',
-      title: 'T-TET 2026 Mock Test Series (15 Full-Length Mocks)',
-      fullAmount: 499,
+      itemId: primarySeries?.id || 'ttet-2026',
+      title: seriesTitle,
+      fullAmount: displayPrice,
       paymentType: 'full',
       metadata: {
         exam: 'Tripura Teachers Eligibility Test (T-TET)',
@@ -92,7 +96,7 @@ export default function MockTestsLandingPage() {
                   onClick={handleEnrolClick}
                   className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-[#ea580c] hover:bg-[#c2410c] text-white font-black text-base shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 inline-flex items-center justify-center gap-3 transition-all cursor-pointer"
                 >
-                  <Zap className="w-5 h-5" /> Enrol Now for ₹499 Only
+                  <Zap className="w-5 h-5" /> Enrol Now for ₹{displayPrice} Only
                 </button>
               )}
 
@@ -189,9 +193,9 @@ export default function MockTestsLandingPage() {
                 </span>
                 <div>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-4xl font-black text-[#0a0e2a]">₹499</span>
-                    <span className="text-sm font-semibold text-slate-400 line-through">₹1,499</span>
-                    <span className="text-xs font-bold text-emerald-600">67% OFF</span>
+                    <span className="text-4xl font-black text-[#0a0e2a]">₹{displayPrice}</span>
+                    <span className="text-sm font-semibold text-slate-400 line-through">₹{Math.max(1499, displayPrice * 2)}</span>
+                    <span className="text-xs font-bold text-emerald-600">Save 50%+</span>
                   </div>
                   <p className="text-[11px] text-slate-500 mt-1">One-time payment for all 15 tests. No renewal fees.</p>
                 </div>
@@ -226,7 +230,7 @@ export default function MockTestsLandingPage() {
                     onClick={handleEnrolClick}
                     className="w-full py-3.5 rounded-2xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white font-extrabold text-xs inline-flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer"
                   >
-                    Enrol for ₹499 <ArrowRight className="w-4 h-4" />
+                    Enrol for ₹{displayPrice} <ArrowRight className="w-4 h-4" />
                   </button>
                 )}
                 <p className="text-[10px] text-slate-400 text-center mt-2">
