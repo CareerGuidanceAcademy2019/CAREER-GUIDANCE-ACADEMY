@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Search, CreditCard, ShieldCheck, X, CheckCircle2 } from 'lucide-react';
 import { CourseCard } from '@/components/public/CourseCard';
 import { ReceiptModal } from '@/components/student/ReceiptModal';
@@ -17,6 +18,7 @@ const CATEGORIES: ('All' | CourseCategory)[] = [
 ];
 
 export default function StudentCourseCataloguePage() {
+  const searchParams = useSearchParams();
   const { db, currentStudent, enrolInCourse, joinWaitingList, showToast, submitPaymentVerification } = useCga();
   const [category, setCategory] = useState<'All' | CourseCategory>('All');
   const [modeFilter, setModeFilter] = useState<'All' | 'Offline' | 'Online'>('All');
@@ -27,6 +29,17 @@ export default function StudentCourseCataloguePage() {
   const [paymentPlan, setPaymentPlan] = useState<'Full Payment' | 'Instalment 1'>('Full Payment');
   const [payManualTarget, setPayManualTarget] = useState<PayManualTarget | null>(null);
   const [generatedReceipt, setGeneratedReceipt] = useState<FeePayment | null>(null);
+
+  useEffect(() => {
+    const enrolCourseId = searchParams.get('enrol');
+    if (enrolCourseId && !selectedCourse && !payManualTarget) {
+      const match = db.courses.find((c) => c.id === enrolCourseId);
+      if (match) {
+        setSelectedCourse(match);
+        setPaymentPlan('Full Payment');
+      }
+    }
+  }, [searchParams, db.courses, selectedCourse, payManualTarget]);
 
   if (!currentStudent) return null;
 

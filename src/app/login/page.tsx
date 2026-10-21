@@ -126,8 +126,9 @@ function LoginInner() {
       return;
     }
 
-    // Keep the selected tab honest, but allow ADMIN superuser to sign in from any tab
-    if (res.session.role !== activeTab && res.session.role !== 'ADMIN') {
+    // Keep the selected tab honest, but allow ADMIN superuser and multi-role user (Angat Saha) to sign in from any tab
+    const isMultiRoleUser = res.session.role === 'ADMIN' || res.session.email === 'angatsaha825@gmail.com';
+    if (res.session.role !== activeTab && !isMultiRoleUser) {
       await cgaService.logout();
       setBusy(false);
       const actual = TABS.find((t) => t.id === res.session!.role)?.label ?? 'another';
@@ -135,16 +136,16 @@ function LoginInner() {
       return;
     }
 
-    const next = params.get('next');
-    // If admin signs in on a specific portal tab, direct them to that portal
-    const targetRole = res.session.role === 'ADMIN' ? activeTab : res.session.role;
+    const next = params.get('next') || params.get('redirect');
+    // If multi-role user signs in on a specific portal tab, direct them to that portal
+    const targetRole = isMultiRoleUser ? activeTab : res.session.role;
     router.push(next && next.startsWith(PORTAL_PREFIX[targetRole]) ? next : PORTAL_HOME[targetRole]);
   };
 
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
-      <PublicHeader />
+      <PublicHeader variant="auth" />
 
       <main className="flex-1 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-4xl w-full grid grid-cols-1 lg:grid-cols-12 bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
@@ -304,7 +305,7 @@ function LoginInner() {
         </div>
       </main>
 
-      <PublicFooter />
+      <PublicFooter variant="auth" />
     </div>
   );
 }

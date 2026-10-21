@@ -57,7 +57,7 @@ export default function AdminActivatePage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
-      <PublicHeader />
+      <PublicHeader variant="auth" />
       <main className="flex-1 flex items-center justify-center py-12 px-4">
         <div className="max-w-lg w-full bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
           <div className="bg-[#0a0e2a] text-white p-7">
@@ -207,7 +207,7 @@ export default function AdminActivatePage() {
           )}
         </div>
       </main>
-      <PublicFooter />
+      <PublicFooter variant="auth" />
     </div>
   );
 }

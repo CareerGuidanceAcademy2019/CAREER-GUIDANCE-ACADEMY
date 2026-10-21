@@ -107,7 +107,7 @@ export default function AdminStudentsPage() {
       photo:
         'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80',
       guardianName: '',
-      address: 'Udaipur, Gomati Tripura 799114',
+      address: 'Udaipur, Gomati Tripura 799120',
       qualification: 'B.A. / B.Ed.',
       targetExam: 'Tripura TET / STGT',
       joinedDate: new Date().toISOString().split('T')[0],

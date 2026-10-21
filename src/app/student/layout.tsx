@@ -27,9 +27,10 @@ import { useCga } from '@/context/CgaContext';
 
 const STUDENT_NAV = [
   { href: '/student/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/student/my-learning', label: 'My Learning', icon: GraduationCap },
   { href: '/student/profile', label: 'My Profile', icon: User },
   { href: '/student/courses', label: 'Course Catalogue & Enrol', icon: BookOpen },
-  { href: '/student/my-courses', label: 'My Enrolled Courses', icon: GraduationCap },
+  { href: '/student/my-courses', label: 'My Enrolled Courses', icon: BookOpen },
   { href: '/student/materials', label: 'Study Materials (PDFs)', icon: FileText },
   { href: '/student/tests', label: 'Mock Tests & Rank', icon: ClipboardCheck },
   { href: '/student/fees', label: 'Fees & Ledger', icon: CreditCard },

@@ -67,7 +67,7 @@ This is a computer-generated receipt from C.G.A Digital Portal.
               </span>
               <h3 className="text-lg font-extrabold">Career Guidance Academy (C.G.A)</h3>
               <p className="text-xs text-blue-100">
-                Chanban Youth Club Rd, Udaipur, Tripura 799114
+                Chanban Youth Club Rd, Udaipur, Tripura 799120
               </p>
             </div>
           </div>

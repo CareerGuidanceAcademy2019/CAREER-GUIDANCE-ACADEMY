@@ -43,7 +43,7 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
-      <PublicHeader />
+      <PublicHeader variant="auth" />
 
       <main className="flex-1 flex items-center justify-center py-12 px-4">
         <div className="max-w-md w-full bg-white rounded-3xl shadow-xl border border-slate-200 p-8">
@@ -126,7 +126,7 @@ export default function ForgotPasswordPage() {
         </div>
       </main>
 
-      <PublicFooter />
+      <PublicFooter variant="auth" />
     </div>
   );
 }

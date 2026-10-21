@@ -45,3 +45,6 @@ cloudflared.exe
 Untitled-*.txt
 
 !.env.example
+.vercel
+.env*
+backups/

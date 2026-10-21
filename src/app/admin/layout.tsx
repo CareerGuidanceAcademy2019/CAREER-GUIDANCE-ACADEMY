@@ -24,6 +24,7 @@ import {
   RotateCcw,
   Landmark,
   Coins,
+  KeyRound,
 } from 'lucide-react';
 import { CGALogo } from '@/components/ui/CGALogo';
 import { CustomAcademicEmblemSvg, CustomArrowRightSvg } from '@/components/ui/CustomIcons';
@@ -31,6 +32,7 @@ import { useCga } from '@/context/CgaContext';
 
 const ADMIN_NAV = [
   { href: '/admin/dashboard', label: 'Admin Dashboard', icon: LayoutDashboard },
+  { href: '/admin/profile', label: 'My Profile & Security', icon: KeyRound },
   { href: '/admin/counter-enrollment', label: 'Counter Cash & Enrol', icon: Coins },
   { href: '/admin/payments', label: 'Payment Verifications', icon: CreditCard, hasBadge: true },
   { href: '/admin/fees', label: 'Fee & Defaulters', icon: CreditCard },
@@ -151,13 +153,22 @@ export default function AdminPortalLayout({ children }: { children: React.ReactN
           <CGALogo size="sm" variant="light" href="/admin/dashboard" />
         </div>
 
-        <div className="px-4 py-3 mx-4 mt-4 rounded-2xl bg-gradient-to-r from-[#0056b3]/40 to-[#ea580c]/30 border border-white/15">
-          <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-300 block">
-            Administrator Console
-          </span>
+        <Link
+          href="/admin/profile"
+          className="block px-4 py-3 mx-4 mt-4 rounded-2xl bg-gradient-to-r from-[#0056b3]/40 to-[#ea580c]/30 border border-white/15 hover:border-amber-400/50 transition-all group"
+          title="Manage Admin Profile & Security"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-300 block">
+              Administrator Console
+            </span>
+            <span className="text-[10px] text-blue-200 group-hover:text-white flex items-center gap-1 font-semibold">
+              Security &rarr;
+            </span>
+          </div>
           <p className="text-xs font-extrabold text-white truncate mt-0.5">{session.name}</p>
           <p className="text-[11px] text-blue-200 truncate">{session.email}</p>
-        </div>
+        </Link>
 
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto" aria-label="Admin Sidebar">
           {ADMIN_NAV.map((item) => {
@@ -227,7 +238,14 @@ export default function AdminPortalLayout({ children }: { children: React.ReactN
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="text-xs font-bold text-slate-600">{session.name}</span>
+            <Link
+              href="/admin/profile"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 hover:border-[#0056b3] hover:bg-slate-50 text-xs font-bold text-slate-700 transition-colors"
+              title="Manage Profile & Security"
+            >
+              <KeyRound className="w-3.5 h-3.5 text-[#ea580c]" />
+              <span>{session.name}</span>
+            </Link>
           </div>
         </header>
 

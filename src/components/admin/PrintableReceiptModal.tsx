@@ -68,7 +68,7 @@ export function PrintableReceiptModal({
   const handleDownloadTxt = () => {
     const textContent = `================================================================================
                     CAREER GUIDANCE ACADEMY (C.G.A)
-        Chanban (Behind Youthclub), Udaipur, Gomati Tripura - 799114
+        Chanban (Behind Youthclub), Udaipur, Gomati Tripura - 799120
     Phone / WhatsApp: ${PAYMENT_SETTINGS.supportPhoneWhatsapp} | Email: ${PAYMENT_SETTINGS.supportEmail}
 ================================================================================
                      OFFICIAL COUNTER MONEY RECEIPT

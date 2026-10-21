@@ -398,13 +398,13 @@ export const INITIAL_SEED_DATA: CgaDatabase = {
       landmark: 'Behind Chanban Youth Club, Near Jagannath Bari Road',
       city: 'Udaipur (Gomati District)',
       state: 'Tripura',
-      pincode: '799114',
+      pincode: '799120',
       phonePrimary: '+91-7005929189',
-      phoneSecondary: '+91 76298 82835',
+      phoneSecondary: '',
       email: 'careerguidanceacademy2019@gmail.com',
       officeHours: 'Mon – Sun: 7:30 AM to 8:00 PM',
       mapEmbedUrl:
-        'https://www.google.com/maps?q=Chanban+Youth+Club+Rd+Udaipur+Tripura+799114&output=embed',
+        'https://www.google.com/maps?q=Chanban+Youth+Club+Rd+Udaipur+Tripura+799120&output=embed',
     },
         standalonePackages: [
       {

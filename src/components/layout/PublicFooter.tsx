@@ -2,13 +2,49 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { MapPin, Phone, Mail, Clock, ArrowUpRight, Shield, GraduationCap } from 'lucide-react';
 import { CGALogo } from '@/components/ui/CGALogo';
 import { useCga } from '@/context/CgaContext';
 
-export function PublicFooter() {
+interface PublicFooterProps {
+  variant?: 'default' | 'auth';
+}
+
+export function PublicFooter({ variant = 'default' }: PublicFooterProps) {
+  const pathname = usePathname();
+  const isAuth = variant === 'auth' || pathname === '/login';
   const { db } = useCga();
   const { contact } = db.siteContent;
+
+  if (isAuth) {
+    return (
+      <footer className="bg-[#0a0e2a] text-slate-300 border-t-2 border-[#0056b3] py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-400">
+          <div className="flex flex-col sm:flex-row items-center gap-3 text-center sm:text-left">
+            <CGALogo size="sm" variant="light" />
+            <div>
+              <p className="font-semibold text-slate-200">Career Guidance Academy (C.G.A) Portal</p>
+              <p className="text-[11px] text-slate-400">
+                Offline Campus: Chanban (Behind Youthclub), Udaipur, Gomati Tripura — PIN: {contact.pincode || '799120'}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-4 text-[11px]">
+            <Link href="/privacy-policy" className="hover:text-white transition-colors">
+              Privacy Policy
+            </Link>
+            <span>•</span>
+            <Link href="/terms-and-conditions" className="hover:text-white transition-colors">
+              Terms & Conditions
+            </Link>
+            <span>•</span>
+            <span>© {new Date().getFullYear()} C.G.A Udaipur. All rights reserved.</span>
+          </div>
+        </div>
+      </footer>
+    );
+  }
 
   return (
     <footer className="bg-[#0a0e2a] text-slate-300 border-t-4 border-[#0056b3]">
@@ -112,12 +148,14 @@ export function PublicFooter() {
             <ul className="space-y-3 text-sm">
               <li className="flex items-start gap-2.5">
                 <MapPin className="w-4 h-4 text-[#ea580c] shrink-0 mt-1" />
-                <span>{contact.address}</span>
+                <span>{contact.address} (PIN: {contact.pincode || '799120'})</span>
               </li>
               <li className="flex items-center gap-2.5">
                 <Phone className="w-4 h-4 text-[#ea580c] shrink-0" />
                 <span>
-                  {contact.phonePrimary} / {contact.phoneSecondary}
+                  {contact.phoneSecondary && contact.phoneSecondary.trim() && contact.phoneSecondary !== contact.phonePrimary
+                    ? `${contact.phonePrimary} / ${contact.phoneSecondary}`
+                    : contact.phonePrimary}
                 </span>
               </li>
               <li className="flex items-center gap-2.5">

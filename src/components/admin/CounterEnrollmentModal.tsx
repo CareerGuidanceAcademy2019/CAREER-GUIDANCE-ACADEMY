@@ -20,6 +20,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
+import { cgaService } from '@/services/cgaService';
 import { Course, StudyMaterial, StudentProfile, FeePayment } from '@/data/initialSeedData';
 import { PAYMENT_SETTINGS } from '@/config/paymentSettings';
 import { PrintableReceiptModal, PrintableReceiptData } from '@/components/admin/PrintableReceiptModal';
@@ -48,11 +49,37 @@ export function CounterEnrollmentModal({ onClose, onSuccess }: CounterEnrollment
   const [newTargetExam, setNewTargetExam] = useState('Tripura TET (T-TET)');
   const [newQualification, setNewQualification] = useState('B.A / B.Sc / B.Ed');
 
+  // Mode: Structured vs Manual Receipt Entry
+  const [entryMode, setEntryMode] = useState<'standard' | 'manual'>('standard');
+
+  // Manual Receipt State
+  const [manualStudentName, setManualStudentName] = useState('');
+  const [manualStudentCode, setManualStudentCode] = useState(
+    `CGA-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`
+  );
+  const [manualPhone, setManualPhone] = useState('');
+  const [manualGuardian, setManualGuardian] = useState('');
+  const [manualAddress, setManualAddress] = useState('Udaipur, Gomati Tripura');
+  const [manualItemTitle, setManualItemTitle] = useState(
+    db.mockSeries[0]?.name ? `${db.mockSeries[0].name} Package` : 'Tripura TET Mock Test Series'
+  );
+  const [manualBatch, setManualBatch] = useState('Counter Batch 2026');
+  const [manualTotalFee, setManualTotalFee] = useState<string>('499');
+  const [manualPaidAmount, setManualPaidAmount] = useState<string>('499');
+  const [manualPaymentMode, setManualPaymentMode] = useState<string>('Cash at Counter');
+  const [manualRefUtr, setManualRefUtr] = useState<string>('');
+  const [manualRemarks, setManualRemarks] = useState<string>(
+    'Physical counter receipt issued at Udaipur center.'
+  );
+
   // Section / Item Type Selection
   const [sectionType, setSectionType] = useState<'course' | 'mock_series' | 'material'>('course');
 
   // Item selections
   const [selectedCourseId, setSelectedCourseId] = useState<string>(db.courses[0]?.id || '');
+  const [selectedSeriesId, setSelectedSeriesId] = useState<string>(
+    db.mockSeries[0]?.id || 'series-ttet-paper1'
+  );
   const [coursePlan, setCoursePlan] = useState<'Full Payment' | 'Instalment 1'>('Full Payment');
   const [selectedMaterialId, setSelectedMaterialId] = useState<string>(db.studyMaterials[0]?.id || '');
 
@@ -69,6 +96,11 @@ export function CounterEnrollmentModal({ onClose, onSuccess }: CounterEnrollment
   const activeCourse = useMemo(() => {
     return db.courses.find((c) => c.id === selectedCourseId) || db.courses[0];
   }, [db.courses, selectedCourseId]);
+
+  // Active Mock Series Details
+  const activeSeries = useMemo(() => {
+    return db.mockSeries.find((s) => s.id === selectedSeriesId) || db.mockSeries[0];
+  }, [db.mockSeries, selectedSeriesId]);
 
   // Active Material Details
   const activeMaterial = useMemo(() => {
@@ -101,21 +133,21 @@ export function CounterEnrollmentModal({ onClose, onSuccess }: CounterEnrollment
       return coursePlan === 'Full Payment' ? activeCourse.price : activeCourse.firstInstalment;
     }
     if (sectionType === 'mock_series') {
-      return 499;
+      return activeSeries?.price || 499;
     }
     if (sectionType === 'material') {
       return (activeMaterial as any)?.price || 199;
     }
     return 0;
-  }, [sectionType, activeCourse, coursePlan, activeMaterial]);
+  }, [sectionType, activeCourse, coursePlan, activeSeries, activeMaterial]);
 
   // Total Item Fee
   const totalItemFee = useMemo(() => {
     if (sectionType === 'course') return activeCourse?.price || 0;
-    if (sectionType === 'mock_series') return 499;
+    if (sectionType === 'mock_series') return activeSeries?.price || 499;
     if (sectionType === 'material') return (activeMaterial as any)?.price || 199;
     return 0;
-  }, [sectionType, activeCourse, activeMaterial]);
+  }, [sectionType, activeCourse, activeSeries, activeMaterial]);
 
   // Payable Amount (custom or standard)
   const payableAmount = customAmount !== '' ? parseFloat(customAmount) || 0 : standardFee;
@@ -212,18 +244,26 @@ export function CounterEnrollmentModal({ onClose, onSuccess }: CounterEnrollment
           nextDueDate = due.toISOString().split('T')[0];
         }
       } else if (sectionType === 'mock_series') {
-        itemTitle = 'Tripura TET (T-TET) 2026 Comprehensive Mock Test Series (15 Mocks)';
+        itemTitle = activeSeries?.name || 'Tripura TET Mock Test Series';
+        batchName = activeSeries?.batchLabel || 'Online Mock Series';
       } else if (sectionType === 'material' && activeMaterial) {
         itemTitle = `${activeMaterial.title} (${activeMaterial.courseName || 'Notes PDF'})`;
       }
 
       // 2. Record in fee_payments
+      const targetCourseId =
+        sectionType === 'course'
+          ? selectedCourseId
+          : sectionType === 'mock_series'
+          ? (activeSeries?.id || selectedSeriesId)
+          : selectedMaterialId;
+
       const newFeePayment: FeePayment = {
         id: `pay-${Date.now()}`,
         receiptNo,
         studentId: candidateId,
         studentName: candidateName,
-        courseId: sectionType === 'course' ? selectedCourseId : sectionType === 'mock_series' ? 'ttet-2026' : selectedMaterialId,
+        courseId: targetCourseId,
         courseName: itemTitle,
         amount: payableAmount,
         paymentMode: paymentMode as any,
@@ -234,6 +274,24 @@ export function CounterEnrollmentModal({ onClose, onSuccess }: CounterEnrollment
         reviewedBy: session?.name || 'Administrator (Admissions Desk)',
         reviewedAt: new Date().toISOString(),
       };
+
+      try {
+        await cgaService.submitPaymentVerification({
+          studentId: candidateId,
+          studentName: candidateName,
+          courseId: targetCourseId,
+          courseName: itemTitle,
+          amount: payableAmount,
+          paymentMode: paymentMode.includes('UPI')
+            ? 'UPI'
+            : paymentMode.includes('Cash')
+            ? 'Cash at Counter'
+            : 'Debit/Credit Card',
+          paymentType: sectionType === 'course' ? (coursePlan === 'Full Payment' ? 'Full Payment' : 'Instalment 1') : 'Full Payment',
+          utr: receiptNo,
+          remarks: newFeePayment.remarks,
+        });
+      } catch {}
 
       try {
         const storedFee = localStorage.getItem('cga_custom_payments');
@@ -305,6 +363,63 @@ export function CounterEnrollmentModal({ onClose, onSuccess }: CounterEnrollment
     }
   };
 
+  const handleGenerateManualReceipt = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualStudentName.trim() || manualStudentName.trim().length < 3) {
+      showToast('Name Required', 'Please enter candidate full name (minimum 3 characters).', 'error');
+      return;
+    }
+    const receiptNo = `${PAYMENT_SETTINGS.receiptPrefix}${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const total = parseFloat(manualTotalFee) || 0;
+    const received = parseFloat(manualPaidAmount) || 0;
+    const due = Math.max(0, total - received);
+
+    const issueDate = new Date().toISOString().split('T')[0];
+    const printableData: PrintableReceiptData = {
+      receiptNo,
+      date: issueDate,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      studentId: `manual-${Date.now()}`,
+      studentName: manualStudentName.trim(),
+      studentCode: manualStudentCode.trim(),
+      studentPhone: manualPhone.trim() || 'N/A',
+      guardianName: manualGuardian.trim() || 'Parent / Guardian',
+      address: manualAddress.trim() || 'Udaipur, Gomati Tripura',
+      itemType: 'course',
+      itemTitle: manualItemTitle.trim(),
+      batchName: manualBatch.trim() || 'Counter Admission',
+      paymentPlan: due > 0 ? 'Part Payment / Instalment' : 'Full Payment',
+      totalFee: total,
+      amountReceived: received,
+      dueAmount: due,
+      nextDueDate: due > 0 ? new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0] : undefined,
+      paymentMode: manualPaymentMode,
+      cashierName: session?.name || 'Administrator (Counter Terminal, Udaipur)',
+      remarks: manualRemarks || (manualRefUtr ? `Ref: ${manualRefUtr}` : 'Physical receipt issued at counter.'),
+    };
+
+    try {
+      await cgaService.submitPaymentVerification({
+        studentId: printableData.studentId,
+        studentName: printableData.studentName,
+        courseId: 'manual-receipt-entry',
+        courseName: printableData.itemTitle,
+        amount: received,
+        paymentMode: manualPaymentMode.includes('UPI')
+          ? 'UPI'
+          : manualPaymentMode.includes('Cash')
+          ? 'Cash at Counter'
+          : 'Debit/Credit Card',
+        paymentType: due > 0 ? 'Instalment 1' : 'Full Payment',
+        utr: manualRefUtr || receiptNo,
+        remarks: printableData.remarks,
+      });
+    } catch {}
+
+    setGeneratedReceipt(printableData);
+    showToast('Receipt Generated', `Official receipt ${receiptNo} generated for ${manualStudentName}. Ready to print.`, 'success');
+  };
+
   return (
     <>
       <div
@@ -337,6 +452,233 @@ export function CounterEnrollmentModal({ onClose, onSuccess }: CounterEnrollment
             </button>
           </div>
 
+          {/* Top Mode Selector: Standard vs Manual Receipt Entry */}
+          <div className="bg-slate-50 border-b border-slate-200 px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              Terminal Mode:
+            </span>
+            <div className="inline-flex p-1 rounded-xl bg-slate-200/80 gap-1">
+              <button
+                type="button"
+                onClick={() => setEntryMode('standard')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  entryMode === 'standard'
+                    ? 'bg-[#0056b3] text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Standard Enrolment Flow
+              </button>
+              <button
+                type="button"
+                onClick={() => setEntryMode('manual')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  entryMode === 'manual'
+                    ? 'bg-[#ea580c] text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Manual Receipt Entry (Fill Any Fields)</span>
+              </button>
+            </div>
+          </div>
+
+          {entryMode === 'manual' ? (
+            /* ==================== MANUAL RECEIPT FILLING MODE ==================== */
+            <form onSubmit={handleGenerateManualReceipt} className="p-6 sm:p-8 space-y-6 max-h-[80vh] overflow-y-auto">
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-900 space-y-1">
+                <span className="font-extrabold text-amber-950 block">Manual Receipt Generator</span>
+                <p>
+                  Fill any candidate details, item name, and fee amount manually. Clicking generate will create an
+                  official C.G.A receipt with receipt number, watermark, and print layout ready for candidate handover.
+                </p>
+              </div>
+
+              {/* 1. Candidate Details */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-extrabold text-[#0a0e2a] flex items-center gap-2 pb-2 border-b border-slate-100">
+                  <UserPlus className="w-4 h-4 text-[#0056b3]" /> 1. Candidate Details (Manual Entry)
+                </h3>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 block">Candidate Full Name *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Subham Debnath"
+                      value={manualStudentName}
+                      onChange={(e) => setManualStudentName(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 font-bold text-slate-900 focus:outline-none focus:border-[#0056b3]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 block">Student Code / ID Number *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. CGA-2026-042"
+                      value={manualStudentCode}
+                      onChange={(e) => setManualStudentCode(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono font-bold text-slate-900 focus:outline-none focus:border-[#0056b3]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 block">Mobile / WhatsApp Number</label>
+                    <input
+                      type="tel"
+                      placeholder="10-digit mobile number"
+                      value={manualPhone}
+                      onChange={(e) => setManualPhone(e.target.value.replace(/\D/g, ''))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono text-slate-900 focus:outline-none focus:border-[#0056b3]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 block">Father / Guardian Name</label>
+                    <input
+                      type="text"
+                      placeholder="Parent or Guardian name"
+                      value={manualGuardian}
+                      onChange={(e) => setManualGuardian(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-slate-900 focus:outline-none focus:border-[#0056b3]"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2 space-y-1">
+                    <label className="font-bold text-slate-700 block">Residential Address</label>
+                    <input
+                      type="text"
+                      placeholder="Residential address"
+                      value={manualAddress}
+                      onChange={(e) => setManualAddress(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-slate-900 focus:outline-none focus:border-[#0056b3]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Course / Mock Test Item Details */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-extrabold text-[#0a0e2a] flex items-center gap-2 pb-2 border-b border-slate-100">
+                  <BookOpen className="w-4 h-4 text-[#0056b3]" /> 2. Item Description & Fee Structure
+                </h3>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                  <div className="sm:col-span-2 space-y-1">
+                    <label className="font-bold text-slate-700 block">Item / Course / Mock Test Name *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Tripura TET Paper-II Daily Mock Series + Printed Study Material"
+                      value={manualItemTitle}
+                      onChange={(e) => setManualItemTitle(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 font-bold text-slate-900 focus:outline-none focus:border-[#0056b3]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 block">Batch / Academic Section</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Regular Batch 2026 / Weekend CBT"
+                      value={manualBatch}
+                      onChange={(e) => setManualBatch(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-slate-900 focus:outline-none focus:border-[#0056b3]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 block">Payment Mode *</label>
+                    <select
+                      value={manualPaymentMode}
+                      onChange={(e) => setManualPaymentMode(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-bold text-slate-900 focus:outline-none focus:border-[#0056b3]"
+                    >
+                      <option value="Cash at Counter">Cash at Counter</option>
+                      <option value="UPI / QR Payment">UPI / QR Payment</option>
+                      <option value="Bank Transfer (NEFT/IMPS)">Bank Transfer (NEFT/IMPS)</option>
+                      <option value="Cheque / DD">Cheque / Demand Draft</option>
+                      <option value="Debit / Credit Card">Debit / Credit Card (POS)</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 block">Total Course / Test Fee (₹) *</label>
+                    <input
+                      type="number"
+                      min={0}
+                      required
+                      value={manualTotalFee}
+                      onChange={(e) => setManualTotalFee(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 font-black text-slate-900 focus:outline-none focus:border-[#0056b3]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 block">Amount Collected Now (₹) *</label>
+                    <input
+                      type="number"
+                      min={0}
+                      required
+                      value={manualPaidAmount}
+                      onChange={(e) => setManualPaidAmount(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-emerald-300 bg-emerald-50/50 font-black text-emerald-800 focus:outline-none focus:border-emerald-600"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 block">Transaction Reference / UTR / Cheque No.</label>
+                    <input
+                      type="text"
+                      placeholder="Optional reference number"
+                      value={manualRefUtr}
+                      onChange={(e) => setManualRefUtr(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono text-slate-900 focus:outline-none focus:border-[#0056b3]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 block">Balance Pending Due (₹)</label>
+                    <div className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 font-black text-slate-700">
+                      ₹{Math.max(0, (parseFloat(manualTotalFee) || 0) - (parseFloat(manualPaidAmount) || 0)).toLocaleString('en-IN')}
+                    </div>
+                  </div>
+
+                  <div className="sm:col-span-2 space-y-1">
+                    <label className="font-bold text-slate-700 block">Receipt Remarks / Notes</label>
+                    <input
+                      type="text"
+                      value={manualRemarks}
+                      onChange={(e) => setManualRemarks(e.target.value)}
+                      placeholder="Printed notes issued at counter, etc."
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-slate-900 focus:outline-none focus:border-[#0056b3]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Buttons */}
+              <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#ea580c] hover:bg-[#c2410c] text-white text-xs font-extrabold shadow-md cursor-pointer transition-all"
+                >
+                  <Printer className="w-4 h-4" /> Generate & Print Official Receipt
+                </button>
+              </div>
+            </form>
+          ) : (
           <form onSubmit={handleSubmitEnrollment} className="p-6 sm:p-8 space-y-6 max-h-[80vh] overflow-y-auto">
             {/* Step 1: Candidate Selection Mode */}
             <div className="space-y-4">
@@ -616,13 +958,44 @@ export function CounterEnrollmentModal({ onClose, onSuccess }: CounterEnrollment
               )}
 
               {sectionType === 'mock_series' && (
-                <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 text-xs space-y-1.5">
-                  <span className="font-extrabold text-amber-950 block">
-                    Tripura TET (T-TET) 2026 Test Series Package
-                  </span>
-                  <p className="text-amber-900 leading-relaxed">
-                    Grants instant access to 15 full-syllabus online mock tests, solution keys, state percentile analytics, and offline paper review at Udaipur center. Standard flat fee: <strong>₹499</strong>.
-                  </p>
+                <div className="space-y-3 p-4 rounded-2xl bg-amber-50/70 border border-amber-200 text-xs">
+                  <div className="space-y-1">
+                    <label className="font-bold text-amber-950 block">Select Mock Test Package / Series *</label>
+                    <select
+                      value={selectedSeriesId}
+                      onChange={(e) => setSelectedSeriesId(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                    >
+                      {db.mockSeries.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({s.classRange}) — Flat Fee: ₹{s.price} (Starts: {s.startsOn})
+                        </option>
+                      ))}
+                      {db.mockTests.filter(t => t.status === 'Published').map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.title} ({t.batchName}) — CBT Mock Test
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {activeSeries && (
+                    <div className="space-y-1 text-amber-900 text-xs pt-1">
+                      <p className="font-semibold text-amber-950">
+                        {activeSeries.name} ({activeSeries.classRange})
+                      </p>
+                      <p className="text-[11px] text-amber-800 leading-relaxed">
+                        {activeSeries.description ||
+                          'Full-syllabus online mock tests, solution keys, state percentile analytics, and offline paper review at Udaipur center.'}
+                      </p>
+                      <div className="flex items-center gap-2 font-bold text-xs pt-1">
+                        <span className="px-2 py-0.5 rounded bg-amber-200/80 text-amber-900">
+                          Package Fee: ₹{activeSeries.price}
+                        </span>
+                        <span className="text-amber-800">Batch: {activeSeries.batchLabel}</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -744,6 +1117,7 @@ export function CounterEnrollmentModal({ onClose, onSuccess }: CounterEnrollment
               </button>
             </div>
           </form>
+          )}
         </div>
       </div>
 

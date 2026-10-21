@@ -1,9 +1,29 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { User, Save, CheckCircle2, GraduationCap, MapPin, Phone, Mail, ShieldAlert, Trash2, X, AlertCircle } from 'lucide-react';
+import {
+  User,
+  Save,
+  CheckCircle2,
+  GraduationCap,
+  Phone,
+  Mail,
+  ShieldCheck,
+  ShieldAlert,
+  Trash2,
+  X,
+  AlertCircle,
+  KeyRound,
+  Eye,
+  EyeOff,
+  Lock,
+  Smartphone,
+  ExternalLink,
+} from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
 import { cgaService } from '@/services/cgaService';
+import { PasswordStrengthMeter } from '@/components/ui/PasswordStrengthMeter';
+import { evaluatePasswordStrength } from '@/lib/passwordPolicy';
 
 const AVATAR_OPTIONS = [
   'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80',
@@ -13,15 +33,40 @@ const AVATAR_OPTIONS = [
 ];
 
 export default function StudentProfilePage() {
-  const { currentStudent, updateStudentProfile } = useCga();
+  const { currentStudent, updateStudentProfile, changePassword, changeEmail, changePhone, showToast } = useCga();
 
   const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
   const [guardianName, setGuardianName] = useState('');
   const [address, setAddress] = useState('');
   const [qualification, setQualification] = useState('');
   const [targetExam, setTargetExam] = useState('');
   const [photo, setPhoto] = useState('');
+
+  // Verified Phone Change Modal State
+  const [showPhoneModal, setShowPhoneModal] = useState(false);
+  const [newPhone, setNewPhone] = useState('');
+  const [phonePassword, setPhonePassword] = useState('');
+  const [showPhonePw, setShowPhonePw] = useState(false);
+  const [phoneError, setPhoneError] = useState('');
+  const [phoneBusy, setPhoneBusy] = useState(false);
+
+  // Verified Email Change Modal State
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [emailPassword, setEmailPassword] = useState('');
+  const [showEmailPw, setShowEmailPw] = useState(false);
+  const [emailError, setEmailError] = useState('');
+  const [emailBusy, setEmailBusy] = useState(false);
+
+  // Verified Password Change Modal State
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPw, setShowCurrentPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordBusy, setPasswordBusy] = useState(false);
 
   // Account Deletion States (DPDP Act 2023)
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -34,7 +79,6 @@ export default function StudentProfilePage() {
   useEffect(() => {
     if (currentStudent) {
       setName(currentStudent.name);
-      setPhone(currentStudent.phone);
       setGuardianName(currentStudent.guardianName);
       setAddress(currentStudent.address);
       setQualification(currentStudent.qualification);
@@ -45,12 +89,11 @@ export default function StudentProfilePage() {
 
   if (!currentStudent) return null;
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSavePersonal = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
     updateStudentProfile(currentStudent.id, {
       name: name.trim(),
-      phone: phone.trim(),
       guardianName: guardianName.trim(),
       address: address.trim(),
       qualification: qualification.trim(),
@@ -59,13 +102,101 @@ export default function StudentProfilePage() {
     });
   };
 
+  const handleUpdatePhone = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPhoneError('');
+    if (!/^[6-9]\d{9}$/.test(newPhone.trim())) {
+      setPhoneError('Please enter a valid 10-digit Indian mobile number.');
+      return;
+    }
+    if (!phonePassword) {
+      setPhoneError('Please enter your current password for security verification.');
+      return;
+    }
+
+    setPhoneBusy(true);
+    const res = await changePhone(phonePassword, newPhone.trim());
+    setPhoneBusy(false);
+
+    if (!res.success) {
+      setPhoneError(res.error || 'Failed to update phone number.');
+      return;
+    }
+
+    setShowPhoneModal(false);
+    setNewPhone('');
+    setPhonePassword('');
+  };
+
+  const handleUpdateEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setEmailError('');
+    if (!newEmail.trim() || !newEmail.includes('@')) {
+      setEmailError('Please enter a valid email address.');
+      return;
+    }
+    if (!emailPassword) {
+      setEmailError('Please enter your current password for security verification.');
+      return;
+    }
+
+    setEmailBusy(true);
+    const res = await changeEmail(emailPassword, newEmail.trim());
+    setEmailBusy(false);
+
+    if (!res.success) {
+      setEmailError(res.error || 'Failed to update email address.');
+      return;
+    }
+
+    setShowEmailModal(false);
+    setNewEmail('');
+    setEmailPassword('');
+  };
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError('');
+
+    if (!currentPassword) {
+      setPasswordError('Please enter your current password.');
+      return;
+    }
+    if (newPassword.length < 8) {
+      setPasswordError('New password must be at least 8 characters long.');
+      return;
+    }
+    const evalRes = evaluatePasswordStrength(newPassword);
+    if (!evalRes.isValid && newPassword.length < 10) {
+      setPasswordError(evalRes.feedback[0] || 'Please create a stronger password.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('New password and confirm password do not match.');
+      return;
+    }
+
+    setPasswordBusy(true);
+    const res = await changePassword(currentPassword, newPassword);
+    setPasswordBusy(false);
+
+    if (!res.success) {
+      setPasswordError(res.error || 'Failed to update password.');
+      return;
+    }
+
+    setShowPasswordModal(false);
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+  };
+
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-extrabold text-[#0a0e2a]">My Student Profile</h1>
+        <h1 className="text-2xl font-extrabold text-[#0a0e2a]">My Student Profile &amp; Security</h1>
         <p className="text-xs sm:text-sm text-slate-600 mt-1">
-          View and update your personal details, profile photo, contact info, and enrolled C.G.A
-          batches.
+          Manage your personal information, enrolled batches, and verified security credentials (phone, email &amp; password).
         </p>
       </div>
 
@@ -111,35 +242,155 @@ export default function StudentProfilePage() {
             <h3 className="text-base font-extrabold text-[#0a0e2a] flex items-center gap-2">
               <GraduationCap className="w-5 h-5 text-[#0056b3]" /> Enrolled Batches
             </h3>
-            {currentStudent.enrollments.map((enr) => (
-              <div
-                key={enr.courseId}
-                className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs space-y-1"
-              >
-                <span className="font-extrabold text-[#0056b3]">{enr.batchName}</span>
-                <p className="font-bold text-slate-900">{enr.courseName}</p>
-                <p className="text-slate-500">Faculty: {enr.facultyName}</p>
-              </div>
-            ))}
+            {currentStudent.enrollments.length === 0 ? (
+              <p className="text-xs text-slate-500">No batch enrollments recorded yet.</p>
+            ) : (
+              currentStudent.enrollments.map((enr) => (
+                <div
+                  key={enr.courseId}
+                  className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs space-y-1"
+                >
+                  <span className="font-extrabold text-[#0056b3]">{enr.batchName}</span>
+                  <p className="font-bold text-slate-900">{enr.courseName}</p>
+                  <p className="text-slate-500">Faculty: {enr.facultyName}</p>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
-        {/* Right Form: Editable Profile Details */}
-        <div className="lg:col-span-8">
+        {/* Right Form: Personal Details & Security Credentials */}
+        <div className="lg:col-span-8 space-y-8">
+          {/* Section 1: Security & Verified Credentials */}
+          <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-2xs space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <span className="text-[11px] font-black uppercase tracking-wider text-[#0056b3] block">
+                  Security &amp; Account Protection
+                </span>
+                <h2 className="text-lg font-extrabold text-[#0a0e2a] mt-0.5">
+                  Verified Contact &amp; Login Credentials
+                </h2>
+              </div>
+              <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200 inline-flex items-center gap-1">
+                <ShieldCheck className="w-3.5 h-3.5" /> Identity Protected
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-500">
+              To prevent unauthorized changes, any update to your registered phone, email, or password requires identity verification with your current password.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Phone Card */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col justify-between space-y-3">
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5">
+                      <Smartphone className="w-3.5 h-3.5 text-[#0056b3]" /> Mobile Number
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                      Verified
+                    </span>
+                  </div>
+                  <p className="text-sm font-extrabold text-[#0a0e2a] tracking-wide pt-1">
+                    {currentStudent.phone || 'Not Set'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  id="student-change-phone-btn"
+                  onClick={() => {
+                    setPhoneError('');
+                    setNewPhone(currentStudent.phone || '');
+                    setPhonePassword('');
+                    setShowPhoneModal(true);
+                  }}
+                  className="w-full py-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-[#0056b3] font-bold text-xs cursor-pointer shadow-2xs transition-all"
+                >
+                  Verify &amp; Change Phone
+                </button>
+              </div>
+
+              {/* Email Card */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col justify-between space-y-3">
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5">
+                      <Mail className="w-3.5 h-3.5 text-[#0056b3]" /> Email Address
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                      Verified
+                    </span>
+                  </div>
+                  <p className="text-sm font-extrabold text-[#0a0e2a] truncate pt-1" title={currentStudent.email}>
+                    {currentStudent.email}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  id="student-change-email-btn"
+                  onClick={() => {
+                    setEmailError('');
+                    setNewEmail(currentStudent.email);
+                    setEmailPassword('');
+                    setShowEmailModal(true);
+                  }}
+                  className="w-full py-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-[#0056b3] font-bold text-xs cursor-pointer shadow-2xs transition-all"
+                >
+                  Verify &amp; Change Email
+                </button>
+              </div>
+
+              {/* Password Card */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col justify-between space-y-3">
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5">
+                      <KeyRound className="w-3.5 h-3.5 text-[#ea580c]" /> Account Password
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[10px] font-bold">
+                      Protected
+                    </span>
+                  </div>
+                  <p className="text-sm font-extrabold text-[#0a0e2a] pt-1">
+                    ••••••••••••
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  id="student-change-password-btn"
+                  onClick={() => {
+                    setPasswordError('');
+                    setCurrentPassword('');
+                    setNewPassword('');
+                    setConfirmPassword('');
+                    setShowPasswordModal(true);
+                  }}
+                  className="w-full py-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-[#ea580c] font-bold text-xs cursor-pointer shadow-2xs transition-all"
+                >
+                  Change Password
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 2: Personal & Academic Details Form */}
           <form
-            onSubmit={handleSave}
+            onSubmit={handleSavePersonal}
             className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-2xs space-y-5"
           >
             <h2 className="text-lg font-extrabold text-[#0a0e2a] border-b border-slate-100 pb-3">
-              Edit Personal & Academic Details
+              Personal &amp; Academic Information
             </h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                <label htmlFor="prof-name" className="block text-xs font-bold text-slate-700 mb-1.5">
                   Student Full Name
                 </label>
                 <input
+                  id="prof-name"
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -148,34 +399,11 @@ export default function StudentProfilePage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Registered Email (Read-Only)
+                <label htmlFor="prof-guardian" className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Parent / Guardian Name
                 </label>
                 <input
-                  type="email"
-                  value={currentStudent.email}
-                  disabled
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-100 text-slate-500 text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Mobile / WhatsApp Number
-                </label>
-                <input
-                  type="text"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Father / Mother / Guardian Name
-                </label>
-                <input
+                  id="prof-guardian"
                   type="text"
                   value={guardianName}
                   onChange={(e) => setGuardianName(e.target.value)}
@@ -184,10 +412,11 @@ export default function StudentProfilePage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                <label htmlFor="prof-qual" className="block text-xs font-bold text-slate-700 mb-1.5">
                   Educational Qualification / Class
                 </label>
                 <input
+                  id="prof-qual"
                   type="text"
                   value={qualification}
                   onChange={(e) => setQualification(e.target.value)}
@@ -196,10 +425,11 @@ export default function StudentProfilePage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Target Examination Wing
+                <label htmlFor="prof-exam" className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Target Competitive Examination
                 </label>
                 <input
+                  id="prof-exam"
                   type="text"
                   value={targetExam}
                   onChange={(e) => setTargetExam(e.target.value)}
@@ -209,10 +439,11 @@ export default function StudentProfilePage() {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+              <label htmlFor="prof-address" className="block text-xs font-bold text-slate-700 mb-1.5">
                 Residential Address (Udaipur / Tripura)
               </label>
               <textarea
+                id="prof-address"
                 rows={2}
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
@@ -223,15 +454,16 @@ export default function StudentProfilePage() {
             <div className="pt-2 flex justify-end">
               <button
                 type="submit"
+                id="prof-save-personal-btn"
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white font-bold text-xs shadow-sm cursor-pointer"
               >
-                <Save className="w-4 h-4" /> Save Profile Changes
+                <Save className="w-4 h-4" /> Save Personal Details
               </button>
             </div>
           </form>
 
           {/* Privacy & Account Deletion Section (DPDP Act 2023) */}
-          <div className="mt-8 bg-white rounded-3xl border border-red-100 p-6 shadow-2xs space-y-4">
+          <div className="bg-white rounded-3xl border border-red-100 p-6 shadow-2xs space-y-4">
             <div className="flex items-start justify-between gap-4">
               <div className="space-y-1">
                 <span className="text-[11px] font-bold text-red-600 uppercase tracking-wider block">
@@ -256,126 +488,402 @@ export default function StudentProfilePage() {
         </div>
       </div>
 
-      {/* Account Deletion Request Modal */}
+      {/* ==================== MODAL: CHANGE MOBILE NUMBER (VERIFIED) ==================== */}
+      {showPhoneModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 sm:p-7 shadow-2xl space-y-4 animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Smartphone className="w-5 h-5 text-[#0056b3]" />
+                <h3 className="font-extrabold text-base text-[#0a0e2a]">Change Mobile Number</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPhoneModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-blue-50 border border-blue-200 text-xs text-blue-900 leading-relaxed">
+              <span className="font-bold block mb-0.5">Verification Required:</span>
+              Enter your new 10-digit mobile number and confirm with your current account password to verify your identity.
+            </div>
+
+            {phoneError && (
+              <div role="alert" className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs font-semibold text-[#dc2626] flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{phoneError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleUpdatePhone} className="space-y-4">
+              <div>
+                <label htmlFor="verify-new-phone" className="block text-xs font-bold text-slate-700 mb-1">
+                  New 10-Digit Mobile Number
+                </label>
+                <input
+                  id="verify-new-phone"
+                  type="tel"
+                  maxLength={10}
+                  value={newPhone}
+                  onChange={(e) => setNewPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="e.g. 98XXXXXXXX"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 font-semibold text-sm focus:ring-2 focus:ring-[#0056b3]"
+                  required
+                />
+              </div>
+
+              <div>
+                <label htmlFor="verify-phone-password" className="block text-xs font-bold text-slate-700 mb-1">
+                  Current Account Password (Verification)
+                </label>
+                <div className="relative">
+                  <input
+                    id="verify-phone-password"
+                    type={showPhonePw ? 'text' : 'password'}
+                    value={phonePassword}
+                    onChange={(e) => setPhonePassword(e.target.value)}
+                    placeholder="Enter your current password"
+                    className="w-full pl-3.5 pr-10 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-[#0056b3]"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPhonePw((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    {showPhonePw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowPhoneModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  id="submit-phone-update-btn"
+                  type="submit"
+                  disabled={phoneBusy}
+                  className="px-5 py-2 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] disabled:opacity-60 text-white font-extrabold text-xs shadow-md cursor-pointer inline-flex items-center gap-1.5"
+                >
+                  {phoneBusy ? 'Verifying…' : 'Verify & Update Mobile'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== MODAL: CHANGE EMAIL ADDRESS (VERIFIED) ==================== */}
+      {showEmailModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 sm:p-7 shadow-2xl space-y-4 animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Mail className="w-5 h-5 text-[#0056b3]" />
+                <h3 className="font-extrabold text-base text-[#0a0e2a]">Change Registered Email</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEmailModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900 leading-relaxed">
+              <span className="font-bold block mb-0.5">Verification Protocol:</span>
+              Enter your new email address and verify with your current password. A confirmation link will be dispatched to the new email to finalize the update.
+            </div>
+
+            {emailError && (
+              <div role="alert" className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs font-semibold text-[#dc2626] flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{emailError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleUpdateEmail} className="space-y-4">
+              <div>
+                <label htmlFor="verify-new-email" className="block text-xs font-bold text-slate-700 mb-1">
+                  New Email Address
+                </label>
+                <input
+                  id="verify-new-email"
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-[#0056b3]"
+                  required
+                />
+              </div>
+
+              <div>
+                <label htmlFor="verify-email-password" className="block text-xs font-bold text-slate-700 mb-1">
+                  Current Account Password (Verification)
+                </label>
+                <div className="relative">
+                  <input
+                    id="verify-email-password"
+                    type={showEmailPw ? 'text' : 'password'}
+                    value={emailPassword}
+                    onChange={(e) => setEmailPassword(e.target.value)}
+                    placeholder="Enter your current password"
+                    className="w-full pl-3.5 pr-10 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-[#0056b3]"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowEmailPw((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    {showEmailPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowEmailModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  id="submit-email-update-btn"
+                  type="submit"
+                  disabled={emailBusy}
+                  className="px-5 py-2 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] disabled:opacity-60 text-white font-extrabold text-xs shadow-md cursor-pointer inline-flex items-center gap-1.5"
+                >
+                  {emailBusy ? 'Verifying…' : 'Verify & Update Email'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== MODAL: CHANGE PASSWORD (VERIFIED) ==================== */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 sm:p-7 shadow-2xl space-y-4 animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <KeyRound className="w-5 h-5 text-[#ea580c]" />
+                <h3 className="font-extrabold text-base text-[#0a0e2a]">Change Account Password</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPasswordModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {passwordError && (
+              <div role="alert" className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs font-semibold text-[#dc2626] flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{passwordError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleUpdatePassword} className="space-y-4">
+              <div>
+                <label htmlFor="verify-current-password" className="block text-xs font-bold text-slate-700 mb-1">
+                  Current Password (Verification)
+                </label>
+                <div className="relative">
+                  <input
+                    id="verify-current-password"
+                    type={showCurrentPw ? 'text' : 'password'}
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    placeholder="Enter current password"
+                    className="w-full pl-3.5 pr-10 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-[#ea580c]"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPw((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    {showCurrentPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="verify-new-password" className="block text-xs font-bold text-slate-700 mb-1">
+                  New Password (Minimum 8 Characters)
+                </label>
+                <div className="relative">
+                  <input
+                    id="verify-new-password"
+                    type={showNewPw ? 'text' : 'password'}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Enter new strong password"
+                    className="w-full pl-3.5 pr-10 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-[#ea580c]"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPw((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    {showNewPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <PasswordStrengthMeter password={newPassword} />
+              </div>
+
+              <div>
+                <label htmlFor="verify-confirm-password" className="block text-xs font-bold text-slate-700 mb-1">
+                  Confirm New Password
+                </label>
+                <input
+                  id="verify-confirm-password"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Repeat new password"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-[#ea580c]"
+                  required
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowPasswordModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  id="submit-password-update-btn"
+                  type="submit"
+                  disabled={passwordBusy}
+                  className="px-5 py-2 rounded-xl bg-[#ea580c] hover:bg-[#c2410c] disabled:opacity-60 text-white font-extrabold text-xs shadow-md cursor-pointer inline-flex items-center gap-1.5"
+                >
+                  {passwordBusy ? 'Verifying…' : 'Verify & Change Password'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== MODAL: DPDP ACCOUNT DELETION REQUEST ==================== */}
       {showDeleteModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-200 space-y-5">
-            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2.5 text-red-600">
-                <ShieldAlert className="w-6 h-6 shrink-0" />
-                <h2 className="text-lg font-extrabold text-[#0a0e2a]">Request Account Deletion</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl border border-red-200 max-w-lg w-full p-6 sm:p-8 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2 text-red-600">
+                <ShieldAlert className="w-5 h-5" />
+                <h3 className="font-extrabold text-base text-slate-900">Right to Erasure Request</h3>
               </div>
               <button
                 type="button"
                 onClick={() => setShowDeleteModal(false)}
-                className="p-1.5 rounded-xl bg-slate-100 text-slate-500 hover:text-slate-800 cursor-pointer"
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
             {deleteSubmitted ? (
-              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-center space-y-3">
-                <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto" />
-                <h3 className="font-extrabold text-slate-900 text-sm">Deletion Request Received</h3>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  Your request has been logged under reference. An administrator will verify the parental consent and process the permanent purge via the secure institute protocol within 7 business days.
+              <div className="text-center py-4 space-y-3">
+                <CheckCircle2 className="w-12 h-12 text-emerald-600 mx-auto" />
+                <h4 className="font-extrabold text-base text-slate-900">Erasure Request Logged</h4>
+                <p className="text-xs text-slate-600 leading-relaxed max-w-sm mx-auto">
+                  Your request has been logged pursuant to the Digital Personal Data Protection Act, 2023. Our Data Protection Officer will process erasure of your records within 30 working days.
                 </p>
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowDeleteModal(false);
-                    setDeleteSubmitted(false);
-                  }}
-                  className="px-5 py-2 rounded-xl bg-[#0056b3] text-white font-bold text-xs cursor-pointer"
+                  onClick={() => setShowDeleteModal(false)}
+                  className="mt-3 px-5 py-2 rounded-xl bg-slate-900 text-white font-bold text-xs"
                 >
-                  Close
+                  Close Window
                 </button>
               </div>
             ) : (
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  setDeleteError('');
-                  setIsDeleting(true);
-                  const res = await cgaService.requestAccountDeletion(deleteReason, guardianConsent);
-                  setIsDeleting(false);
-                  if (!res.success) {
-                    setDeleteError(res.error || 'Failed to submit request.');
-                    return;
-                  }
-                  setDeleteSubmitted(true);
-                }}
-                className="space-y-4 text-xs"
-              >
+              <div className="space-y-4">
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Please specify the reason for requesting account erasure. This will permanently remove your student profile, enrolled batches, and mock attempt history.
+                </p>
+
                 {deleteError && (
-                  <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 font-semibold flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>{deleteError}</span>
+                  <div role="alert" className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs font-semibold text-[#dc2626]">
+                    {deleteError}
                   </div>
                 )}
 
-                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-1.5 text-slate-600">
-                  <p className="font-bold text-slate-800">
-                    Candidate: {currentStudent.name} ({currentStudent.studentCode})
-                  </p>
-                  <p>
-                    All course admissions, mock test records, score attempts, fee receipts, and login credentials will be permanently erased.
-                  </p>
-                </div>
-
                 <div>
-                  <label htmlFor="del-reason" className="block font-bold text-slate-700 mb-1">
-                    Reason for deletion (optional):
+                  <label htmlFor="del-reason" className="block text-xs font-bold text-slate-700 mb-1">
+                    Reason for Deletion (Optional)
                   </label>
                   <textarea
                     id="del-reason"
                     rows={2}
                     value={deleteReason}
                     onChange={(e) => setDeleteReason(e.target.value)}
-                    placeholder="E.g., Coaching course completed, shifting location..."
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-red-500"
+                    placeholder="e.g. Competitive preparation completed, course ended..."
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-red-500"
                   />
                 </div>
 
-                {/* Minor Guardian Consent Checkbox */}
-                <div className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200/80">
-                  <label className="flex items-start gap-2.5 cursor-pointer">
-                    <input
-                      id="del-consent"
-                      type="checkbox"
-                      checked={guardianConsent}
-                      onChange={(e) => setGuardianConsent(e.target.checked)}
-                      className="mt-0.5 accent-amber-600"
-                      required
-                    />
-                    <span className="text-slate-700 leading-relaxed font-semibold">
-                      Parent / Guardian Verification: For school students or candidates enrolled under parental care, I certify that my parent or legal guardian has approved this complete data erasure.
-                    </span>
-                  </label>
-                </div>
+                <label className="flex items-start gap-2.5 cursor-pointer p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 font-medium">
+                  <input
+                    type="checkbox"
+                    checked={guardianConsent}
+                    onChange={(e) => setGuardianConsent(e.target.checked)}
+                    className="w-4 h-4 mt-0.5 rounded text-red-600"
+                  />
+                  <span>
+                    <strong>Statutory Guardian Consent:</strong> I confirm that parent/guardian consent is provided if this candidate is under 18 years of age.
+                  </span>
+                </label>
 
-                <div className="flex items-center justify-end gap-2.5 pt-2">
+                <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-slate-100">
                   <button
                     type="button"
                     onClick={() => setShowDeleteModal(false)}
-                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold"
+                    className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
-                    type="submit"
-                    disabled={isDeleting || !guardianConsent}
-                    className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold cursor-pointer"
+                    type="button"
+                    disabled={isDeleting}
+                    onClick={async () => {
+                      setIsDeleting(true);
+                      setDeleteError('');
+                      const res = await cgaService.requestAccountDeletion(deleteReason, guardianConsent);
+                      setIsDeleting(false);
+                      if (!res.success) {
+                        setDeleteError(res.error || 'Failed to submit request.');
+                        return;
+                      }
+                      setDeleteSubmitted(true);
+                    }}
+                    className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs shadow-md cursor-pointer"
                   >
-                    {isDeleting ? 'Submitting...' : 'Confirm Deletion Request'}
+                    {isDeleting ? 'Submitting…' : 'Submit Deletion Request'}
                   </button>
                 </div>
-              </form>
+              </div>
             )}
           </div>
         </div>

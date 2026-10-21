@@ -539,8 +539,8 @@ insert into public.profiles (
   '7629882835',
   'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
   'Institute Administration',
-  'Chanban Youth Club Rd, Udaipur, Tripura 799114',
-  'Chanban Youth Club Rd, Udaipur, Tripura 799114',
+  'Chanban Youth Club Rd, Udaipur, Tripura 799120',
+  'Chanban Youth Club Rd, Udaipur, Tripura 799120',
   'Post Graduate (M.Sc, B.Ed)',
   'Director & Faculty Administration',
   'Active'

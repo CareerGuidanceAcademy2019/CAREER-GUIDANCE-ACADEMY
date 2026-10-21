@@ -167,6 +167,19 @@ export default function RegisterPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="p-8 space-y-5" noValidate>
+            {/* Bot Honeypot */}
+            <div className="hidden" aria-hidden="true">
+              <input
+                id="reg-hp"
+                name="reg-hp"
+                type="text"
+                value={honeypot}
+                onChange={(e) => setHoneypot(e.target.value)}
+                tabIndex={-1}
+                autoComplete="off"
+              />
+            </div>
+
             {error && (
               <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 flex items-center gap-2.5 text-xs font-semibold text-[#dc2626]">
                 <AlertCircle className="w-4 h-4 shrink-0" />

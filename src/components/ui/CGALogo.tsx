@@ -53,7 +53,7 @@ export function CGALogo({
               variant === 'light' ? 'text-blue-200' : 'text-slate-600'
             }`}
           >
-            Chanban, Udaipur • Tripura 799114
+            Chanban, Udaipur • Tripura 799120
           </span>
         </div>
       )}

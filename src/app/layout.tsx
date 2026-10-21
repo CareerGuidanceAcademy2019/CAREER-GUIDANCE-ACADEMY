@@ -24,7 +24,7 @@ export const metadata: Metadata = {
     template: '%s | Career Guidance Academy',
   },
   description:
-    'Official web portal of Career Guidance Academy (C.G.A), Chanban Youth Club Rd, Udaipur, Tripura 799114. Coaching for TET, STGT, STPGT, TPSC, JRBT, Banking, SSC, Railway, and Class VII to X (TBSE & CBSE).',
+    'Official web portal of Career Guidance Academy (C.G.A), Chanban Youth Club Rd, Udaipur, Tripura 799120. Coaching for TET, STGT, STPGT, TPSC, JRBT, Banking, SSC, Railway, and Class VII to X (TBSE & CBSE).',
   alternates: {
     canonical: './',
   },

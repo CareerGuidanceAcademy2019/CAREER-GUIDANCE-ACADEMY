@@ -1,67 +1,67 @@
 {
-  "timestamp": "2026-10-17T11:56:00.229Z",
+  "timestamp": "2026-10-18T05:51:32.132Z",
   "scenarios": {
     "publicPages": [
       {
         "path": "/",
-        "reqSec": 962.2,
-        "p50": 301,
-        "p99": 524,
+        "reqSec": 437.5,
+        "p50": 651,
+        "p99": 927,
         "errors": 0,
         "timeouts": 0,
-        "throughputBytesSec": 56950784
+        "throughputBytesSec": 25894912
       },
       {
         "path": "/courses",
-        "reqSec": 1093.28,
-        "p50": 266,
-        "p99": 4687,
-        "errors": 1201,
+        "reqSec": 452.6,
+        "p50": 636,
+        "p99": 9199,
+        "errors": 1715,
         "timeouts": 0,
-        "throughputBytesSec": 63796317.1
+        "throughputBytesSec": 26530406.4
       },
       {
         "path": "/mock-tests",
-        "reqSec": 1151.8,
-        "p50": 258,
-        "p99": 4411,
-        "errors": 1099,
+        "reqSec": 489.8,
+        "p50": 585,
+        "p99": 9245,
+        "errors": 1764,
         "timeouts": 0,
-        "throughputBytesSec": 51504742.4
+        "throughputBytesSec": 21901926.4
       },
       {
         "path": "/how-to-pay",
-        "reqSec": 983.9,
-        "p50": 296,
-        "p99": 4830,
-        "errors": 1081,
+        "reqSec": 515.1,
+        "p50": 557,
+        "p99": 9006,
+        "errors": 1157,
         "timeouts": 0,
-        "throughputBytesSec": 62265753.6
+        "throughputBytesSec": 32592281.6
       }
     ],
     "loginAuth": {
-      "reqSec": 1506.3,
-      "p50": 126,
-      "p99": 411,
+      "reqSec": 739.9,
+      "p50": 246,
+      "p99": 1019,
       "errors": 0
     },
     "mockTestEngine": {
-      "reqSec": 1135.46,
-      "p50": 168,
-      "p99": 276,
+      "reqSec": 588,
+      "p50": 340,
+      "p99": 829,
       "errors": 0
     },
     "paymentFlow": {
-      "reqSec": 1024.3,
-      "p50": 46,
-      "p99": 83,
+      "reqSec": 487.9,
+      "p50": 99,
+      "p99": 340,
       "errors": 0
     },
     "adminExports": {
-      "reqSec": 39.9,
-      "p50": 343,
-      "p99": 1717,
-      "non2xx": 399
+      "reqSec": 106.9,
+      "p50": 128,
+      "p99": 869,
+      "non2xx": 1069
     }
   },
   "concurrencyInvariants": {

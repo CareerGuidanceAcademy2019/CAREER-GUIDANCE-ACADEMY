@@ -80,9 +80,21 @@ export async function DELETE(request: Request) {
   await admin.from('mock_attempts').delete().eq('student_id', id);
   await admin.from('series_enrollments').delete().eq('student_id', id);
   await admin.from('test_attempts').delete().eq('student_id', id);
+  await admin.from('material_access').delete().eq('student_id', id);
+  await admin.from('payment_requests').delete().eq('student_id', id);
+  await admin.from('account_deletion_requests').delete().eq('student_id', id);
   await admin.from('fee_payments').delete().eq('student_id', id);
   await admin.from('enrollments').delete().eq('student_id', id);
   await admin.from('waiting_list').delete().eq('student_id', id);
+
+  if (target?.email) {
+    await admin.from('access_allowlist').delete().eq('identifier', target.email);
+  }
+  const { data: profPhone } = await admin.from('profiles').select('phone').eq('id', id).maybeSingle();
+  if (profPhone?.phone) {
+    await admin.from('access_allowlist').delete().eq('identifier', profPhone.phone);
+  }
+
   await admin.from('profiles').delete().eq('id', id);
 
   // If a corresponding auth account exists, remove it so credentials/session are wiped completely

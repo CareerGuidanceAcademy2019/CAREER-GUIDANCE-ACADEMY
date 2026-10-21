@@ -103,7 +103,9 @@ export default function ContactPage() {
                         Institute Address
                       </span>
                       <p className="text-sm font-bold text-slate-900 mt-0.5">{contact.address}</p>
-                      <p className="text-xs text-slate-500 mt-0.5">{contact.landmark}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {contact.landmark} — PIN: {contact.pincode || '799120'}
+                      </p>
                     </div>
                   </div>
 
@@ -114,12 +116,14 @@ export default function ContactPage() {
                       </div>
                       <div>
                         <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                          Helpline Numbers
+                          Contact Number
                         </span>
                         <p className="text-sm font-bold text-slate-900 mt-0.5">
                           {contact.phonePrimary}
                         </p>
-                        <p className="text-xs text-slate-600">{contact.phoneSecondary}</p>
+                        {contact.phoneSecondary && contact.phoneSecondary.trim() && contact.phoneSecondary !== contact.phonePrimary && (
+                          <p className="text-xs text-slate-600">{contact.phoneSecondary}</p>
+                        )}
                       </div>
                     </div>
 

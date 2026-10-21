@@ -1676,7 +1676,12 @@ export const cgaService = {
 
     return { success: true };
   },
-  async deleteFaculty(id: string) {
+  async deleteFaculty(id: string): Promise<ServiceResult> {
+    try {
+      const res = await fetch(`/api/admin/faculty?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (res.ok) return { success: true };
+    } catch {}
+
     const { error } = await this.client().from('faculty').delete().eq('id', id);
     return error ? { success: false, error: msg(error, 'Delete failed.') } : { success: true };
   },
@@ -1702,23 +1707,33 @@ export const cgaService = {
   },
 
   async upsertTest(t: MockTest): Promise<ServiceResult> {
-    try {
-      await this.client().from('mock_tests').upsert({
-        id: t.id,
-        title: t.title,
-        subject: t.subject ?? null,
-        drive_link: t.driveLink ?? null,
-        course_id: t.courseId,
-        batch_name: t.batchName,
-        duration_minutes: t.durationMinutes,
-        total_marks: t.totalMarks,
-        marks_per_question: t.marksPerQuestion,
-        negative_marking: t.negativeMarking,
-        scheduled_date: t.scheduledDate,
-        status: t.status,
-        questions: t.questions,
-      });
-    } catch {}
+    const courseId = t.courseId && t.courseId.trim() ? t.courseId.trim() : null;
+    const { error } = await this.client().from('mock_tests').upsert({
+      id: t.id,
+      title: t.title,
+      subject: t.subject ?? null,
+      drive_link: t.driveLink ?? null,
+      course_id: courseId,
+      series_id: (t as any).seriesId ?? null,
+      subject_id: (t as any).subjectId ?? null,
+      test_type: (t as any).testType ?? 'sectional',
+      test_no: (t as any).testNo ?? 1,
+      question_count: t.questions?.length || 30,
+      batch_name: t.batchName || '',
+      duration_minutes: t.durationMinutes || 60,
+      total_marks: t.totalMarks || (t.questions?.length ? t.questions.length * (t.marksPerQuestion || 1) : 30),
+      marks_per_question: t.marksPerQuestion || 1,
+      negative_marking: t.negativeMarking || 0,
+      scheduled_date: t.scheduledDate || '',
+      status: t.status || 'Draft',
+      questions: t.questions || [],
+      window_start: (t as any).windowStart ?? null,
+      window_end: (t as any).windowEnd ?? null,
+    });
+
+    if (error) {
+      return { success: false, error: msg(error, 'Could not save mock test to database.') };
+    }
 
     try {
       if (typeof window !== 'undefined') {
@@ -1738,8 +1753,22 @@ export const cgaService = {
   },
   async deleteTest(id: string): Promise<ServiceResult> {
     try {
-      await this.client().from('mock_tests').delete().eq('id', id);
+      const res = await fetch(`/api/admin/mock-tests?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (res.ok) {
+        if (typeof window !== 'undefined') {
+          const stored = localStorage.getItem('cga_custom_tests');
+          if (stored) {
+            const list: MockTest[] = JSON.parse(stored);
+            const filtered = list.filter((t) => t.id !== id);
+            localStorage.setItem('cga_custom_tests', JSON.stringify(filtered));
+          }
+        }
+        return { success: true };
+      }
     } catch {}
+
+    const { error } = await this.client().from('mock_tests').delete().eq('id', id);
+    if (error) return { success: false, error: msg(error, 'Delete failed.') };
 
     try {
       if (typeof window !== 'undefined') {
@@ -1748,12 +1777,6 @@ export const cgaService = {
           const list: MockTest[] = JSON.parse(stored);
           const filtered = list.filter((t) => t.id !== id);
           localStorage.setItem('cga_custom_tests', JSON.stringify(filtered));
-        }
-        const deletedStored = localStorage.getItem('cga_deleted_tests');
-        const deletedList: string[] = deletedStored ? JSON.parse(deletedStored) : [];
-        if (!deletedList.includes(id)) {
-          deletedList.push(id);
-          localStorage.setItem('cga_deleted_tests', JSON.stringify(deletedList));
         }
       }
     } catch {}

@@ -56,7 +56,7 @@ interface PayManualModalProps {
 }
 
 export function PayManualModal({ target, onClose, onSuccess }: PayManualModalProps) {
-  const { currentStudent, showToast } = useCga();
+  const { currentStudent, showToast, submitPaymentVerification, enrolInSeries } = useCga();
   const settings: PaymentSettingsRecord = PAYMENT_SETTINGS;
 
   // Flow State
@@ -246,7 +246,29 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
     setIsSubmitting(true);
 
     try {
-      // Simulate/Trigger RPC call
+      if (currentStudent) {
+        // Record payment verification in Supabase Postgres and local state
+        await submitPaymentVerification({
+          courseId: target.itemId,
+          amount: currentAmount,
+          paymentMode: channel === 'upi' ? 'UPI' : 'Net Banking',
+          paymentType: selectedPlan === 'instalment_1' ? 'Instalment 1' : 'Full Payment',
+          utr: utr,
+          screenshotUrl: screenshotPreview || undefined,
+          remarks: `Ref: ${referenceCode} | Item: ${target.title} (${target.itemType})`,
+        });
+
+        // If enrolling in a mock test series, trigger immediate enrolment
+        if (target.itemType === 'mock_series') {
+          await enrolInSeries({
+            seriesId: target.itemId,
+            paymentMode: 'UPI',
+            paymentRef: utr,
+          });
+        }
+      }
+
+      // Also persist to localStorage cache
       const storedRequests = JSON.parse(localStorage.getItem('cga_payment_requests') || '[]');
       const newRequest = {
         id: requestId,
