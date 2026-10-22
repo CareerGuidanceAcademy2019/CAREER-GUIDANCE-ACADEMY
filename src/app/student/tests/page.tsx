@@ -42,7 +42,13 @@ export default function StudentMockTestsPage() {
   const { db, currentStudent, submitMockTestAttempt, enrolInSeries, showToast } = useCga();
   const [payManualTarget, setPayManualTarget] = useState<PayManualTarget | null>(null);
 
+  const myPastAttempts = currentStudent
+    ? (db.testAttempts || []).filter((a) => a.studentId === currentStudent.id || a.studentId === 'me')
+    : [];
+
   const [activeTest, setActiveTest] = useState<any | null>(null);
+  const [isStartingTest, setIsStartingTest] = useState<boolean>(() => Boolean(searchParams.get('testId')));
+  const [startingTestTitle, setStartingTestTitle] = useState<string>('');
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
   const [markedForReview, setMarkedForReview] = useState<Record<string, boolean>>({});
@@ -226,7 +232,26 @@ export default function StudentMockTestsPage() {
   if (!currentStudent) return null;
 
   const startTest = async (test: any) => {
+    // 1. Strict Single Attempt Check: Candidates can appear for a mock test only once
+    const pastAttempt = myPastAttempts.find(
+      (a) => a.testId === test.id && Boolean(a.submittedAt || (a as any).submitted_at)
+    );
+    if (pastAttempt) {
+      showToast(
+        'Single Attempt Policy',
+        'You have already appeared for this mock test. Each candidate is permitted only one attempt. Loading your detailed solutions and scorecard.',
+        'info'
+      );
+      setIsStartingTest(false);
+      setCompletedAttempt(pastAttempt);
+      if (typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, behavior: 'instant' });
+      }
+      return;
+    }
+
     if (!isStudentEnrolledInTest(test)) {
+      setIsStartingTest(false);
       showToast(
         'Access Restricted',
         'You are enrolled in Tripura TET Paper-I. To appear for other mock exams, please enrol in that course.',
@@ -240,12 +265,20 @@ export default function StudentMockTestsPage() {
       matchingEnrollment?.accessValidUntil &&
       new Date(matchingEnrollment.accessValidUntil).getTime() < currentTime
     ) {
+      setIsStartingTest(false);
       showToast(
         'Access Expired',
         'Your batch access duration for this course has expired. Please contact admin to renew.',
         'error'
       );
       return;
+    }
+
+    // 2. Immediately transition into the exam launch state so the enrollment section never flashes
+    setIsStartingTest(true);
+    setStartingTestTitle(test.title);
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'instant' });
     }
 
     try {
@@ -266,6 +299,7 @@ export default function StudentMockTestsPage() {
 
         const questionsToUse = (data.questions && data.questions.length > 0) ? data.questions : (test.questions || []);
         if (!Array.isArray(questionsToUse) || questionsToUse.length === 0) {
+          setIsStartingTest(false);
           showToast(
             'Test Not Ready',
             'Questions for this mock test are currently being finalized by the faculty. Please check back shortly.',
@@ -289,19 +323,24 @@ export default function StudentMockTestsPage() {
         setMarkedForReview({});
         setSecondsLeft(remaining);
         setLangView('both');
+        setIsStartingTest(false);
         return;
       } else {
         const errJson = await res.json().catch(() => null);
+        setIsStartingTest(false);
         if (errJson?.error) {
           showToast('Cannot Start Test', errJson.error, 'error');
           return;
         }
       }
-    } catch {}
+    } catch {
+      setIsStartingTest(false);
+    }
 
     // Fallback to local test state ONLY if it contains valid questions
     const localQuestions = test.questions || [];
     if (!Array.isArray(localQuestions) || localQuestions.length === 0) {
+      setIsStartingTest(false);
       showToast(
         'Questions Unavailable',
         'The question paper for this test is being prepared by the faculty. Please check back shortly.',
@@ -317,20 +356,66 @@ export default function StudentMockTestsPage() {
     setMarkedForReview({});
     setSecondsLeft((test.durationMinutes || 30) * 60);
     setLangView('both');
+    setIsStartingTest(false);
   };
 
   // Auto-launch test if testId is in query params
   useEffect(() => {
     const testId = searchParams.get('testId');
-    if (testId && !activeTest) {
+    if (testId && !activeTest && !completedAttempt) {
+      // Check single attempt integrity first
+      const pastAttempt = myPastAttempts.find(
+        (a) => a.testId === testId && Boolean(a.submittedAt || (a as any).submitted_at)
+      );
+      if (pastAttempt) {
+        setCompletedAttempt(pastAttempt);
+        setIsStartingTest(false);
+        return;
+      }
+
       const match = db.mockTests.find((t) => t.id === testId);
       if (match && match.status === 'Published') {
         startTest(match);
+      } else {
+        setIsStartingTest(false);
       }
     }
-  }, [searchParams, db.mockTests, activeTest]);
+  }, [searchParams, db.mockTests, activeTest, completedAttempt, myPastAttempts]);
 
   const handleOpenSeriesCheckout = (seriesId: string) => {
+    if (isStudentEnrolledInSeries(seriesId)) {
+      showToast('Already Enrolled', 'You are already enrolled in this mock test series.', 'info');
+      return;
+    }
+    const hasPendingPayment =
+      (db.feePayments || []).some(
+        (p) => (p.studentId === currentStudent.id || p.studentId === 'me') && p.courseId === seriesId && p.status === 'Pending'
+      ) ||
+      (typeof window !== 'undefined' &&
+        (() => {
+          try {
+            const stored = localStorage.getItem('cga_custom_payments');
+            if (stored) {
+              const list = JSON.parse(stored);
+              return list.some(
+                (p: any) =>
+                  (p.studentId === currentStudent.id || p.studentId === 'me') &&
+                  p.courseId === seriesId &&
+                  p.status === 'Pending'
+              );
+            }
+          } catch {}
+          return false;
+        })());
+    if (hasPendingPayment) {
+      showToast(
+        'Verification Pending',
+        'You have already submitted a payment for this mock series. Please wait for admin verification.',
+        'info'
+      );
+      return;
+    }
+
     const activeSeriesList = db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL;
     const s = activeSeriesList.find((item) => item.id === seriesId);
     setPayManualTarget({
@@ -342,6 +427,28 @@ export default function StudentMockTestsPage() {
       paymentType: 'full',
     });
   };
+
+  // ==================== CBT LAUNCH TRANSITION SCREEN (NO FLASH OF ENROLL SECTION) ====================
+  if (isStartingTest) {
+    return (
+      <div className="bg-white rounded-3xl border border-slate-200 p-8 sm:p-16 text-center space-y-6 shadow-sm min-h-[60vh] flex flex-col items-center justify-center">
+        <div className="w-16 h-16 rounded-2xl bg-blue-50 text-[#0056b3] flex items-center justify-center shadow-xs">
+          <Clock className="w-8 h-8 animate-spin text-[#0056b3]" />
+        </div>
+        <div className="space-y-2 max-w-md mx-auto">
+          <span className="px-3 py-1 rounded-full bg-blue-100 text-[#0056b3] text-xs font-bold uppercase tracking-wider">
+            CBT Secure Examination Engine
+          </span>
+          <h2 className="text-xl sm:text-2xl font-extrabold text-[#0a0e2a]">
+            {startingTestTitle || 'Launching Mock Examination...'}
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
+            Directly loading questions, synchronizing timer, and establishing test session integrity. Entering examination hall...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   // ==================== 1. LIVE TIMED MCQ EXAM VIEW ====================
   if (activeTest) {
@@ -929,7 +1036,6 @@ export default function StudentMockTestsPage() {
   };
 
   const publishedTests = db.mockTests.filter((t) => t.status === 'Published');
-  const myPastAttempts = db.testAttempts.filter((a) => a.studentId === currentStudent.id);
 
   // Filter published tests according to category
   const filteredTests = publishedTests.filter((t) => {
@@ -947,6 +1053,21 @@ export default function StudentMockTestsPage() {
   const paper1Series = activeSeriesList.find((s) => s.id === 'series-ttet-paper1') || MOCK_SERIES_INITIAL[0];
   const paper2SciSeries = activeSeriesList.find((s) => s.id === 'series-ttet-paper2-sci') || MOCK_SERIES_INITIAL[1];
   const paper2SocSeries = activeSeriesList.find((s) => s.id === 'series-ttet-paper2-soc') || MOCK_SERIES_INITIAL[2];
+
+  const isP1Enrolled = isStudentEnrolledInSeries('series-ttet-paper1');
+  const isP1Pending = db.feePayments?.some(
+    (p) => p.studentId === currentStudent.id && p.courseId === 'series-ttet-paper1' && p.status === 'Pending'
+  );
+
+  const isP2SciEnrolled = isStudentEnrolledInSeries('series-ttet-paper2-sci');
+  const isP2SciPending = db.feePayments?.some(
+    (p) => p.studentId === currentStudent.id && p.courseId === 'series-ttet-paper2-sci' && p.status === 'Pending'
+  );
+
+  const isP2SocEnrolled = isStudentEnrolledInSeries('series-ttet-paper2-soc');
+  const isP2SocPending = db.feePayments?.some(
+    (p) => p.studentId === currentStudent.id && p.courseId === 'series-ttet-paper2-soc' && p.status === 'Pending'
+  );
 
   return (
     <div className="space-y-8">
@@ -1037,14 +1158,26 @@ export default function StudentMockTestsPage() {
             </div>
 
             <div className="pt-5 mt-5 border-t border-white/15 relative z-10">
-              <button
-                type="button"
-                onClick={() => handleOpenSeriesCheckout('series-ttet-paper1')}
-                className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer shadow-md transition-all flex items-center justify-center gap-1.5"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                Enroll Now @ ₹{paper1Series.price}/- (Pay via UPI / Bank)
-              </button>
+              {isP1Enrolled ? (
+                <div className="w-full py-2.5 rounded-xl bg-emerald-500/25 border border-emerald-400/40 text-emerald-200 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+                  <span>Enrolled &amp; Active</span>
+                </div>
+              ) : isP1Pending ? (
+                <div className="w-full py-2.5 rounded-xl bg-amber-500/25 border border-amber-400/40 text-amber-200 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs">
+                  <Clock className="w-4 h-4 text-amber-300 animate-pulse" />
+                  <span>Verification Pending (Admin Review)</span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleOpenSeriesCheckout('series-ttet-paper1')}
+                  className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer shadow-md transition-all flex items-center justify-center gap-1.5"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Enroll Now @ ₹{paper1Series.price}/- (Pay via UPI / Bank)
+                </button>
+              )}
             </div>
           </div>
 
@@ -1100,14 +1233,26 @@ export default function StudentMockTestsPage() {
             </div>
 
             <div className="pt-5 mt-5 border-t border-white/15 relative z-10">
-              <button
-                type="button"
-                onClick={() => handleOpenSeriesCheckout('series-ttet-paper2-sci')}
-                className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer shadow-md transition-all flex items-center justify-center gap-1.5"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                Enroll Now @ ₹{paper2SciSeries.price}/- (Pay via UPI / Bank)
-              </button>
+              {isP2SciEnrolled ? (
+                <div className="w-full py-2.5 rounded-xl bg-emerald-500/25 border border-emerald-400/40 text-emerald-200 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+                  <span>Enrolled &amp; Active</span>
+                </div>
+              ) : isP2SciPending ? (
+                <div className="w-full py-2.5 rounded-xl bg-amber-500/25 border border-amber-400/40 text-amber-200 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs">
+                  <Clock className="w-4 h-4 text-amber-300 animate-pulse" />
+                  <span>Verification Pending (Admin Review)</span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleOpenSeriesCheckout('series-ttet-paper2-sci')}
+                  className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer shadow-md transition-all flex items-center justify-center gap-1.5"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Enroll Now @ ₹{paper2SciSeries.price}/- (Pay via UPI / Bank)
+                </button>
+              )}
             </div>
           </div>
 
@@ -1163,14 +1308,26 @@ export default function StudentMockTestsPage() {
             </div>
 
             <div className="pt-5 mt-5 border-t border-white/15 relative z-10">
-              <button
-                type="button"
-                onClick={() => handleOpenSeriesCheckout('series-ttet-paper2-soc')}
-                className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer shadow-md transition-all flex items-center justify-center gap-1.5"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                Enroll Now @ ₹{paper2SocSeries.price}/- (Pay via UPI / Bank)
-              </button>
+              {isP2SocEnrolled ? (
+                <div className="w-full py-2.5 rounded-xl bg-emerald-500/25 border border-emerald-400/40 text-emerald-200 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+                  <span>Enrolled &amp; Active</span>
+                </div>
+              ) : isP2SocPending ? (
+                <div className="w-full py-2.5 rounded-xl bg-amber-500/25 border border-amber-400/40 text-amber-200 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs">
+                  <Clock className="w-4 h-4 text-amber-300 animate-pulse" />
+                  <span>Verification Pending (Admin Review)</span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleOpenSeriesCheckout('series-ttet-paper2-soc')}
+                  className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer shadow-md transition-all flex items-center justify-center gap-1.5"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Enroll Now @ ₹{paper2SocSeries.price}/- (Pay via UPI / Bank)
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1327,23 +1484,45 @@ export default function StudentMockTestsPage() {
               </div>
 
               {/* Banner if student is not enrolled in this series */}
-              {!isEnrolled && (
-                <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                  <div className="flex items-center gap-2 text-amber-900 font-bold">
-                    <Lock className="w-4 h-4 text-[#ea580c] shrink-0" />
-                    <span>
-                      Enrolment required for this series to appear in CBT tests and download watermarked question papers.
-                    </span>
+              {!isEnrolled && (() => {
+                const isSeriesPending = db.feePayments?.some(
+                  (p) => p.studentId === currentStudent.id && p.courseId === selectedSeriesId && p.status === 'Pending'
+                );
+
+                if (isSeriesPending) {
+                  return (
+                    <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-2 text-amber-950 font-bold">
+                        <Clock className="w-4 h-4 text-amber-600 shrink-0 animate-pulse" />
+                        <span>
+                          Enrolment payment submitted (UTR verification pending). CGA Admission Cell is reviewing your transaction.
+                        </span>
+                      </div>
+                      <span className="px-3.5 py-1.5 rounded-xl bg-amber-100 text-amber-900 border border-amber-300 font-extrabold shrink-0 inline-flex items-center gap-1.5">
+                        Verification Pending
+                      </span>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2 text-amber-900 font-bold">
+                      <Lock className="w-4 h-4 text-[#ea580c] shrink-0" />
+                      <span>
+                        Enrolment required for this series to appear in CBT tests and download watermarked question papers.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenSeriesCheckout(selectedSeriesId)}
+                      className="px-4 py-2 rounded-xl bg-[#0056b3] hover:bg-blue-700 text-white font-black shrink-0 cursor-pointer shadow-xs"
+                    >
+                      Enrol Now
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleOpenSeriesCheckout(selectedSeriesId)}
-                    className="px-4 py-2 rounded-xl bg-[#0056b3] hover:bg-blue-700 text-white font-black shrink-0 cursor-pointer shadow-xs"
-                  >
-                    Enrol Now
-                  </button>
-                </div>
-              )}
+                );
+              })()}
 
               {/* SUBSECTION (A): MOCK TESTS */}
               {activeSubsection === 'tests' && (() => {

@@ -102,6 +102,27 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'This mock test has not yet been launched live by administrators.' }, { status: 403 });
     }
 
+    // 2.5 Strict Single Attempt Enforcement: Each candidate can appear only once
+    if (!isAdmin) {
+      const { data: pastAttempts } = await admin
+        .from('test_attempts')
+        .select('id, submitted_at')
+        .eq('test_id', testId)
+        .eq('student_id', user.id);
+
+      const hasSubmitted = (pastAttempts || []).some((a: any) => a.submitted_at != null);
+      if (hasSubmitted) {
+        return NextResponse.json(
+          {
+            error:
+              'Single Attempt Policy: You have already appeared for and submitted this mock test. Reattempts are not permitted. You can review your scorecard and solutions.',
+            alreadyAttempted: true,
+          },
+          { status: 403 }
+        );
+      }
+    }
+
     // 3. Strict Enrollment Verification (Course Isolation)
     if (!isAdmin) {
       const testCourseId = (testRecord.course_id || testRecord.courseId || '').toString();

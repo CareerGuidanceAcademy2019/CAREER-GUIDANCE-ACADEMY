@@ -1160,14 +1160,31 @@ export const cgaService = {
       mockSeries: seriesRaw.length > 0 ? seriesRaw.map(toMockSeries) : INITIAL_SEED_DATA.mockSeries,
       mockSubjects: subjectsRaw.length > 0 ? subjectsRaw.map(toMockSubject) : INITIAL_SEED_DATA.mockSubjects,
       seriesTests: seriesTestsRaw.length > 0 ? seriesTestsRaw.map(toSeriesMockTest) : INITIAL_SEED_DATA.seriesTests,
-      seriesEnrollments: seriesEnrRaw.map((e: Row) => ({
-        id: e.id,
-        studentId: e.student_id,
-        seriesId: e.series_id,
-        paymentId: e.payment_id ?? undefined,
-        enrolledAt: e.enrolled_at,
-        accessValidUntil: e.access_valid_until ?? undefined,
-      })),
+      seriesEnrollments: (() => {
+        const fromSb = seriesEnrRaw.map((e: Row) => ({
+          id: e.id,
+          studentId: e.student_id,
+          seriesId: e.series_id,
+          paymentId: e.payment_id ?? undefined,
+          enrolledAt: e.enrolled_at,
+          accessValidUntil: e.access_valid_until ?? undefined,
+        }));
+        if (typeof window !== 'undefined') {
+          try {
+            const storedSe = localStorage.getItem('cga_series_enrollments');
+            if (storedSe) {
+              const localList = JSON.parse(storedSe);
+              const existingKeys = new Set(fromSb.map((x) => `${x.studentId}::${x.seriesId}`));
+              localList.forEach((item: any) => {
+                if (!existingKeys.has(`${item.studentId}::${item.seriesId}`)) {
+                  fromSb.push(item);
+                }
+              });
+            }
+          } catch {}
+        }
+        return fromSb;
+      })(),
       seriesAttempts: seriesAttemptsRaw.map((a: Row) =>
         toSeriesAttempt(a, studentName(a.student_id), studentCode(a.student_id), studentPhone(a.student_id))
       ),
@@ -1405,6 +1422,59 @@ export const cgaService = {
     remarks?: string;
   }): Promise<ServiceResult<{ receipt: FeePayment }>> {
     const sb = this.client();
+
+    // Strict Single Enrollment & Payment Acceptance Policy:
+    // One student can enroll for any specific course or mock test only once.
+    // For enrollment, payment will be accepted only once.
+    // One student cannot apply twice for enrolment in course or mocks.
+    try {
+      const { data: existingRecords } = await sb
+        .from('fee_payments')
+        .select('id, status, utr')
+        .eq('student_id', p.studentId)
+        .eq('course_id', p.courseId);
+
+      const existingActive = (existingRecords || []).find(
+        (r: any) => r.status === 'Pending' || r.status === 'Verified'
+      );
+      if (existingActive) {
+        if (existingActive.status === 'Verified') {
+          return {
+            success: false,
+            error: 'You are already enrolled in this course or mock test. Multiple enrolments are not permitted.',
+          };
+        }
+        return {
+          success: false,
+          error:
+            'A payment verification request for this course or mock test is already pending admin verification. Payment is accepted only once per enrollment.',
+        };
+      }
+    } catch {}
+
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('cga_custom_payments');
+        const list: FeePayment[] = stored ? JSON.parse(stored) : [];
+        const localActive = list.find(
+          (r) => r.studentId === p.studentId && r.courseId === p.courseId && (r.status === 'Pending' || r.status === 'Verified')
+        );
+        if (localActive) {
+          if (localActive.status === 'Verified') {
+            return {
+              success: false,
+              error: 'You are already enrolled in this course or mock test. Multiple enrolments are not permitted.',
+            };
+          }
+          return {
+            success: false,
+            error:
+              'A payment verification request for this course or mock test is already pending admin verification. Payment is accepted only once per enrollment.',
+          };
+        }
+      } catch {}
+    }
+
     const receiptNo = `${PAYMENT_SETTINGS.receiptPrefix}${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
     const newPayment: FeePayment = {
@@ -1463,15 +1533,19 @@ export const cgaService = {
 
   async approvePayment(paymentId: string, reviewedBy = 'CGA Administrator'): Promise<ServiceResult> {
     const sb = this.client();
+    let approvedPayment: FeePayment | null = null;
     try {
-      await sb
+      const { data } = await sb
         .from('fee_payments')
         .update({
           status: 'Verified',
           reviewed_by: reviewedBy,
           reviewed_at: new Date().toISOString(),
         })
-        .eq('id', paymentId);
+        .or(`id.eq.${paymentId},receipt_no.eq.${paymentId}`)
+        .select()
+        .maybeSingle();
+      if (data) approvedPayment = data as any;
     } catch {}
 
     try {
@@ -1479,16 +1553,91 @@ export const cgaService = {
         const stored = localStorage.getItem('cga_custom_payments');
         if (stored) {
           const list: FeePayment[] = JSON.parse(stored);
-          const found = list.find((p) => p.id === paymentId);
+          const found = list.find((p) => p.id === paymentId || p.receiptNo === paymentId);
           if (found) {
             found.status = 'Verified';
             found.reviewedBy = reviewedBy;
             found.reviewedAt = new Date().toISOString();
             localStorage.setItem('cga_custom_payments', JSON.stringify(list));
+            approvedPayment = found;
           }
         }
       }
     } catch {}
+
+    // Fallback: check cga_payment_requests if not found in fee_payments
+    if (!approvedPayment && typeof window !== 'undefined') {
+      try {
+        const storedReqs = localStorage.getItem('cga_payment_requests');
+        if (storedReqs) {
+          const rList = JSON.parse(storedReqs);
+          const req = rList.find((r: any) => r.id === paymentId || r.referenceCode === paymentId);
+          if (req) {
+            approvedPayment = {
+              id: req.id,
+              receiptNo: req.referenceCode,
+              studentId: req.studentId,
+              studentName: req.studentName || 'Student',
+              courseId: req.itemId,
+              courseName: req.itemId,
+              amount: req.amountReceived || req.expectedAmount,
+              paymentMode: req.paymentChannel === 'bank_transfer' ? 'Net Banking' : 'UPI',
+              paymentType: req.paymentType === 'instalment_1' ? 'Instalment 1' : req.paymentType === 'instalment_2' ? 'Instalment 2' : 'Full Payment',
+              date: new Date().toISOString().slice(0, 10),
+              status: 'Verified',
+              reviewedBy,
+              reviewedAt: new Date().toISOString(),
+              remarks: `Admin approved. Ref: ${req.referenceCode}`,
+            };
+          }
+        }
+      } catch {}
+    }
+
+    // Unlock mock series or course in permanent state upon admin verification
+    if (approvedPayment) {
+      const isSeries = approvedPayment.courseId?.startsWith('series-') || approvedPayment.remarks?.includes('mock_series');
+      if (isSeries) {
+        try {
+          await sb.from('series_enrollments').upsert({
+            student_id: approvedPayment.studentId,
+            series_id: approvedPayment.courseId,
+            payment_id: approvedPayment.id,
+            enrolled_at: new Date().toISOString(),
+          });
+        } catch {}
+
+        try {
+          if (typeof window !== 'undefined') {
+            const storedSe = localStorage.getItem('cga_series_enrollments');
+            const seList = storedSe ? JSON.parse(storedSe) : [];
+            if (!seList.some((e: any) => e.studentId === approvedPayment?.studentId && e.seriesId === approvedPayment?.courseId)) {
+              seList.push({
+                id: `ser-enr-${Date.now()}`,
+                studentId: approvedPayment.studentId,
+                seriesId: approvedPayment.courseId,
+                paymentId: approvedPayment.id,
+                enrolledAt: new Date().toISOString(),
+              });
+              localStorage.setItem('cga_series_enrollments', JSON.stringify(seList));
+            }
+          }
+        } catch {}
+      } else {
+        // Course enrolment unlocking
+        try {
+          await sb.from('enrollments').upsert({
+            student_id: approvedPayment.studentId,
+            course_id: approvedPayment.courseId,
+            enrolled_date: new Date().toISOString().slice(0, 10),
+            paid_amount: approvedPayment.amount,
+            total_fee: approvedPayment.amount,
+            due_amount: 0,
+            progress: 0,
+          });
+        } catch {}
+      }
+    }
 
     return { success: true };
   },
@@ -1503,7 +1652,7 @@ export const cgaService = {
           rejection_reason: reason,
           reviewed_at: new Date().toISOString(),
         })
-        .eq('id', paymentId);
+        .or(`id.eq.${paymentId},receipt_no.eq.${paymentId}`);
     } catch {}
 
     try {
@@ -1511,7 +1660,7 @@ export const cgaService = {
         const stored = localStorage.getItem('cga_custom_payments');
         if (stored) {
           const list: FeePayment[] = JSON.parse(stored);
-          const found = list.find((p) => p.id === paymentId);
+          const found = list.find((p) => p.id === paymentId || p.receiptNo === paymentId);
           if (found) {
             found.status = 'Rejected';
             found.rejectionReason = reason;
@@ -1535,6 +1684,26 @@ export const cgaService = {
     answers: Record<string, number>,
     timeTakenMinutes: number
   ): Promise<ServiceResult<{ attempt: TestAttempt }>> {
+    const session = await this.getSession().catch(() => null);
+    const stuId = session?.userId || 'me';
+
+    // Strict Single Attempt Check: Any candidate can attempt a mock test only once
+    if (typeof window !== 'undefined') {
+      try {
+        const existing = localStorage.getItem('cga_test_attempts');
+        const arr: TestAttempt[] = existing ? JSON.parse(existing) : [];
+        const alreadySubmitted = arr.some(
+          (item) => item.testId === testId && (item.studentId === stuId || item.studentId === 'me') && Boolean(item.submittedAt)
+        );
+        if (alreadySubmitted) {
+          return {
+            success: false,
+            error: 'Single Attempt Policy: You have already completed this mock test. Each candidate is permitted only one attempt.',
+          };
+        }
+      } catch {}
+    }
+
     let sbAttempt: TestAttempt | null = null;
     try {
       const { data, error } = await this.client().rpc('submit_test_attempt', {
@@ -1581,7 +1750,6 @@ export const cgaService = {
       return { success: false, error: 'Test not found or no longer available.' };
     }
 
-    const session = await this.getSession().catch(() => null);
     let correctCount = 0;
     let wrongCount = 0;
     let unattemptedCount = 0;

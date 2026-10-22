@@ -88,12 +88,14 @@ export function AppearTestButton({
             <CheckCircle2 className="w-3 h-3 text-emerald-600" />
             <span>Score: {score} / {total} {acc ? `(${acc})` : ''}</span>
           </span>
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Attempted</span>
+          <span className="text-[10px] font-extrabold text-emerald-700 uppercase tracking-wider bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+            Attempted (1/1)
+          </span>
         </div>
 
         <button
           type="button"
-          onClick={onViewSolutions || onAppear}
+          onClick={onViewSolutions}
           className="w-full py-2.5 px-4 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-extrabold inline-flex items-center justify-center gap-2 cursor-pointer transition-all shadow-2xs"
         >
           <Eye className="w-3.5 h-3.5 text-emerald-700" />

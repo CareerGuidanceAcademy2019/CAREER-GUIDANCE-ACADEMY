@@ -23,7 +23,7 @@ import {
   HelpCircle,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
-import { MockTest, StudentEnrollment } from '@/data/initialSeedData';
+import { MockTest, StudentEnrollment, FeePayment } from '@/data/initialSeedData';
 
 export default function StudentMyLearningPage() {
   const router = useRouter();
@@ -38,10 +38,47 @@ export default function StudentMyLearningPage() {
   // Student's enrolled courses
   const enrollments: StudentEnrollment[] = currentStudent.enrollments || [];
 
-  // Student's enrolled mock test series IDs
-  const enrolledSeriesIds: string[] = (db.seriesEnrollments || [])
-    .filter((e) => e.studentId === currentStudent.id)
-    .map((e) => e.seriesId);
+  // Student's enrolled mock test series IDs (checking db + localStorage)
+  const enrolledSeriesIds: string[] = React.useMemo(() => {
+    const fromDb = (db.seriesEnrollments || [])
+      .filter((e) => e.studentId === currentStudent.id || e.studentId === 'me')
+      .map((e) => e.seriesId);
+    let fromLocal: string[] = [];
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('cga_series_enrollments');
+        if (stored) {
+          const list = JSON.parse(stored);
+          fromLocal = list
+            .filter((e: any) => e.studentId === currentStudent.id || e.studentId === 'me')
+            .map((e: any) => e.seriesId);
+        }
+      } catch {}
+    }
+    return Array.from(new Set([...fromDb, ...fromLocal]));
+  }, [db.seriesEnrollments, currentStudent.id]);
+
+  // Pending payments awaiting Admin verification
+  const pendingPayments: FeePayment[] = React.useMemo(() => {
+    const listFromDb = (db.feePayments || []).filter(
+      (p) => (p.studentId === currentStudent.id || p.studentId === 'me') && p.status === 'Pending'
+    );
+    let localCustom: FeePayment[] = [];
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('cga_custom_payments');
+        if (stored) {
+          localCustom = (JSON.parse(stored) as FeePayment[]).filter(
+            (p) => (p.studentId === currentStudent.id || p.studentId === 'me') && p.status === 'Pending'
+          );
+        }
+      } catch {}
+    }
+    const map = new Map<string, FeePayment>();
+    listFromDb.forEach((p) => map.set(p.id, p));
+    localCustom.forEach((p) => map.set(p.id, p));
+    return Array.from(map.values());
+  }, [db.feePayments, currentStudent.id]);
 
   // Check if student has special access or specific series enrollment
   const isSpecialAccess =
@@ -59,13 +96,22 @@ export default function StudentMyLearningPage() {
     if (enrolledInCourse) return true;
     const enrolledInSeries = enrolledSeriesIds.some((sId) => {
       const s = db.mockSeries.find((ms) => ms.id === sId);
-      if (!s) return false;
       return (
         t.courseId === sId ||
-        t.title.toLowerCase().includes(s.name.toLowerCase()) ||
-        (s.id === 'series-ttet-paper1' && t.title.toLowerCase().includes('paper-i')) ||
-        (s.id === 'series-ttet-paper2-sci' && t.title.toLowerCase().includes('science')) ||
-        (s.id === 'series-ttet-paper2-soc' && t.title.toLowerCase().includes('social'))
+        (s && t.title.toLowerCase().includes(s.name.toLowerCase())) ||
+        (sId === 'series-ttet-paper1' &&
+          (t.courseId === 'crs-tet-1-online' ||
+            t.title.toLowerCase().includes('paper-i') ||
+            t.title.toLowerCase().includes('paper 1') ||
+            t.courseId.includes('paper1'))) ||
+        (sId === 'series-ttet-paper2-sci' &&
+          (t.courseId === 'crs-tet-2-sci-online' ||
+            t.title.toLowerCase().includes('science') ||
+            t.courseId.includes('paper2-sci'))) ||
+        (sId === 'series-ttet-paper2-soc' &&
+          (t.courseId === 'crs-tet-2-soc-online' ||
+            t.title.toLowerCase().includes('social') ||
+            t.courseId.includes('paper2-soc')))
       );
     });
     return enrolledInSeries;
@@ -149,6 +195,99 @@ export default function StudentMyLearningPage() {
           </div>
         </div>
       </div>
+
+      {/* Pending Admin Verification Section */}
+      {pendingPayments.length > 0 && (
+        <div className="bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-300 rounded-3xl p-6 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-md">
+                <Clock className="w-5 h-5 animate-pulse" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-extrabold text-amber-950">
+                    Enrolment Application Awaiting Admin Verification ({pendingPayments.length})
+                  </h2>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 text-[10px] font-black uppercase tracking-wider">
+                    Under Review
+                  </span>
+                </div>
+                <p className="text-xs text-amber-800 mt-0.5">
+                  Your 12-digit payment reference (UTR) has been securely received. Our admissions cell verifies transactions within 2–4 hours. Once verified by Admin, your course or mock tests will automatically unlock right here in your learning dashboard.
+                </p>
+              </div>
+            </div>
+            <a
+              href="tel:+919436456789"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shrink-0 self-start sm:self-auto transition-colors"
+            >
+              <span>Admission Cell: +91 94364 56789</span>
+            </a>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+            {pendingPayments.map((p) => {
+              const courseObj = db.courses.find((c) => c.id === p.courseId);
+              const seriesObj = db.mockSeries.find((s) => s.id === p.courseId);
+              const isSeries = Boolean(seriesObj) || p.courseId.startsWith('series-');
+              const itemName =
+                p.courseName ||
+                courseObj?.name ||
+                seriesObj?.name ||
+                (p.courseId === 'series-ttet-paper1'
+                  ? 'T-TET 2026 Mock Test Series (Paper-I)'
+                  : p.courseId === 'series-ttet-paper2-sci'
+                  ? 'T-TET 2026 Mock Test Series (Paper-II Science)'
+                  : p.courseId === 'series-ttet-paper2-soc'
+                  ? 'T-TET 2026 Mock Test Series (Paper-II Social)'
+                  : p.courseId);
+
+              return (
+                <div
+                  key={p.id}
+                  className="bg-white/90 backdrop-blur-sm rounded-2xl border border-amber-200 p-4 space-y-2 shadow-xs"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      {isSeries ? (
+                        <ClipboardCheck className="w-4 h-4 text-amber-600 shrink-0" />
+                      ) : (
+                        <BookOpen className="w-4 h-4 text-amber-600 shrink-0" />
+                      )}
+                      <span className="text-xs font-extrabold text-slate-900 line-clamp-1">
+                        {itemName}
+                      </span>
+                    </div>
+                    <span className="text-xs font-black text-amber-700 shrink-0">
+                      ₹{p.amount.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-[11px] bg-amber-50/60 p-2.5 rounded-xl border border-amber-100">
+                    <div>
+                      <span className="text-slate-500 block">Bank Ref / UTR:</span>
+                      <span className="font-mono font-bold text-slate-900">{p.utr || p.receiptNo}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block">Submitted On:</span>
+                      <span className="font-medium text-slate-700">{p.date || 'Today'}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-amber-900 pt-1">
+                    <span className="flex items-center gap-1 font-semibold">
+                      <Clock className="w-3.5 h-3.5 text-amber-600" />
+                      Status: Under Admin Review
+                    </span>
+                    <span className="text-slate-500 italic">Payment accepted once</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Main Tab Navigation */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
@@ -544,7 +683,7 @@ export default function StudentMyLearningPage() {
                           <div className="space-y-2">
                             <p className="text-xs text-slate-600">
                               {pastAttempt
-                                ? 'You have already attempted this mock test. You can re-attempt or review answer explanations in the arena.'
+                                ? 'Single Attempt Policy: You have already submitted this mock exam (1/1 attempts used). You can view your scorecard, question analysis, and complete solutions below.'
                                 : 'This test is live and ready. The launch window is open for enrolled students.'}
                             </p>
                             <button
@@ -553,7 +692,7 @@ export default function StudentMyLearningPage() {
                               className="w-full py-2.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
                             >
                               <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                              <span>{pastAttempt ? 'Re-attempt Test in Arena' : 'Appear for Test Now'}</span>
+                              <span>{pastAttempt ? 'View Results & Solutions (Attempted 1/1)' : 'Appear for Test Now'}</span>
                               <ArrowRight className="w-3.5 h-3.5" />
                             </button>
                           </div>

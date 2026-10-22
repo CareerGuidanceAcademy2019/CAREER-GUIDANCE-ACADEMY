@@ -29,16 +29,61 @@ export default function MockTestsLandingPage() {
   const { session, currentStudent, db, showToast } = useCga();
   const [payTarget, setPayTarget] = useState<PayManualTarget | null>(null);
 
+  const primarySeries = db.mockSeries?.[0];
+  const targetSeriesId = primarySeries?.id || 'series-ttet-paper1';
+
   // Check if student already enrolled in series
   const isEnrolled = Boolean(
     currentStudent &&
-      (db.seriesEnrollments?.some(
-        (se) => se.studentId === currentStudent.id && se.seriesId === 'ttet-2026'
+      ((db.seriesEnrollments || []).some(
+        (se) => (se.studentId === currentStudent.id || se.studentId === 'me') && (se.seriesId === targetSeriesId || se.seriesId === 'ttet-2026')
       ) ||
+        (typeof window !== 'undefined' &&
+          (() => {
+            try {
+              const stored = localStorage.getItem('cga_series_enrollments');
+              if (stored) {
+                const list = JSON.parse(stored);
+                return list.some(
+                  (se: any) =>
+                    (se.studentId === currentStudent.id || se.studentId === 'me') &&
+                    (se.seriesId === targetSeriesId || se.seriesId === 'ttet-2026')
+                );
+              }
+            } catch {}
+            return false;
+          })()) ||
+        currentStudent.enrollments?.some((e) => e.courseId === targetSeriesId) ||
         (currentStudent as any).seriesEnrolled)
   );
 
-  const primarySeries = db.mockSeries?.[0];
+  // Check if payment verification is pending
+  const isPending = Boolean(
+    currentStudent &&
+      ((db.feePayments || []).some(
+        (p) =>
+          (p.studentId === currentStudent.id || p.studentId === 'me') &&
+          (p.courseId === targetSeriesId || p.courseId === 'ttet-2026') &&
+          p.status === 'Pending'
+      ) ||
+        (typeof window !== 'undefined' &&
+          (() => {
+            try {
+              const stored = localStorage.getItem('cga_custom_payments');
+              if (stored) {
+                const list = JSON.parse(stored);
+                return list.some(
+                  (p: any) =>
+                    (p.studentId === currentStudent.id || p.studentId === 'me') &&
+                    (p.courseId === targetSeriesId || p.courseId === 'ttet-2026') &&
+                    p.status === 'Pending'
+                );
+              }
+            } catch {}
+            return false;
+          })()))
+  );
+
   const displayPrice = primarySeries?.price || 499;
   const seriesTitle = primarySeries?.name || 'T-TET 2026 Mock Test Series (15 Full-Length Mocks)';
 
@@ -88,7 +133,14 @@ export default function MockTestsLandingPage() {
                   href="/student/tests"
                   className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-base shadow-xl inline-flex items-center justify-center gap-2 transition-all"
                 >
-                  <CheckCircle2 className="w-5 h-5" /> Enrolled & Active - Launch Tests
+                  <CheckCircle2 className="w-5 h-5" /> Enrolled &amp; Active - Launch Tests
+                </Link>
+              ) : isPending ? (
+                <Link
+                  href="/student/my-learning"
+                  className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-base shadow-xl inline-flex items-center justify-center gap-2 transition-all"
+                >
+                  <Clock className="w-5 h-5" /> Payment Under Admin Review - View Status
                 </Link>
               ) : (
                 <button

@@ -549,22 +549,56 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
 
   const approvePayment = useCallback(
     async (paymentId: string) => {
-      const targetPayment = db.feePayments.find((p) => p.id === paymentId);
+      let targetPayment = db.feePayments.find((p) => p.id === paymentId || p.receiptNo === paymentId);
+      if (!targetPayment && typeof window !== 'undefined') {
+        try {
+          const customP = JSON.parse(localStorage.getItem('cga_custom_payments') || '[]');
+          targetPayment = customP.find((p: any) => p.id === paymentId || p.receiptNo === paymentId);
+        } catch {}
+      }
+      if (!targetPayment && typeof window !== 'undefined') {
+        try {
+          const reqs = JSON.parse(localStorage.getItem('cga_payment_requests') || '[]');
+          const r = reqs.find((item: any) => item.id === paymentId || item.referenceCode === paymentId);
+          if (r) {
+            targetPayment = {
+              id: r.id,
+              receiptNo: r.referenceCode,
+              studentId: r.studentId,
+              studentName: r.studentName || 'Student',
+              courseId: r.itemId,
+              courseName: r.itemId,
+              amount: r.amountReceived || r.expectedAmount,
+              paymentMode: r.paymentChannel === 'bank_transfer' ? 'Net Banking' : 'UPI',
+              paymentType: 'Full Payment',
+              date: new Date().toISOString().slice(0, 10),
+              status: 'Verified',
+              reviewedBy: sessionRef.current?.name || 'Administrator',
+              reviewedAt: new Date().toISOString(),
+              remarks: `Admin approved. Ref: ${r.referenceCode}`,
+            };
+          }
+        } catch {}
+      }
+
       if (!targetPayment) return { success: false, error: 'Payment record not found.' };
 
       await cgaService.approvePayment(paymentId, sessionRef.current?.name || 'CGA Administrator');
 
       setDb((prev) => {
-        const nextPayments = prev.feePayments.map((p) =>
-          p.id === paymentId
-            ? {
-                ...p,
-                status: 'Verified' as const,
-                reviewedBy: sessionRef.current?.name || 'Administrator',
-                reviewedAt: new Date().toISOString(),
-              }
-            : p
-        );
+        const paymentExists = prev.feePayments.some((p) => p.id === targetPayment!.id || p.receiptNo === targetPayment!.receiptNo);
+        const nextPayments = paymentExists
+          ? prev.feePayments.map((p) =>
+              p.id === targetPayment!.id || p.receiptNo === targetPayment!.receiptNo
+                ? {
+                    ...p,
+                    status: 'Verified' as const,
+                    reviewedBy: sessionRef.current?.name || 'Administrator',
+                    reviewedAt: new Date().toISOString(),
+                  }
+                : p
+            )
+          : [{ ...targetPayment!, status: 'Verified' as const }, ...prev.feePayments];
 
         // Unlock enrollment / clear due for the student
         const crs = prev.courses.find((c) => c.id === targetPayment.courseId);
@@ -602,10 +636,31 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
           return st;
         });
 
+        const isSeries =
+          targetPayment.courseId.startsWith('series-') ||
+          prev.mockSeries.some((s) => s.id === targetPayment.courseId) ||
+          targetPayment.remarks?.includes('mock_series');
+
+        const nextSeriesEnrollments = isSeries
+          ? [
+              ...prev.seriesEnrollments.filter(
+                (se) => !(se.studentId === targetPayment.studentId && se.seriesId === targetPayment.courseId)
+              ),
+              {
+                id: `ser-enr-${Date.now()}`,
+                studentId: targetPayment.studentId,
+                seriesId: targetPayment.courseId,
+                paymentId: targetPayment.id,
+                enrolledAt: new Date().toISOString(),
+              },
+            ]
+          : prev.seriesEnrollments;
+
         return {
           ...prev,
           feePayments: nextPayments,
           students: nextStudents,
+          seriesEnrollments: nextSeriesEnrollments,
         };
       });
 

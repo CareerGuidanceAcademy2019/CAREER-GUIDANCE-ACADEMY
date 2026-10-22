@@ -20,6 +20,7 @@ import { formatFacultyName } from '@/lib/names';
 interface CourseCardProps {
   course: Course;
   isEnrolled?: boolean;
+  isPending?: boolean;
   onSelectCourse?: (course: Course) => void;
   onJoinWaitlist?: (course: Course) => void;
 }
@@ -27,6 +28,7 @@ interface CourseCardProps {
 export function CourseCard({
   course,
   isEnrolled = false,
+  isPending = false,
   onSelectCourse,
   onJoinWaitlist,
 }: CourseCardProps) {
@@ -216,11 +218,19 @@ export function CourseCard({
 
         {isEnrolled ? (
           <Link
-            href="/student/my-courses"
+            href="/student/my-learning"
             className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-xs whitespace-nowrap shrink-0"
           >
             <CheckCircle2 className="w-4 h-4 shrink-0" />
             Enrolled
+          </Link>
+        ) : isPending ? (
+          <Link
+            href="/student/my-learning"
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200 transition-colors shadow-xs whitespace-nowrap shrink-0"
+          >
+            <Clock className="w-4 h-4 shrink-0 text-amber-700 animate-pulse" />
+            Verification Pending
           </Link>
         ) : onSelectCourse ? (
           isOpen ? (

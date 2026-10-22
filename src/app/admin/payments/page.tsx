@@ -35,7 +35,7 @@ import { FeePayment } from '@/data/initialSeedData';
 import { MaskedData } from '@/components/ui/MaskedData';
 
 export default function AdminPaymentsPage() {
-  const { db, session, showToast } = useCga();
+  const { db, session, showToast, approvePayment, rejectPayment } = useCga();
 
   // State
   const [requests, setRequests] = useState<PaymentRequest[]>([]);
@@ -344,27 +344,23 @@ export default function AdminPaymentsPage() {
       // 1. Try Supabase RPC
       const { createClient } = await import('@/lib/supabase/client');
       const sb = createClient();
-      const { data, error } = await sb.rpc('cga_approve_payment', {
+      await sb.rpc('cga_approve_payment', {
         p_request_id: approvingRequest.id,
         p_amount_received: amountNum,
         p_admin_id: session?.userId || null,
       });
+    } catch {}
 
-      if (!error) {
-        showToast('Payment Approved', `Reference ${approvingRequest.referenceCode} approved & fulfilled successfully.`, 'success');
-      } else {
-        // Local fallback update
-        updateLocalRequestStatus(approvingRequest.id, 'approved', amountNum);
-        showToast('Payment Approved', `Payment marked approved locally.`, 'success');
-      }
-    } catch {
-      updateLocalRequestStatus(approvingRequest.id, 'approved', amountNum);
-      showToast('Payment Approved', `Payment marked approved.`, 'success');
-    } finally {
-      setIsProcessingApproval(false);
-      setApprovingRequest(null);
-      fetchRequests();
-    }
+    try {
+      // 2. Call context approvePayment to unlock course/series & sync React state
+      await approvePayment(approvingRequest.id);
+    } catch {}
+
+    updateLocalRequestStatus(approvingRequest.id, 'approved', amountNum);
+    showToast('Payment Approved', `Reference ${approvingRequest.referenceCode} approved & unlocked successfully.`, 'success');
+    setIsProcessingApproval(false);
+    setApprovingRequest(null);
+    fetchRequests();
   };
 
   // Open Rejection Dialog
@@ -386,26 +382,22 @@ export default function AdminPaymentsPage() {
     try {
       const { createClient } = await import('@/lib/supabase/client');
       const sb = createClient();
-      const { data, error } = await sb.rpc('cga_reject_payment', {
+      await sb.rpc('cga_reject_payment', {
         p_request_id: rejectingRequest.id,
         p_reason: rejectReason.trim(),
         p_admin_id: session?.userId || null,
       });
+    } catch {}
 
-      if (!error) {
-        showToast('Payment Rejected', `Request marked as rejected. Student can resubmit proof.`, 'info');
-      } else {
-        updateLocalRequestStatus(rejectingRequest.id, 'rejected', null, rejectReason.trim());
-        showToast('Payment Rejected', `Payment marked as rejected.`, 'info');
-      }
-    } catch {
-      updateLocalRequestStatus(rejectingRequest.id, 'rejected', null, rejectReason.trim());
-      showToast('Payment Rejected', `Payment marked as rejected.`, 'info');
-    } finally {
-      setIsProcessingReject(false);
-      setRejectingRequest(null);
-      fetchRequests();
-    }
+    try {
+      await rejectPayment(rejectingRequest.id, rejectReason.trim());
+    } catch {}
+
+    updateLocalRequestStatus(rejectingRequest.id, 'rejected', null, rejectReason.trim());
+    showToast('Payment Rejected', `Request marked as rejected.`, 'info');
+    setIsProcessingReject(false);
+    setRejectingRequest(null);
+    fetchRequests();
   };
 
   const updateLocalRequestStatus = (id: string, newStatus: PaymentStatus, amountReceived?: number | null, reason?: string) => {
@@ -413,7 +405,7 @@ export default function AdminPaymentsPage() {
       const localStored = localStorage.getItem('cga_payment_requests');
       if (localStored) {
         const list: PaymentRequest[] = JSON.parse(localStored);
-        const req = list.find((r) => r.id === id);
+        const req = list.find((r) => r.id === id || r.referenceCode === id);
         if (req) {
           req.status = newStatus;
           if (amountReceived !== undefined) req.amountReceived = amountReceived;

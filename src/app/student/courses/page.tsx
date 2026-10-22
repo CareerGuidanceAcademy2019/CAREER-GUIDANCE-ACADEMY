@@ -44,6 +44,24 @@ export default function StudentCourseCataloguePage() {
   if (!currentStudent) return null;
 
   const enrolledIds = currentStudent.enrollments.map((e) => e.courseId);
+  const pendingIds = React.useMemo(() => {
+    const fromDb = (db.feePayments || [])
+      .filter((p) => (p.studentId === currentStudent.id || p.studentId === 'me') && p.status === 'Pending')
+      .map((p) => p.courseId);
+    let fromLocal: string[] = [];
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('cga_custom_payments');
+        if (stored) {
+          const list = JSON.parse(stored);
+          fromLocal = list
+            .filter((p: any) => (p.studentId === currentStudent.id || p.studentId === 'me') && p.status === 'Pending')
+            .map((p: any) => p.courseId);
+        }
+      } catch {}
+    }
+    return Array.from(new Set([...fromDb, ...fromLocal]));
+  }, [db.feePayments, currentStudent.id]);
 
   const filteredCourses = db.courses.filter((c) => {
     const matchCat = category === 'All' || c.category === category;
@@ -166,7 +184,16 @@ export default function StudentCourseCataloguePage() {
             key={course.id}
             course={course}
             isEnrolled={enrolledIds.includes(course.id)}
+            isPending={pendingIds.includes(course.id)}
             onSelectCourse={(c) => {
+              if (enrolledIds.includes(c.id)) {
+                showToast('Already Enrolled', 'You are already enrolled in this course.', 'info');
+                return;
+              }
+              if (pendingIds.includes(c.id)) {
+                showToast('Verification Pending', 'Your enrolment application is already pending admin verification.', 'info');
+                return;
+              }
               setSelectedCourse(c);
               setPaymentPlan('Full Payment');
             }}
