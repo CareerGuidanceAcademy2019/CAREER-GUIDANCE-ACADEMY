@@ -104,7 +104,7 @@ export function AppearTestButton({
   }
 
   // 3. STATE: UPCOMING
-  const isLaunchedStatus = test.status === 'launched';
+  const isLaunchedStatus = test.status === 'launched' || test.status === 'Published';
   const isBeforeStart = winStart ? now < winStart : !isLaunchedStatus;
 
   if (isBeforeStart) {

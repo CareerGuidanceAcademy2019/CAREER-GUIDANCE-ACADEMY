@@ -335,10 +335,10 @@ export function UpiPaymentModal({
                   1. Complete the payment in your UPI app or Bank portal.
                 </p>
                 <p>
-                  2. Note down the <strong>12-digit UTR / UPI Reference Number</strong> and take a screenshot.
+                  2. Note down the <strong>12-digit UTR / UPI Reference Number</strong> from your payment app.
                 </p>
                 <p>
-                  3. Click the button below to submit your UTR &amp; screenshot for immediate administrative verification.
+                  3. Click the button below to submit your 12-digit UTR for immediate verification.
                 </p>
               </div>
 
@@ -348,7 +348,7 @@ export function UpiPaymentModal({
                 onClick={() => setStep('proof')}
                 className="w-full py-3.5 px-5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-extrabold flex items-center justify-center gap-2 shadow-lg shadow-emerald-700/20 cursor-pointer transition-all"
               >
-                I Have Completed the Payment → Submit UTR &amp; Screenshot <ArrowRight className="w-4 h-4" />
+                I Have Completed the Payment → Submit 12-Digit UTR <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           )}
@@ -428,31 +428,28 @@ export function UpiPaymentModal({
                 </div>
               </div>
 
-              {/* Screenshot Upload with Preview */}
-              <div>
-                <label className="block text-xs font-extrabold text-slate-800 mb-1">
-                  Upload Payment Screenshot / Receipt (Recommended)
-                </label>
-                <div className="flex flex-col sm:flex-row items-center gap-3">
-                  <label className="flex-1 w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-dashed border-slate-300 hover:border-[#0056b3] bg-slate-50 hover:bg-blue-50/40 text-xs font-bold text-slate-700 cursor-pointer transition-all">
-                    <Upload className="w-4 h-4 text-[#0056b3]" />
-                    <span>{screenshotDataUrl ? 'Change Screenshot' : 'Choose Screenshot Image'}</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleScreenshotChange}
-                      className="hidden"
-                    />
-                  </label>
-                  {screenshotDataUrl && (
-                    <div className="relative w-16 h-16 rounded-xl overflow-hidden border-2 border-emerald-500 shrink-0">
-                      <img
-                        src={screenshotDataUrl}
-                        alt="Payment Screenshot Preview"
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  )}
+              {/* Contact Admission Cell for Support Box */}
+              <div className="p-4 rounded-2xl bg-blue-50/80 border border-blue-200 space-y-2">
+                <div className="flex items-center gap-2 text-xs font-extrabold text-[#0056b3]">
+                  <Phone className="w-4 h-4 text-[#0056b3]" />
+                  <span>Contact Admission Cell for Support</span>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Only your 12-digit bank UTR is needed to verify your payment. For instant activation assistance or queries, please reach our admission desk:
+                </p>
+                <div className="flex flex-wrap items-center gap-2.5 pt-1 text-xs">
+                  <a
+                    href="tel:+917005929189"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-blue-200 font-bold text-[#0056b3] hover:bg-blue-100 transition-colors"
+                  >
+                    <Phone className="w-3.5 h-3.5" /> +91 70059 29189
+                  </a>
+                  <a
+                    href="tel:+919436128944"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-blue-200 font-bold text-[#0056b3] hover:bg-blue-100 transition-colors"
+                  >
+                    <Phone className="w-3.5 h-3.5" /> +91 94361 28944
+                  </a>
                 </div>
               </div>
 
@@ -463,7 +460,7 @@ export function UpiPaymentModal({
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Paid from account of Subhradip Banik"
+                  placeholder="e.g. Paid from account of S Banik"
                   value={remarks}
                   onChange={(e) => setRemarks(e.target.value)}
                   className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs outline-hidden"

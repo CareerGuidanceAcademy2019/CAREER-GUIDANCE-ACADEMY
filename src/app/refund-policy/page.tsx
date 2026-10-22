@@ -181,7 +181,7 @@ export default function RefundPolicyPage() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
               <div className="bg-white p-4 rounded-xl border border-slate-200">
                 <span className="text-xs text-slate-400 block font-medium">Head of Administration</span>
-                <p className="text-slate-900 font-bold text-sm mt-1">Subhradip Banik</p>
+                <p className="text-slate-900 font-bold text-sm mt-1">S Banik</p>
                 <p className="text-xs text-slate-500 mt-0.5">Director &amp; Chief Administrator</p>
                 <a
                   href={`tel:${PAYMENT_SETTINGS.supportPhoneWhatsapp}`}

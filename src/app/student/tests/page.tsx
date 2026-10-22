@@ -65,6 +65,12 @@ export default function StudentMockTestsPage() {
   const [selectedSubjectTab, setSelectedSubjectTab] = useState<string>('all');
   const [copiedPostId, setCopiedPostId] = useState<string | null>(null);
 
+  const SERIES_TO_COURSES: Record<string, string[]> = {
+    'series-ttet-paper1': ['crs-tet-1-online', 'crs-tet-1-offline', 'crs-tet-1', 'series-ttet-paper1'],
+    'series-ttet-paper2-sci': ['crs-tet-2-sci-online', 'crs-tet-2-sci-offline', 'crs-tet-2-sci', 'series-ttet-paper2-sci'],
+    'series-ttet-paper2-soc': ['crs-tet-2-arts-online', 'crs-tet-2-arts-offline', 'crs-tet-2-arts', 'series-ttet-paper2-soc'],
+  };
+
   const isStudentEnrolledInSeries = (seriesId: string) => {
     if (!currentStudent) return false;
     if (currentStudent.email === 'angatsaha825@gmail.com') return true;
@@ -72,9 +78,55 @@ export default function StudentMockTestsPage() {
       (se) => se.studentId === currentStudent.id && se.seriesId === seriesId
     );
     if (inSeries) return true;
-    const inCourse = currentStudent.enrollments.some((e) => e.courseId === seriesId);
-    if (inCourse) return true;
+
+    // Check course enrollment matching this series
+    const matchingCourses = SERIES_TO_COURSES[seriesId] || [seriesId];
+    const match = currentStudent.enrollments.find((e) => matchingCourses.includes(e.courseId));
+    if (match) {
+      if (match.accessValidUntil) {
+        return new Date(match.accessValidUntil).getTime() > currentTime;
+      }
+      return true;
+    }
     return false;
+  };
+
+  const isStudentEnrolledInTest = (test: any) => {
+    if (!currentStudent) return false;
+    if (currentStudent.email === 'angatsaha825@gmail.com') return true;
+
+    if (test.seriesId && test.seriesId !== 'all') {
+      return isStudentEnrolledInSeries(test.seriesId);
+    }
+
+    if (test.courseId) {
+      for (const [sId, courses] of Object.entries(SERIES_TO_COURSES)) {
+        if (courses.includes(test.courseId)) {
+          return isStudentEnrolledInSeries(sId);
+        }
+      }
+      const match = currentStudent.enrollments.find((e) => e.courseId === test.courseId);
+      if (match) {
+        if (match.accessValidUntil) {
+          return new Date(match.accessValidUntil).getTime() > currentTime;
+        }
+        return true;
+      }
+      return false;
+    }
+
+    const title = (test.title || '').toLowerCase();
+    if (title.includes('paper-i') || title.includes('paper 1') || title.includes('paper-1')) {
+      return isStudentEnrolledInSeries('series-ttet-paper1');
+    }
+    if (title.includes('science')) {
+      return isStudentEnrolledInSeries('series-ttet-paper2-sci');
+    }
+    if (title.includes('social') || title.includes('arts')) {
+      return isStudentEnrolledInSeries('series-ttet-paper2-soc');
+    }
+
+    return isStudentEnrolledInSeries('series-ttet-paper1');
   };
 
   const isStudentEnrolledInPost = (post: MockSubjectPost) => {
@@ -174,6 +226,15 @@ export default function StudentMockTestsPage() {
   if (!currentStudent) return null;
 
   const startTest = async (test: any) => {
+    if (!isStudentEnrolledInTest(test)) {
+      showToast(
+        'Access Restricted',
+        'You are enrolled in Tripura TET Paper-I. To appear for other mock exams, please enrol in that course.',
+        'error'
+      );
+      return;
+    }
+
     const matchingEnrollment = currentStudent.enrollments.find((e) => e.courseId === test.courseId);
     if (
       matchingEnrollment?.accessValidUntil &&
@@ -203,6 +264,16 @@ export default function StudentMockTestsPage() {
           remaining = Math.max(10, serverDuration - elapsed);
         }
 
+        const questionsToUse = (data.questions && data.questions.length > 0) ? data.questions : (test.questions || []);
+        if (!Array.isArray(questionsToUse) || questionsToUse.length === 0) {
+          showToast(
+            'Test Not Ready',
+            'Questions for this mock test are currently being finalized by the faculty. Please check back shortly.',
+            'error'
+          );
+          return;
+        }
+
         setCompletedAttempt(null);
         setActiveTest({
           ...test,
@@ -211,7 +282,7 @@ export default function StudentMockTestsPage() {
           totalMarks: data.totalMarks || test.totalMarks,
           negativeMarking: data.negativeMarking ?? test.negativeMarking,
           questionGroups: data.questionGroups || [],
-          questions: data.questions || test.questions || [],
+          questions: questionsToUse,
         });
         setCurrentQIndex(0);
         setSelectedAnswers(data.savedAnswers || {});
@@ -219,10 +290,26 @@ export default function StudentMockTestsPage() {
         setSecondsLeft(remaining);
         setLangView('both');
         return;
+      } else {
+        const errJson = await res.json().catch(() => null);
+        if (errJson?.error) {
+          showToast('Cannot Start Test', errJson.error, 'error');
+          return;
+        }
       }
     } catch {}
 
-    // Fallback to local test state
+    // Fallback to local test state ONLY if it contains valid questions
+    const localQuestions = test.questions || [];
+    if (!Array.isArray(localQuestions) || localQuestions.length === 0) {
+      showToast(
+        'Questions Unavailable',
+        'The question paper for this test is being prepared by the faculty. Please check back shortly.',
+        'error'
+      );
+      return;
+    }
+
     setCompletedAttempt(null);
     setActiveTest(test);
     setCurrentQIndex(0);
@@ -258,7 +345,28 @@ export default function StudentMockTestsPage() {
 
   // ==================== 1. LIVE TIMED MCQ EXAM VIEW ====================
   if (activeTest) {
-    const currentQ = activeTest.questions[currentQIndex];
+    if (!Array.isArray(activeTest.questions) || activeTest.questions.length === 0) {
+      return (
+        <div className="bg-white rounded-3xl border border-slate-200 p-8 text-center space-y-4 shadow-sm">
+          <div className="w-12 h-12 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+            <ClipboardCheck className="w-6 h-6" />
+          </div>
+          <h2 className="text-lg font-extrabold text-slate-800">Mock Test Paper Being Finalized</h2>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
+            The question set for &quot;{activeTest.title}&quot; is currently being verified by the academic faculty. Please return to the mock test dashboard.
+          </p>
+          <button
+            type="button"
+            onClick={() => setActiveTest(null)}
+            className="px-5 py-2.5 rounded-xl bg-[#0056b3] text-white text-xs font-bold cursor-pointer hover:bg-blue-700 transition-all shadow-xs"
+          >
+            Return to Mock Tests
+          </button>
+        </div>
+      );
+    }
+
+    const currentQ = activeTest.questions[currentQIndex] || activeTest.questions[0] || {};
     const langMode = getTestLanguageMode(activeTest);
     const showBoth = langMode === 'bilingual' && langView === 'both';
     const showEnglishOnly = langMode === 'english_only' || (langMode === 'bilingual' && langView === 'en');
@@ -442,8 +550,8 @@ export default function StudentMockTestsPage() {
 
               {/* Options List */}
               <div className="space-y-3">
-                {currentQ.options.map((opt: MockQuestionOption, idx: number) => {
-                  const isSelected = selectedAnswers[currentQ.id] === idx;
+                {(currentQ?.options || []).map((opt: MockQuestionOption, idx: number) => {
+                  const isSelected = selectedAnswers[currentQ?.id || ''] === idx;
                   const optBn = currentQ.optionsBn?.[idx];
                   const optImg = getOptionImage(opt);
                   const optText = getOptionText(opt);
@@ -1240,13 +1348,23 @@ export default function StudentMockTestsPage() {
               {/* SUBSECTION (A): MOCK TESTS */}
               {activeSubsection === 'tests' && (() => {
                 const allAvailableTests: any[] = [
-                  ...(db.seriesTests || []),
-                  ...(db.mockTests || []).map((mt) => ({
-                    ...mt,
-                    seriesId: mt.courseId || 'series-ttet-paper1',
-                    subjectId: mt.subject || null,
-                    testType: mt.title.toLowerCase().includes('full') ? 'full' : 'sectional',
-                  })),
+                  ...(db.seriesTests || []).filter((st) => st.questions && st.questions.length > 0),
+                  ...(db.mockTests || []).map((mt) => {
+                    const cId = (mt.courseId || '').toLowerCase();
+                    const title = (mt.title || '').toLowerCase();
+                    let mappedSeries = 'series-ttet-paper1';
+                    if (cId.includes('sci') || title.includes('science')) {
+                      mappedSeries = 'series-ttet-paper2-sci';
+                    } else if (cId.includes('arts') || cId.includes('soc') || title.includes('social')) {
+                      mappedSeries = 'series-ttet-paper2-soc';
+                    }
+                    return {
+                      ...mt,
+                      seriesId: mappedSeries,
+                      subjectId: mt.subject || null,
+                      testType: mt.title.toLowerCase().includes('full') ? 'full' : 'sectional',
+                    };
+                  }),
                 ];
 
                 const filtered = allAvailableTests.filter((t) => {
@@ -1275,6 +1393,7 @@ export default function StudentMockTestsPage() {
                     {filtered.map((test) => {
                       const langMode = getTestLanguageMode(test);
                       const existingAttempt = myPastAttempts.find((a) => a.testId === test.id);
+                      const isTestEnrolled = isStudentEnrolledInTest(test);
 
                       return (
                         <div
@@ -1341,7 +1460,7 @@ export default function StudentMockTestsPage() {
                           <div className="pt-2 border-t border-slate-100">
                             <AppearTestButton
                               test={test}
-                              isEnrolled={isEnrolled}
+                              isEnrolled={isTestEnrolled}
                               attempt={existingAttempt ? {
                                 id: existingAttempt.id,
                                 score: existingAttempt.score,
@@ -1350,7 +1469,7 @@ export default function StudentMockTestsPage() {
                                 submittedAt: existingAttempt.submittedAt,
                               } : null}
                               onAppear={() => startTest(test)}
-                              onEnrol={() => handleOpenSeriesCheckout(selectedSeriesId)}
+                              onEnrol={() => handleOpenSeriesCheckout(test.seriesId || selectedSeriesId)}
                               onViewSolutions={() => {
                                 if (existingAttempt) {
                                   setCompletedAttempt(existingAttempt);

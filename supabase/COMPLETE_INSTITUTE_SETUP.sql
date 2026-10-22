@@ -469,8 +469,8 @@ create policy "enquiries: admin all" on public.enquiries for all to authenticate
 -- ============================================================================
 
 insert into public.access_allowlist (identifier, role, note) values
-  ('careerguidanceacademy2019@gmail.com', 'admin', 'Subhradip Banik - Institute Administrator'),
-  ('7005929189',                         'admin', 'Subhradip Banik - Mobile Access'),
+  ('careerguidanceacademy2019@gmail.com', 'admin', 'S Banik - Institute Administrator'),
+  ('7005929189',                         'admin', 'S Banik - Mobile Access'),
   ('angatsaha825@gmail.com',             'admin', 'Angat Saha - Institute Director & Super Administrator'),
   ('7629882835',                         'admin', 'Angat Saha - Primary Mobile Access'),
   ('admissions@cgaudaipur.in',           'admin', 'Career Guidance Academy Admissions Admin'),
@@ -478,7 +478,7 @@ insert into public.access_allowlist (identifier, role, note) values
   ('+91 87875 41120',                    'admin', 'C.G.A Udaipur Secondary Office Contact')
 on conflict (identifier) do update set role = excluded.role, note = excluded.note;
 
--- Create/update the profile for Subhradip Banik
+-- Create/update the profile for S Banik
 insert into public.profiles (
   id, role, student_code, name, email, phone,
   photo, guardian_name, address, permanent_address, qualification, target_exam, status
@@ -486,7 +486,7 @@ insert into public.profiles (
   '4eacbd2f-bcac-425c-bed3-079d137dcf41',
   'admin',
   'CGA-2026-002',
-  'Subhradip Banik',
+  'S Banik',
   'careerguidanceacademy2019@gmail.com',
   '7005929189',
   'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
@@ -501,15 +501,15 @@ on conflict (id) do update set
   role = 'admin',
   status = 'Active',
   student_code = coalesce(profiles.student_code, 'CGA-2026-002'),
-  name = 'Subhradip Banik',
+  name = 'S Banik',
   phone = '7005929189';
 
--- Create/update faculty record for Subhradip Banik
+-- Create/update faculty record for S Banik
 insert into public.faculty (
   name, designation, subject, qualification, experience, photo, bio,
   profile_id, achievements, work_ability, approval_status
 ) values (
-  'Subhradip Banik',
+  'S Banik',
   'Administrator & Senior Faculty',
   'Career Guidance & Academic Administration',
   'Post Graduate',
@@ -522,7 +522,7 @@ insert into public.faculty (
   'Approved'
 )
 on conflict (profile_id) do update set
-  name = 'Subhradip Banik',
+  name = 'S Banik',
   designation = 'Administrator & Senior Faculty',
   approval_status = 'Approved';
 

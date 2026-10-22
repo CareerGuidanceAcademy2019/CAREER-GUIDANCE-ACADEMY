@@ -158,6 +158,23 @@ export default function AboutPage() {
           </div>
         </section>
 
+        {/* Digital Infrastructure & Technical Leadership */}
+        <section className="py-14 bg-slate-50 border-y border-slate-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="max-w-3xl mx-auto text-center space-y-3">
+              <span className="text-xs font-extrabold uppercase tracking-widest text-[#0056b3]">
+                Technology &amp; Digital Innovation
+              </span>
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0a0e2a]">
+                Platform Architecture &amp; Development
+              </h2>
+              <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
+                The Career Guidance Academy digital learning portal, timed CBT mock test platform, and automated admissions infrastructure are architected and developed by <strong className="text-slate-900">Angat Saha</strong> to deliver high-speed, secure, and accessible education for competitive aspirants across Tripura.
+              </p>
+            </div>
+          </div>
+        </section>
+
         {/* CTA */}
         <section className="py-14 bg-white">
           <div className="max-w-5xl mx-auto px-4 text-center space-y-5">

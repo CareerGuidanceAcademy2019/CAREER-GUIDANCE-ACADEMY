@@ -368,6 +368,7 @@ const toSeriesMockTest = (r: Row): SeriesMockTest => ({
   retentionDays: r.retention_days ? Number(r.retention_days) : 7,
   archiveDownloadedAt: r.archive_downloaded_at ?? null,
   purgeRequiresArchive: r.purge_requires_archive ?? true,
+  questions: r.questions ?? [],
 });
 
 const toSeriesAttempt = (r: Row, studentName: string, studentCode: string, studentPhone: string): SeriesAttempt => ({
@@ -436,7 +437,7 @@ export const cgaService = {
     const name =
       meta.name ||
       (data.user.email === 'careerguidanceacademy2019@gmail.com'
-        ? 'Subhradip Banik'
+        ? 'S Banik'
         : data.user.email === 'angatsaha825@gmail.com'
         ? 'Angat Saha'
         : data.user.email?.split('@')[0] || 'User');
@@ -1102,11 +1103,10 @@ export const cgaService = {
         return {
           ...t,
           questions: (t.questions || []).map((q) => ({
-            id: q.id,
-            question: q.question,
-            options: q.options,
+            ...q,
             correctOptionIndex: -1,
             explanation: '',
+            explanationBn: '',
           })),
         };
       }

@@ -11,8 +11,8 @@
 
 insert into public.access_allowlist (identifier, role, note) values
   -- ---------- OFFICIAL C.G.A ACADEMY ADMINS ----------
-  ('careerguidanceacademy2019@gmail.com', 'admin', 'Subhradip Banik (CGA Administrator)'),
-  ('+91 70059 29189',                    'admin', 'Subhradip Banik Mobile'),
+  ('careerguidanceacademy2019@gmail.com', 'admin', 'S Banik (CGA Administrator)'),
+  ('+91 70059 29189',                    'admin', 'S Banik Mobile'),
   ('angatsaha825@gmail.com',             'admin', 'Angat Saha (CGA Administrator)'),
   ('+91 76298 82835',                    'admin', 'Angat Saha Mobile'),
   ('admissions@cgaudaipur.in',           'admin', 'Career Guidance Academy Admissions Admin'),

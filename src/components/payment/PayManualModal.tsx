@@ -722,74 +722,32 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
                 </div>
               </div>
 
-              {/* Screenshot Upload with Drag & Drop */}
-              <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">
-                  Payment Screenshot Proof (Optional but Recommended)
-                </label>
-                <div
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={handleDrop}
-                  onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-slate-300 hover:border-blue-400 p-5 rounded-2xl bg-slate-50 text-center cursor-pointer transition-colors space-y-2"
-                >
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    onChange={handleFileChange}
-                    className="hidden"
-                  />
-                  <div className="w-10 h-10 rounded-full bg-blue-100 text-[#0056b3] mx-auto flex items-center justify-center">
-                    <Upload className="w-5 h-5" />
-                  </div>
-                  <p className="text-xs font-bold text-slate-800">
-                    Click to select from phone gallery or drag &amp; drop screenshot here
-                  </p>
-                  <p className="text-[11px] text-slate-500">JPG, PNG, or WEBP up to 5 MB</p>
+              {/* Contact Admission Cell for Support Box */}
+              <div className="p-4 rounded-2xl bg-blue-50/80 border border-blue-200 space-y-2">
+                <div className="flex items-center gap-2 text-xs font-extrabold text-[#0056b3]">
+                  <Phone className="w-4 h-4 text-[#0056b3]" />
+                  <span>Contact Admission Cell for Support</span>
                 </div>
-
-                {screenshotError && (
-                  <p className="text-xs text-red-600 mt-1 font-semibold">{screenshotError}</p>
-                )}
-
-                {isBlurryOrSmall && (
-                  <p className="text-xs text-amber-700 mt-1 font-medium bg-amber-50 p-2 rounded-lg border border-amber-200 flex items-center gap-1.5">
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                    <span>The uploaded image seems very small or low-resolution. Please ensure the 12-digit UTR is clearly readable.</span>
-                  </p>
-                )}
-
-                {screenshotPreview && (
-                  <div className="mt-3 p-3 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={screenshotPreview}
-                        alt="Payment Screenshot Preview"
-                        className="w-12 h-12 object-cover rounded-xl border border-slate-300"
-                      />
-                      <div className="text-xs">
-                        <strong className="text-slate-900 block truncate max-w-xs">
-                          {screenshotFile?.name || 'payment_screenshot.jpg'}
-                        </strong>
-                        <span className="text-[11px] text-slate-500">
-                          {screenshotFile ? `${(screenshotFile.size / 1024).toFixed(0)} KB` : 'Attached'}
-                        </span>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setScreenshotFile(null);
-                        setScreenshotPreview(null);
-                      }}
-                      className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 cursor-pointer"
-                      title="Remove image"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                )}
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Only your genuine 12-digit UTR is required to verify your transaction against bank records. For instant activation assistance or queries, please reach our admission desk:
+                </p>
+                <div className="flex flex-wrap items-center gap-3 pt-1 text-xs">
+                  <a
+                    href="tel:+917005929189"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-blue-200 font-bold text-[#0056b3] hover:bg-blue-100 transition-colors"
+                  >
+                    <Phone className="w-3.5 h-3.5" /> +91 70059 29189
+                  </a>
+                  <a
+                    href="tel:+919436128944"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-blue-200 font-bold text-[#0056b3] hover:bg-blue-100 transition-colors"
+                  >
+                    <Phone className="w-3.5 h-3.5" /> +91 94361 28944
+                  </a>
+                  <span className="text-[11px] text-slate-500">
+                    Admission Cell • Chanban, Udaipur
+                  </span>
+                </div>
               </div>
 
               {/* Confirmation Checkbox */}

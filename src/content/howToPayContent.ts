@@ -101,8 +101,8 @@ export function getHowToPayContent(settings: PaymentSettingsRecord): {
         },
         {
           number: 5,
-          title: 'Submit the 12-Digit UTR & Screenshot',
-          description: `Return here immediately. Copy the 12-digit UTR from your payment screen, upload a clear screenshot, and click Submit. Our administrative desk will verify it against the bank statement (${timing}).`,
+          title: 'Submit the 12-Digit UTR to Verify',
+          description: `Return here immediately. Copy the 12-digit UTR from your payment screen and click Submit. Our administrative desk will verify it directly against bank records (${timing}). You can also connect with our admission cell for immediate verification support.`,
           icon: 'FileCheck',
         },
       ],
@@ -241,8 +241,8 @@ export function getHowToPayContent(settings: PaymentSettingsRecord): {
         },
         {
           number: 5,
-          title: '১২-ডিজিটের UTR ও স্ক্রিনশট জমা দিন',
-          description: `পেমেন্ট সম্পন্ন হলে ১২-ডিজিটের UTR নম্বরটি কপি করে আমাদের পোর্টালে লিখুন এবং স্ক্রিনশট আপলোড করে সাবমিট করুন। অ্যাডমিন ভেরিফাই করার পর (${timing}) অ্যাক্সেস পেয়ে যাবেন।`,
+          title: '১২-ডিজিটের UTR নম্বর জমা দিন',
+          description: `পেমেন্ট সম্পন্ন হলে ১২-ডিজিটের UTR নম্বরটি কপি করে আমাদের পোর্টালে লিখুন এবং সাবমিট করুন। অ্যাডমিন সরাসরি ব্যাঙ্কের সাথে যাচাই (${timing}) করার পর অ্যাক্সেস চালু করে দেবে। যেকোনো প্রয়োজনে সরাসরি অ্যাডমিশন সেলে যোগাযোগ করুন।`,
           icon: 'FileCheck',
         },
       ],

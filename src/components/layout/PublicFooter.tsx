@@ -218,7 +218,7 @@ export function PublicFooter({ variant = 'default' }: PublicFooterProps) {
           <div>
             <span className="font-bold text-white uppercase tracking-wider block mb-2">Data Protection Officer</span>
             <p className="text-slate-400 leading-relaxed">
-              Designated Grievance &amp; DPDP Officer: <strong>Subhradip Banik</strong><br />
+              Designated Grievance &amp; DPDP Officer: <strong>S. Banik</strong><br />
               Email:{' '}
               <a href="mailto:careerguidanceacademy2019@gmail.com" className="hover:text-amber-400 underline">
                 careerguidanceacademy2019@gmail.com
@@ -246,7 +246,7 @@ export function PublicFooter({ variant = 'default' }: PublicFooterProps) {
 
         <div className="mt-8 pt-6 border-t border-slate-800/60 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
           <p>
-            © {new Date().getFullYear()} {db.siteContent.instituteName}, Udaipur, Gomati Tripura. All Rights Reserved.
+            © {new Date().getFullYear()} {db.siteContent.instituteName}, Udaipur, Gomati Tripura. All Rights Reserved. • Designed &amp; Developed by <span className="text-slate-300 font-semibold">Angat Saha</span>
           </p>
           <div className="flex items-center gap-4">
             <Link href="/privacy-policy" className="hover:text-slate-300">Privacy</Link>
