@@ -21,6 +21,43 @@ export async function GET(request: Request) {
     });
 
     if (error) {
+      const { data: testRow } = await supabaseAdmin
+        .from('mock_tests')
+        .select('*')
+        .eq('id', testId)
+        .maybeSingle();
+
+      if (testRow) {
+        const rawQs = Array.isArray(testRow.questions) ? testRow.questions : [];
+        const mappedQs = rawQs.map((q: any, idx: number) => ({
+          id: q.id || `q-${idx}`,
+          position: idx + 1,
+          questionText: q.question || '',
+          options: q.options || [],
+          questionTextBn: q.questionBn || null,
+          optionsBn: q.optionsBn || null,
+          correctOption: q.correctOptionIndex ?? 0,
+          explanation: q.explanation || '',
+          explanationBn: q.explanationBn || null,
+        }));
+
+        return NextResponse.json({
+          success: true,
+          test: {
+            id: testRow.id,
+            title: testRow.title,
+            durationMinutes: testRow.duration_minutes,
+            totalMarks: testRow.total_marks,
+            marksPerQuestion: testRow.marks_per_question,
+            negativeMarking: testRow.negative_marking,
+            status: testRow.status,
+            scheduledDate: testRow.scheduled_date,
+          },
+          questions: mappedQs,
+          questionGroups: [],
+        });
+      }
+
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 

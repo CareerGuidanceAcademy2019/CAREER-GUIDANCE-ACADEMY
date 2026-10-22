@@ -100,8 +100,8 @@ export default function AdminMockTestsPage() {
       subject: 'Child Development & Pedagogy',
       languageMode: 'bilingual',
       courseId: firstCourse?.id || '',
-      courseName: firstCourse?.name || '',
-      batchName: firstCourse?.batchName || '',
+      courseName: firstCourse?.name || 'Open to All Batches',
+      batchName: firstCourse?.batchName || 'Institute-wide (All Students)',
       durationMinutes: 30,
       totalMarks: 30,
       marksPerQuestion: 1,
@@ -365,7 +365,7 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
     setEditingTest({ ...editingTest, questions: updated });
   };
 
-  const handleSaveTest = (e: React.FormEvent) => {
+  const handleSaveTest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingTest || !editingTest.title.trim()) {
       showToast('Validation Error', 'Please specify a mock test title.', 'error');
@@ -377,29 +377,30 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
     }
 
     const computedMarks = editingTest.questions.length * editingTest.marksPerQuestion;
-    saveMockTest({ ...editingTest, totalMarks: computedMarks }, isNew);
-    setEditingTest(null);
+    const ok = await saveMockTest({ ...editingTest, totalMarks: computedMarks }, isNew);
+    if (ok) {
+      setEditingTest(null);
+    }
   };
 
-  const togglePublish = (test: MockTest) => {
+  const togglePublish = async (test: MockTest) => {
     const nextStatus = test.status === 'Published' ? 'Draft' : 'Published';
-    saveMockTest(
+    await saveMockTest(
       {
         ...test,
         status: nextStatus,
       },
-      false
-    );
-    showToast(
-      nextStatus === 'Published' ? 'Test Launched Live!' : 'Test Set to Draft',
-      `"${test.title}" is now ${nextStatus.toLowerCase()}.`,
-      nextStatus === 'Published' ? 'success' : 'info'
+      false,
+      nextStatus === 'Published' ? 'Test Launched Live!' : 'Test Set to Draft'
     );
   };
 
-  const handleQuickDateChange = (test: MockTest, newDate: string) => {
-    saveMockTest({ ...test, scheduledDate: newDate }, false);
-    showToast('Launch Date Scheduled', `Launch date for "${test.title}" updated to ${newDate}.`, 'success');
+  const handleQuickDateChange = async (test: MockTest, newDate: string) => {
+    await saveMockTest(
+      { ...test, scheduledDate: newDate },
+      false,
+      'Launch Date Scheduled'
+    );
   };
 
   const handleSubjectChange = (subj: string) => {
@@ -502,135 +503,189 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
       {/* ==================== TAB 1: BATCH MOCK TESTS ==================== */}
       {activeAdminTab === 'tests' && (
         <div className="space-y-8">
-          {/* Mock Tests Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {db.mockTests.map((test) => {
-              const langMode = test.languageMode || (test.subject ? getSubjectLanguageMode(test.subject) : getSubjectLanguageMode(test.title));
+          {/* Mock Tests Grid or Clean Empty State */}
+          {db.mockTests.length === 0 ? (
+            <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center shadow-2xs space-y-4">
+              <div className="w-14 h-14 rounded-2xl bg-blue-50 text-[#0056b3] flex items-center justify-center mx-auto">
+                <ClipboardCheck className="w-7 h-7" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-extrabold text-[#0a0e2a]">No Mock Tests Active</h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  The mock test section is currently empty. You can create a new mock test using the button below and launch it whenever you are ready.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={openCreateModal}
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-bold cursor-pointer shadow-sm transition-all"
+              >
+                <Plus className="w-4 h-4" /> Create &amp; Upload Mock Test
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {db.mockTests.map((test) => {
+                const langMode =
+                  test.languageMode ||
+                  (test.subject ? getSubjectLanguageMode(test.subject) : getSubjectLanguageMode(test.title));
 
-              return (
-                <div
-                  key={test.id}
-                  className="bg-white rounded-3xl border border-slate-200 p-6 shadow-2xs flex flex-col justify-between space-y-4"
-                >
-                  <div className="space-y-2.5">
-                    <div className="flex flex-wrap items-center justify-between gap-1.5">
-                      <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-[#0056b3] text-[11px] font-extrabold truncate">
-                        {test.batchName}
-                      </span>
-                      <span
-                        className={`px-2.5 py-0.5 rounded-full text-[11px] font-extrabold whitespace-nowrap shrink-0 ${
-                          test.status === 'Published'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-amber-50 text-[#ea580c] border border-amber-200'
-                        }`}
-                      >
-                        {test.status === 'Published' ? 'Launched' : 'Draft / Scheduled'}
-                      </span>
-                    </div>
-
-                    <h2 className="text-base font-extrabold text-[#0a0e2a]">{test.title}</h2>
-                    <p className="text-xs text-slate-500">
-                      {test.questions.length} Questions • {test.totalMarks} Marks • {test.durationMinutes}{' '}
-                      Mins • -{test.negativeMarking} Negative
-                    </p>
-
-                    {/* Language Mode Badge */}
-                    <div className="flex items-center gap-1.5 pt-1">
-                      {langMode === 'english_only' && (
-                        <span className="px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-700 text-[10px] font-bold border border-indigo-200">
-                          English Only
+                return (
+                  <div
+                    key={test.id}
+                    className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-2xs flex flex-col justify-between hover:border-blue-300 transition-all hover:shadow-md"
+                  >
+                    <div className="space-y-3">
+                      {/* Top Header Row */}
+                      <div className="flex items-center justify-between gap-2">
+                        <span
+                          className="px-2.5 py-1 rounded-full bg-blue-50 text-[#0056b3] text-[11px] font-extrabold truncate max-w-[170px]"
+                          title={test.batchName}
+                        >
+                          {test.batchName}
                         </span>
-                      )}
-                      {langMode === 'bengali_only' && (
-                        <span className="px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200 font-sans">
-                          Bengali Only (বাংলা)
+                        <span
+                          className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+                            test.status === 'Published'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-amber-50 text-[#ea580c] border border-amber-200'
+                          }`}
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              test.status === 'Published' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+                            }`}
+                          />
+                          {test.status === 'Published' ? 'Launched' : 'Draft / Scheduled'}
                         </span>
-                      )}
-                      {langMode === 'bilingual' && (
-                        <span className="px-2 py-0.5 rounded-lg bg-purple-50 text-purple-700 text-[10px] font-bold border border-purple-200">
-                          Bilingual (English and Bengali)
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Admin Launch Date Manager (Inline) */}
-                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-xs space-y-1">
-                      <div className="flex items-center justify-between text-slate-500 text-[11px]">
-                        <span className="font-bold flex items-center gap-1">
-                          <Calendar className="w-3.5 h-3.5 text-[#0056b3]" /> Launch Date
-                        </span>
-                        <span className="text-[10px] text-slate-400">Admin Managed</span>
                       </div>
-                      <input
-                        type="date"
-                        value={test.scheduledDate || ''}
-                        onChange={(e) => handleQuickDateChange(test, e.target.value)}
-                        className="w-full bg-white px-2 py-1 rounded-lg border border-slate-200 font-semibold text-xs text-slate-800 cursor-pointer focus:ring-1 focus:ring-[#0056b3]"
-                        title="Click to change the scheduled launch date"
-                      />
-                    </div>
-                  </div>
 
-                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsNew(false);
-                          setEditingTest({ ...test });
-                        }}
-                        className="px-3 py-1.5 rounded-xl bg-blue-50 text-[#0056b3] hover:bg-blue-100 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" /> Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => router.push(`/admin/mock-tests/${test.id}/questions`)}
-                        className="px-3 py-1.5 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
-                      >
-                        <ImageIcon className="w-3.5 h-3.5" /> Diagrams & Review
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => router.push(`/admin/mock-tests/${test.id}/preview`)}
-                        className="px-3 py-1.5 rounded-xl bg-blue-50 text-[#0056b3] hover:bg-blue-100 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
-                      >
-                        <Eye className="w-3.5 h-3.5" /> Preview &amp; Checklist
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => window.open(`/api/admin/mock-tests/archive?testId=${encodeURIComponent(test.id)}`, '_blank')}
-                        className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
-                        title="Download self-contained ZIP archive"
-                      >
-                        <Download className="w-3.5 h-3.5" /> Archive (ZIP)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => togglePublish(test)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-1 cursor-pointer transition-colors ${
-                          test.status === 'Published'
-                            ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                            : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
-                        }`}
-                      >
-                        <Send className="w-3.5 h-3.5" />
-                        {test.status === 'Published' ? 'Unpublish' : 'Launch Now'}
-                      </button>
+                      {/* Title & Stats */}
+                      <div>
+                        <h2
+                          className="text-sm sm:text-base font-extrabold text-[#0a0e2a] line-clamp-2 min-h-[2.75rem] leading-snug"
+                          title={test.title}
+                        >
+                          {test.title}
+                        </h2>
+                        <p className="text-xs text-slate-500 mt-1">
+                          {test.questions.length} Questions • {test.totalMarks} Marks • {test.durationMinutes} Mins • -
+                          {test.negativeMarking} Negative
+                        </p>
+                      </div>
+
+                      {/* Language Mode Badge */}
+                      <div className="flex items-center gap-1.5 min-h-[1.5rem]">
+                        {langMode === 'english_only' && (
+                          <span className="px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-700 text-[10px] font-bold border border-indigo-200">
+                            English Only
+                          </span>
+                        )}
+                        {langMode === 'bengali_only' && (
+                          <span className="px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200 font-sans">
+                            Bengali Only (বাংলা)
+                          </span>
+                        )}
+                        {langMode === 'bilingual' && (
+                          <span className="px-2 py-0.5 rounded-lg bg-purple-50 text-purple-700 text-[10px] font-bold border border-purple-200">
+                            Bilingual (English and Bengali)
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Admin Launch Date Manager (Inline) */}
+                      <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-xs space-y-1">
+                        <div className="flex items-center justify-between text-slate-500 text-[11px]">
+                          <span className="font-bold flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5 text-[#0056b3]" /> Launch Date
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-medium">Admin Managed</span>
+                        </div>
+                        <input
+                          type="date"
+                          value={test.scheduledDate || ''}
+                          onChange={(e) => handleQuickDateChange(test, e.target.value)}
+                          className="w-full bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 font-semibold text-xs text-slate-800 cursor-pointer focus:ring-1 focus:ring-[#0056b3]"
+                          title="Click to change the scheduled launch date"
+                        />
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setDeleteTarget(test)}
-                      className="p-2 rounded-xl bg-red-50 text-[#dc2626] hover:bg-red-100 cursor-pointer"
-                      title="Delete Test"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+
+                    {/* Card Actions Footer */}
+                    <div className="pt-3.5 mt-3.5 border-t border-slate-100 space-y-2">
+                      {/* Row 1: Core Content Editors (Grid of 3 buttons) */}
+                      <div className="grid grid-cols-3 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsNew(false);
+                            setEditingTest({ ...test });
+                          }}
+                          className="h-8 px-2 rounded-xl bg-blue-50 text-[#0056b3] hover:bg-blue-100 text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                          title="Edit Mock Test Details & Questions"
+                        >
+                          <Edit2 className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">Edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/admin/mock-tests/${test.id}/questions`)}
+                          className="h-8 px-2 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                          title="Diagrams, Uploads & Questions Review"
+                        >
+                          <ImageIcon className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">Diagrams</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/admin/mock-tests/${test.id}/preview`)}
+                          className="h-8 px-2 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                          title="Preview Test & Checklist"
+                        >
+                          <Eye className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">Preview</span>
+                        </button>
+                      </div>
+
+                      {/* Row 2: Launch/Unpublish + Archive ZIP + Delete */}
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => togglePublish(test)}
+                          className={`h-8 flex-1 px-3 rounded-xl text-[11px] font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap ${
+                            test.status === 'Published'
+                              ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                              : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
+                          }`}
+                        >
+                          <Send className="w-3.5 h-3.5 shrink-0" />
+                          <span>{test.status === 'Published' ? 'Unpublish' : 'Launch Now'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            window.open(`/api/admin/mock-tests/archive?testId=${encodeURIComponent(test.id)}`, '_blank')
+                          }
+                          className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center cursor-pointer transition-colors shrink-0"
+                          title="Download self-contained offline ZIP archive"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(test)}
+                          className="w-8 h-8 rounded-xl bg-red-50 text-[#dc2626] hover:bg-red-100 flex items-center justify-center cursor-pointer transition-colors shrink-0"
+                          title="Delete Mock Test"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Batch Rank List & Results Table */}
           <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-2xs space-y-4">
@@ -1167,18 +1222,19 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
               <div>
                 <label className="font-bold text-slate-700 block mb-1">Target Course & Batch</label>
                 <select
-                  value={editingTest.courseId}
+                  value={editingTest.courseId || ''}
                   onChange={(e) => {
                     const crs = db.courses.find((c) => c.id === e.target.value);
                     setEditingTest({
                       ...editingTest,
                       courseId: e.target.value,
-                      courseName: crs?.name || editingTest.courseName,
-                      batchName: crs?.batchName || editingTest.batchName,
+                      courseName: crs?.name || (e.target.value ? editingTest.courseName : 'Open to All Batches'),
+                      batchName: crs?.batchName || (e.target.value ? editingTest.batchName : 'Institute-wide (All Students)'),
                     });
                   }}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-semibold"
                 >
+                  <option value="">Open to All Batches (Institute-wide)</option>
                   {db.courses.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name} ({c.batchName})
@@ -1596,12 +1652,13 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
       <ConfirmDialog
         isOpen={!!deleteTarget}
         title="Delete Mock Test?"
-        message={`Are you sure you want to delete "${deleteTarget?.title}"? All associated attempt records will be removed.`}
+        message={`Are you sure you want to permanently delete "${deleteTarget?.title}"? All associated questions and attempt records will be removed.`}
         confirmLabel="Yes, Delete Test"
-        onConfirm={() => {
+        onConfirm={async () => {
           if (deleteTarget) {
-            deleteMockTest(deleteTarget.id);
+            const id = deleteTarget.id;
             setDeleteTarget(null);
+            await deleteMockTest(id);
           }
         }}
         onCancel={() => setDeleteTarget(null)}

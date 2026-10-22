@@ -123,7 +123,7 @@ interface CgaContextType {
   deleteFaculty: (facultyId: string) => Promise<void>;
   saveMaterial: (material: StudyMaterial, isNew: boolean) => Promise<void>;
   deleteMaterial: (materialId: string) => Promise<void>;
-  saveMockTest: (test: MockTest, isNew: boolean) => Promise<void>;
+  saveMockTest: (test: MockTest, isNew: boolean, customSuccessTitle?: string) => Promise<boolean>;
   deleteMockTest: (testId: string) => Promise<void>;
   saveAchievement: (achievement: Achievement, isNew: boolean) => Promise<void>;
   deleteAchievement: (achievementId: string) => Promise<void>;
@@ -830,10 +830,11 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
   );
 
   const saveMockTest = useCallback(
-    async (t: MockTest, isNew: boolean) => {
-      await run(cgaService.upsertTest(t), {
-        title: isNew ? 'Mock Test Created' : 'Mock Test Updated',
-        message: `"${t.title}" (${t.status}) saved for ${t.batchName}.`,
+    async (t: MockTest, isNew: boolean, customSuccessTitle?: string) => {
+      return await run(cgaService.upsertTest(t), {
+        title: customSuccessTitle || (isNew ? 'Mock Test Created' : t.status === 'Published' ? 'Test Launched Live!' : 'Test Set to Draft'),
+        message: `"${t.title}" (${t.status}) saved for ${t.batchName || 'students'}.`,
+        type: t.status === 'Published' ? 'success' : 'info',
       });
     },
     [run]

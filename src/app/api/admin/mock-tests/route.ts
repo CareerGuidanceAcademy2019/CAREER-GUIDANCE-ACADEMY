@@ -27,7 +27,13 @@ export async function DELETE(request: Request) {
     .maybeSingle();
 
   if (!test) {
-    return NextResponse.json({ error: 'Mock test not found' }, { status: 404 });
+    await admin.from('mock_attempts').delete().eq('test_id', id);
+    await admin.from('test_attempts').delete().eq('test_id', id);
+    await admin.from('mock_questions').delete().eq('test_id', id);
+    await admin.from('mock_question_groups').delete().eq('test_id', id);
+    await admin.from('mock_launch_log').delete().eq('test_id', id);
+    await admin.from('mock_test_question_stats').delete().eq('test_id', id);
+    return NextResponse.json({ ok: true, message: 'Mock test cleaned and removed.' });
   }
 
   // 1. Find and delete diagram images from storage bucket

@@ -940,7 +940,18 @@ export const cgaService = {
     if (typeof window !== 'undefined') {
       try {
         const ct = localStorage.getItem('cga_custom_tests');
-        if (ct) localTests = JSON.parse(ct);
+        if (ct) {
+          const parsed: MockTest[] = JSON.parse(ct);
+          const legacyPurgeIds = new Set([
+            'mock-2', 'mock-3', 'mock-4',
+            'mock-ttet-p1-cdp-1', 'mock-ttet-p1-eng-1', 'mock-ttet-p1-ben-1',
+            'mock-ttet-p1-math-1', 'mock-ttet-p1-evs-1', 'mock-ttet-p2-sci-1', 'mock-ttet-p2-soc-1',
+          ]);
+          localTests = parsed.filter((t) => !legacyPurgeIds.has(t.id));
+          if (localTests.length !== parsed.length) {
+            localStorage.setItem('cga_custom_tests', JSON.stringify(localTests));
+          }
+        }
         const dt = localStorage.getItem('cga_deleted_tests');
         if (dt) localDeletedIds = JSON.parse(dt);
         const at = localStorage.getItem('cga_test_attempts');
@@ -1707,13 +1718,25 @@ export const cgaService = {
   },
 
   async upsertTest(t: MockTest): Promise<ServiceResult> {
-    const courseId = t.courseId && t.courseId.trim() ? t.courseId.trim() : null;
+    let validCourseId: string | null = null;
+    if (t.courseId && t.courseId.trim()) {
+      const trimmed = t.courseId.trim();
+      const { data: matchedCourse } = await this.client()
+        .from('courses')
+        .select('id')
+        .eq('id', trimmed)
+        .maybeSingle();
+      if (matchedCourse) {
+        validCourseId = matchedCourse.id;
+      }
+    }
+
     const { error } = await this.client().from('mock_tests').upsert({
       id: t.id,
       title: t.title,
       subject: t.subject ?? null,
       drive_link: t.driveLink ?? null,
-      course_id: courseId,
+      course_id: validCourseId,
       series_id: (t as any).seriesId ?? null,
       subject_id: (t as any).subjectId ?? null,
       test_type: (t as any).testType ?? 'sectional',
@@ -1746,40 +1769,51 @@ export const cgaService = {
           list.push(t);
         }
         localStorage.setItem('cga_custom_tests', JSON.stringify(list));
+
+        // If it was previously marked deleted, un-delete it
+        const delStored = localStorage.getItem('cga_deleted_tests');
+        if (delStored) {
+          const delList: string[] = JSON.parse(delStored);
+          const nextDelList = delList.filter((id) => id !== t.id);
+          localStorage.setItem('cga_deleted_tests', JSON.stringify(nextDelList));
+        }
       }
     } catch {}
 
     return { success: true };
   },
   async deleteTest(id: string): Promise<ServiceResult> {
-    try {
-      const res = await fetch(`/api/admin/mock-tests?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
-      if (res.ok) {
-        if (typeof window !== 'undefined') {
-          const stored = localStorage.getItem('cga_custom_tests');
-          if (stored) {
-            const list: MockTest[] = JSON.parse(stored);
-            const filtered = list.filter((t) => t.id !== id);
-            localStorage.setItem('cga_custom_tests', JSON.stringify(filtered));
-          }
-        }
-        return { success: true };
-      }
-    } catch {}
-
-    const { error } = await this.client().from('mock_tests').delete().eq('id', id);
-    if (error) return { success: false, error: msg(error, 'Delete failed.') };
-
-    try {
-      if (typeof window !== 'undefined') {
+    // 1. Instantly remove from local storage state so it disappears from UI immediately
+    if (typeof window !== 'undefined') {
+      try {
         const stored = localStorage.getItem('cga_custom_tests');
         if (stored) {
           const list: MockTest[] = JSON.parse(stored);
           const filtered = list.filter((t) => t.id !== id);
           localStorage.setItem('cga_custom_tests', JSON.stringify(filtered));
         }
+        const delStored = localStorage.getItem('cga_deleted_tests');
+        const delList: string[] = delStored ? JSON.parse(delStored) : [];
+        if (!delList.includes(id)) {
+          delList.push(id);
+          localStorage.setItem('cga_deleted_tests', JSON.stringify(delList));
+        }
+      } catch {}
+    }
+
+    // 2. Cascade delete on the server via dedicated admin route
+    try {
+      const res = await fetch(`/api/admin/mock-tests?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (res.ok) {
+        return { success: true };
       }
     } catch {}
+
+    // 3. Fallback direct database delete
+    const { error } = await this.client().from('mock_tests').delete().eq('id', id);
+    if (error && error.code !== 'PGRST116') {
+      return { success: false, error: msg(error, 'Delete failed.') };
+    }
 
     return { success: true };
   },
