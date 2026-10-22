@@ -853,9 +853,12 @@ export const cgaService = {
   },
 
   async requestPasswordReset(email: string): Promise<ServiceResult> {
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://careerguidanceacademy.in';
+    const origin =
+      typeof window !== 'undefined'
+        ? window.location.origin
+        : process.env.NEXT_PUBLIC_SITE_URL || 'https://careerguidanceacademy.vercel.app';
     const { error } = await this.client().auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-      redirectTo: `${origin}/reset-password`,
+      redirectTo: `${origin}/auth/callback?next=/reset-password`,
     });
     // Do not reveal whether the email exists.
     if (error && error.status === 429) {

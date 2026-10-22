@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   ArrowRight,
   Award,
@@ -33,8 +34,20 @@ import { Announcement } from '@/data/initialSeedData';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 export default function HomePage() {
+  const router = useRouter();
   const { db, session, saveAnnouncement, deleteAnnouncement, showToast } = useCga();
   const { siteContent, courses, achievements, faculty, announcements = [] } = db;
+
+  // Auto-detect recovery code or token from email redirect and forward immediately to reset-password
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get('code');
+    const hash = window.location.hash;
+    if (code || hash.includes('type=recovery') || hash.includes('access_token')) {
+      router.push(`/reset-password${window.location.search}${window.location.hash}`);
+    }
+  }, [router]);
 
   // Admin Announcement Quick-Action state
   const [showAdminAnnForm, setShowAdminAnnForm] = useState(false);
