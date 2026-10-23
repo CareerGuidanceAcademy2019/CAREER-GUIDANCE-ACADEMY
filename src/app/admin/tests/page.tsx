@@ -97,6 +97,7 @@ export default function AdminMockTestsPage() {
     setEditingTest({
       id: `mock-${Date.now()}`,
       title: '',
+      seriesId: 'series-ttet-paper1',
       subject: 'Child Development & Pedagogy',
       languageMode: 'bilingual',
       courseId: firstCourse?.id || '',
@@ -1220,7 +1221,32 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
               </div>
 
               <div>
-                <label className="font-bold text-slate-700 block mb-1">Target Course & Batch</label>
+                <label className="font-bold text-slate-700 block mb-1">
+                  Target Mock Test Series Package *
+                </label>
+                <select
+                  value={editingTest.seriesId || 'series-ttet-paper1'}
+                  onChange={(e) => {
+                    setEditingTest({
+                      ...editingTest,
+                      seriesId: e.target.value,
+                    });
+                  }}
+                  className="w-full px-3 py-2 rounded-xl border border-blue-200 bg-white font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                >
+                  {(db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL).map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.id})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Strict access control: only students enrolled in this series will be permitted to attempt this test.
+                </p>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Target Course & Batch (Optional)</label>
                 <select
                   value={editingTest.courseId || ''}
                   onChange={(e) => {

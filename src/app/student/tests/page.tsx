@@ -74,7 +74,16 @@ export default function StudentMockTestsPage() {
   const SERIES_TO_COURSES: Record<string, string[]> = {
     'series-ttet-paper1': ['crs-tet-1-online', 'crs-tet-1-offline', 'crs-tet-1', 'series-ttet-paper1'],
     'series-ttet-paper2-sci': ['crs-tet-2-sci-online', 'crs-tet-2-sci-offline', 'crs-tet-2-sci', 'series-ttet-paper2-sci'],
-    'series-ttet-paper2-soc': ['crs-tet-2-arts-online', 'crs-tet-2-arts-offline', 'crs-tet-2-arts', 'series-ttet-paper2-soc'],
+    'series-ttet-paper2-soc': [
+      'crs-tet-2-sst-online',
+      'crs-tet-2-sst-offline',
+      'crs-tet-2-arts-online',
+      'crs-tet-2-arts-offline',
+      'crs-tet-2-arts',
+      'crs-tet-2-soc',
+      'crs-tet-2-sst',
+      'series-ttet-paper2-soc',
+    ],
   };
 
   const isStudentEnrolledInSeries = (seriesId: string) => {
@@ -101,14 +110,15 @@ export default function StudentMockTestsPage() {
     if (!currentStudent) return false;
     if (currentStudent.email === 'angatsaha825@gmail.com') return true;
 
-    if (test.seriesId && test.seriesId !== 'all') {
-      return isStudentEnrolledInSeries(test.seriesId);
+    const sId = test.seriesId || test.series_id;
+    if (sId && sId !== 'all') {
+      return isStudentEnrolledInSeries(sId);
     }
 
     if (test.courseId) {
-      for (const [sId, courses] of Object.entries(SERIES_TO_COURSES)) {
+      for (const [seriesKey, courses] of Object.entries(SERIES_TO_COURSES)) {
         if (courses.includes(test.courseId)) {
-          return isStudentEnrolledInSeries(sId);
+          return isStudentEnrolledInSeries(seriesKey);
         }
       }
       const match = currentStudent.enrollments.find((e) => e.courseId === test.courseId);
@@ -122,14 +132,39 @@ export default function StudentMockTestsPage() {
     }
 
     const title = (test.title || '').toLowerCase();
-    if (title.includes('paper-i') || title.includes('paper 1') || title.includes('paper-1')) {
-      return isStudentEnrolledInSeries('series-ttet-paper1');
+    const subject = (test.subject || '').toLowerCase();
+
+    // Check Paper 2 Social Science / Arts first
+    if (
+      title.includes('social') ||
+      title.includes('arts') ||
+      title.includes('sst') ||
+      subject.includes('history') ||
+      subject.includes('geography') ||
+      subject.includes('political')
+    ) {
+      return isStudentEnrolledInSeries('series-ttet-paper2-soc');
     }
-    if (title.includes('science')) {
+
+    // Check Paper 2 Science & Math
+    if (
+      title.includes('science') ||
+      title.includes('math') ||
+      subject.includes('science') ||
+      subject.includes('mathematics')
+    ) {
       return isStudentEnrolledInSeries('series-ttet-paper2-sci');
     }
-    if (title.includes('social') || title.includes('arts')) {
-      return isStudentEnrolledInSeries('series-ttet-paper2-soc');
+
+    // Check Paper 1 explicitly (ensuring Paper-II is not matched as Paper-I)
+    const isExplicitP2 = /\b(paper[\s\-_]?(?:2|ii)|tet[\s\-_]?2)\b/i.test(title);
+    if (
+      !isExplicitP2 &&
+      (/\b(paper[\s\-_]?(?:1|i)|tet[\s\-_]?1)\b/i.test(title) ||
+        title.includes('evs') ||
+        subject.includes('environmental'))
+    ) {
+      return isStudentEnrolledInSeries('series-ttet-paper1');
     }
 
     return isStudentEnrolledInSeries('series-ttet-paper1');
@@ -1040,9 +1075,30 @@ export default function StudentMockTestsPage() {
   // Filter published tests according to category
   const filteredTests = publishedTests.filter((t) => {
     if (filterCategory === 'all') return true;
-    if (filterCategory === 'p1') return t.title.toLowerCase().includes('paper-i') || t.title.toLowerCase().includes('paper i');
-    if (filterCategory === 'p2sci') return t.title.toLowerCase().includes('science');
-    if (filterCategory === 'p2soc') return t.title.toLowerCase().includes('social');
+    const title = t.title.toLowerCase();
+    const sId = t.seriesId || '';
+    if (filterCategory === 'p1') {
+      return (
+        sId === 'series-ttet-paper1' ||
+        (!/\b(paper[\s\-_]?(?:2|ii)|tet[\s\-_]?2)\b/i.test(title) &&
+          /\b(paper[\s\-_]?(?:1|i)|tet[\s\-_]?1)\b/i.test(title))
+      );
+    }
+    if (filterCategory === 'p2sci') {
+      return (
+        sId === 'series-ttet-paper2-sci' ||
+        title.includes('science') ||
+        title.includes('math')
+      );
+    }
+    if (filterCategory === 'p2soc') {
+      return (
+        sId === 'series-ttet-paper2-soc' ||
+        title.includes('social') ||
+        title.includes('arts') ||
+        title.includes('sst')
+      );
+    }
     if (filterCategory === 'bilingual') return getTestLanguageMode(t) === 'bilingual';
     if (filterCategory === 'english') return getTestLanguageMode(t) === 'english_only';
     if (filterCategory === 'bengali') return getTestLanguageMode(t) === 'bengali_only';
@@ -1531,11 +1587,21 @@ export default function StudentMockTestsPage() {
                   ...(db.mockTests || []).map((mt) => {
                     const cId = (mt.courseId || '').toLowerCase();
                     const title = (mt.title || '').toLowerCase();
-                    let mappedSeries = 'series-ttet-paper1';
-                    if (cId.includes('sci') || title.includes('science')) {
-                      mappedSeries = 'series-ttet-paper2-sci';
-                    } else if (cId.includes('arts') || cId.includes('soc') || title.includes('social')) {
-                      mappedSeries = 'series-ttet-paper2-soc';
+                    const existingSeries = mt.seriesId;
+                    let mappedSeries = existingSeries || 'series-ttet-paper1';
+                    if (!existingSeries) {
+                      if (
+                        cId.includes('arts') ||
+                        cId.includes('soc') ||
+                        cId.includes('sst') ||
+                        title.includes('social') ||
+                        title.includes('arts') ||
+                        title.includes('sst')
+                      ) {
+                        mappedSeries = 'series-ttet-paper2-soc';
+                      } else if (cId.includes('sci') || title.includes('science') || title.includes('math')) {
+                        mappedSeries = 'series-ttet-paper2-sci';
+                      }
                     }
                     return {
                       ...mt,
@@ -1920,9 +1986,9 @@ export default function StudentMockTestsPage() {
           onClose={() => setPayManualTarget(null)}
           onSuccess={(refCode) => {
             showToast(
-              'Enrolment Submitted',
-              `Your payment reference ${refCode} has been verified and your mock series is activated!`,
-              'success'
+              'Enrolment Submitted for Verification',
+              `Your payment reference ${refCode} has been submitted for admin verification. Access will be unlocked once approved by administration.`,
+              'info'
             );
             setPayManualTarget(null);
           }}

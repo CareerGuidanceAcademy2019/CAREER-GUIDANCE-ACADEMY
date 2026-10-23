@@ -509,9 +509,10 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
   const submitPaymentVerification = useCallback<CgaContextType['submitPaymentVerification']>(
     async (params) => {
       const crs = db.courses.find((c) => c.id === params.courseId);
+      const srs = db.mockSeries.find((s) => s.id === params.courseId);
       const studentId = sessionRef.current?.userId || 'std-1';
       const studentName = sessionRef.current?.name || 'Student';
-      const courseName = crs?.name || 'Course';
+      const courseName = crs?.name || srs?.name || 'Tripura TET Mock Test Series';
 
       const res = await cgaService.submitPaymentVerification({
         studentId,
@@ -544,7 +545,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
       );
       return { success: true, receipt };
     },
-    [db.courses, showToast]
+    [db.courses, db.mockSeries, showToast]
   );
 
   const approvePayment = useCallback(
@@ -639,6 +640,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         const isSeries =
           targetPayment.courseId.startsWith('series-') ||
           prev.mockSeries.some((s) => s.id === targetPayment.courseId) ||
+          targetPayment.itemType === 'mock_series' ||
           targetPayment.remarks?.includes('mock_series');
 
         const nextSeriesEnrollments = isSeries
@@ -652,6 +654,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
                 seriesId: targetPayment.courseId,
                 paymentId: targetPayment.id,
                 enrolledAt: new Date().toISOString(),
+                accessValidUntil: new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString(),
               },
             ]
           : prev.seriesEnrollments;

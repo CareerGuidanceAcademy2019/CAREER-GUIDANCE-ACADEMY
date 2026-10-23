@@ -4,24 +4,76 @@ import { checkRateLimit, createRateLimitResponse, getClientIp, RATE_LIMIT_RULES 
 import { INITIAL_SEED_DATA, MockQuestionOption, getOptionText } from '@/data/initialSeedData';
 
 // Normalized course and series mappings for strict access isolation
-const TET_P1_KEYS = new Set(['series-ttet-paper1', 'crs-tet-1-online', 'crs-tet-1-offline', 'crs-tet-1']);
-const TET_P2_SCI_KEYS = new Set(['series-ttet-paper2-sci', 'crs-tet-2-sci-online', 'crs-tet-2-sci-offline', 'crs-tet-2-sci']);
-const TET_P2_SOC_KEYS = new Set(['series-ttet-paper2-soc', 'crs-tet-2-arts-online', 'crs-tet-2-arts-offline', 'crs-tet-2-arts']);
+const TET_P1_KEYS = new Set([
+  'series-ttet-paper1',
+  'crs-tet-1-online',
+  'crs-tet-1-offline',
+  'crs-tet-1',
+]);
 
-function getMatchingAllowedKeys(targetKey: string, title?: string): Set<string> {
+const TET_P2_SCI_KEYS = new Set([
+  'series-ttet-paper2-sci',
+  'crs-tet-2-sci-online',
+  'crs-tet-2-sci-offline',
+  'crs-tet-2-sci',
+]);
+
+const TET_P2_SOC_KEYS = new Set([
+  'series-ttet-paper2-soc',
+  'crs-tet-2-sst-online',
+  'crs-tet-2-sst-offline',
+  'crs-tet-2-sst',
+  'crs-tet-2-soc',
+  'crs-tet-2-arts-online',
+  'crs-tet-2-arts-offline',
+  'crs-tet-2-arts',
+]);
+
+function getMatchingAllowedKeys(targetKey: string, title?: string): { keys: Set<string>; sectionLabel: string } {
   const normKey = targetKey?.toLowerCase() || '';
   const normTitle = title?.toLowerCase() || '';
 
-  if (TET_P1_KEYS.has(normKey) || normTitle.includes('paper-i') || normTitle.includes('paper 1') || normTitle.includes('paper-1')) {
-    return TET_P1_KEYS;
+  // 1. Direct ID / Key matching
+  if (TET_P2_SOC_KEYS.has(normKey)) {
+    return { keys: TET_P2_SOC_KEYS, sectionLabel: 'Tripura TET Paper-II (Social Studies)' };
   }
-  if (TET_P2_SCI_KEYS.has(normKey) || normTitle.includes('science')) {
-    return TET_P2_SCI_KEYS;
+  if (TET_P2_SCI_KEYS.has(normKey)) {
+    return { keys: TET_P2_SCI_KEYS, sectionLabel: 'Tripura TET Paper-II (Science & Mathematics)' };
   }
-  if (TET_P2_SOC_KEYS.has(normKey) || normTitle.includes('social') || normTitle.includes('arts')) {
-    return TET_P2_SOC_KEYS;
+  if (TET_P1_KEYS.has(normKey)) {
+    return { keys: TET_P1_KEYS, sectionLabel: 'Tripura TET Paper-I' };
   }
-  return new Set([normKey]);
+
+  // 2. Strict Title / Subject Fallback (Check Paper 2 Social & Science BEFORE Paper 1)
+  if (
+    normTitle.includes('social') ||
+    normTitle.includes('arts') ||
+    normTitle.includes('sst') ||
+    normTitle.includes('history') ||
+    normTitle.includes('geography') ||
+    normTitle.includes('polity')
+  ) {
+    return { keys: TET_P2_SOC_KEYS, sectionLabel: 'Tripura TET Paper-II (Social Studies)' };
+  }
+
+  if (
+    normTitle.includes('science') ||
+    normTitle.includes('math')
+  ) {
+    return { keys: TET_P2_SCI_KEYS, sectionLabel: 'Tripura TET Paper-II (Science & Mathematics)' };
+  }
+
+  // Ensure "paper-ii" does not accidentally match "paper-i"
+  const isExplicitP2 = /\b(paper[\s\-_]?(?:2|ii)|tet[\s\-_]?2)\b/i.test(normTitle);
+  if (
+    !isExplicitP2 &&
+    (/\b(paper[\s\-_]?(?:1|i)|tet[\s\-_]?1)\b/i.test(normTitle) ||
+      normTitle.includes('evs'))
+  ) {
+    return { keys: TET_P1_KEYS, sectionLabel: 'Tripura TET Paper-I' };
+  }
+
+  return { keys: new Set([normKey].filter(Boolean)), sectionLabel: 'Enrolled Course / Series' };
 }
 
 export async function POST(request: Request) {
@@ -129,7 +181,7 @@ export async function POST(request: Request) {
       const testSeriesId = (testRecord.series_id || testRecord.seriesId || '').toString();
       const testTitle = (testRecord.title || '').toString();
 
-      const allowedKeys = getMatchingAllowedKeys(testSeriesId || testCourseId, testTitle);
+      const { keys: allowedKeys, sectionLabel } = getMatchingAllowedKeys(testSeriesId || testCourseId, testTitle);
 
       // Check series enrollments
       const { data: seriesEnrs } = await admin
@@ -173,8 +225,7 @@ export async function POST(request: Request) {
       if (!hasValidEnrollment) {
         return NextResponse.json(
           {
-            error:
-              'Access Restricted: You are not enrolled in this mock test course. Enrolling in Tripura TET Paper-I gives you access only to Paper-I mock tests.',
+            error: `Access Restricted: You are not enrolled in ${sectionLabel}. Enrolling in a specific mock test series or course gives you access only to that specific section's tests.`,
           },
           { status: 403 }
         );

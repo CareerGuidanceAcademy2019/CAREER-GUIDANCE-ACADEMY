@@ -81,37 +81,54 @@ export default function AdminPaymentsPage() {
   const [isExporting, setIsExporting] = useState(false);
 
   // Fetch payment requests
+  // Fetch payment requests (merged across payment_requests and fee_payments)
   const fetchRequests = async () => {
     setIsLoading(true);
+    let allCombined: PaymentRequest[] = [];
+    const seenRefs = new Set<string>();
+
     try {
       const { createClient } = await import('@/lib/supabase/client');
       const sb = createClient();
-      const { data, error } = await sb
+
+      // 1. Fetch from payment_requests
+      const { data: prData, error: prError } = await sb
         .from('payment_requests')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (!error && data && data.length > 0) {
-        // Fetch profiles to augment student names
-        const studentIds = Array.from(new Set(data.map((r: any) => r.student_id)));
-        let profileMap: Record<string, any> = {};
-        if (studentIds.length > 0) {
-          const { data: profiles } = await sb
-            .from('profiles')
-            .select('id, name, student_code, phone, email')
-            .in('id', studentIds);
-          (profiles || []).forEach((p: any) => {
-            profileMap[p.id] = p;
-          });
-        }
+      // 2. Fetch from fee_payments
+      const { data: fpData, error: fpError } = await sb
+        .from('fee_payments')
+        .select('*')
+        .order('date', { ascending: false });
 
-        const mapped: PaymentRequest[] = data.map((r: any) => {
+      // Gather student profiles to augment names
+      const studentIds = new Set<string>();
+      (prData || []).forEach((r: any) => r.student_id && studentIds.add(r.student_id));
+      (fpData || []).forEach((r: any) => r.student_id && studentIds.add(r.student_id));
+
+      let profileMap: Record<string, any> = {};
+      if (studentIds.size > 0) {
+        const { data: profiles } = await sb
+          .from('profiles')
+          .select('id, name, student_code, phone, email')
+          .in('id', Array.from(studentIds));
+        (profiles || []).forEach((p: any) => {
+          profileMap[p.id] = p;
+        });
+      }
+
+      // Map payment_requests
+      if (!prError && prData) {
+        prData.forEach((r: any) => {
           const prof = profileMap[r.student_id];
-          return {
+          seenRefs.add(r.reference_code);
+          allCombined.push({
             id: r.id,
             studentId: r.student_id,
             studentName: prof?.name || 'Student',
-            studentCode: prof?.student_code || r.student_id.slice(0, 8),
+            studentCode: prof?.student_code || r.student_id?.slice(0, 8),
             studentPhone: prof?.phone || '',
             studentEmail: prof?.email || '',
             itemType: r.item_type,
@@ -131,40 +148,76 @@ export default function AdminPaymentsPage() {
             rejectReason: r.reject_reason,
             expiresAt: r.expires_at,
             createdAt: r.created_at,
-          };
+          });
         });
-        setRequests(mapped);
-        setIsLoading(false);
-        return;
       }
-    } catch {
-      // Fall back to localStorage + db.feePayments
+
+      // Map fee_payments (merge any that aren't already in seenRefs)
+      if (!fpError && fpData) {
+        fpData.forEach((p: any) => {
+          if (!seenRefs.has(p.receipt_no)) {
+            seenRefs.add(p.receipt_no);
+            const prof = profileMap[p.student_id];
+            allCombined.push({
+              id: p.id,
+              studentId: p.student_id,
+              studentName: prof?.name || 'Student',
+              studentCode: prof?.student_code || p.student_id?.slice(0, 8),
+              studentPhone: prof?.phone || '',
+              studentEmail: prof?.email || '',
+              itemType: (p.item_type || (p.course_id?.startsWith('series-') ? 'mock_series' : 'course')) as any,
+              itemId: p.item_id || p.course_id,
+              paymentType: p.payment_type === 'Instalment 1' ? 'instalment_1' : p.payment_type === 'Instalment 2' ? 'instalment_2' : 'full',
+              expectedAmount: Number(p.amount),
+              amountReceived: p.status === 'Verified' ? Number(p.amount) : null,
+              referenceCode: p.receipt_no,
+              paymentChannel: p.payment_mode === 'Net Banking' ? 'bank_transfer' : 'upi',
+              paymentMethod: (p.payment_method || 'upi_manual') as any,
+              utr: p.utr,
+              screenshotPath: p.screenshot_url,
+              status: p.status === 'Verified' ? 'approved' : p.status === 'Rejected' ? 'rejected' : 'pending_review',
+              reviewedBy: p.reviewed_by,
+              reviewedAt: p.reviewed_at,
+              rejectReason: p.rejection_reason,
+              expiresAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
+              createdAt: p.date ? new Date(p.date).toISOString() : new Date().toISOString(),
+            });
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('[AdminPayments] Error fetching from Supabase:', e);
     }
 
+    // Merge with localStorage and db.feePayments
     try {
       const localStored = localStorage.getItem('cga_payment_requests');
-      let localList: PaymentRequest[] = localStored ? JSON.parse(localStored) : [];
+      const localList: PaymentRequest[] = localStored ? JSON.parse(localStored) : [];
+      localList.forEach((r) => {
+        if (!seenRefs.has(r.referenceCode)) {
+          seenRefs.add(r.referenceCode);
+          allCombined.push(r);
+        }
+      });
 
-      // Combine with db.feePayments
-      const existingRefs = new Set(localList.map((r) => r.referenceCode));
-      const feeMapped: PaymentRequest[] = db.feePayments
-        .filter((p) => !existingRefs.has(p.receiptNo))
-        .map((p) => {
+      (db.feePayments || []).forEach((p) => {
+        if (!seenRefs.has(p.receiptNo)) {
+          seenRefs.add(p.receiptNo);
           const stu = db.students.find((s) => s.id === p.studentId);
-          return {
+          allCombined.push({
             id: p.id,
             studentId: p.studentId,
             studentName: p.studentName || stu?.name || 'Student',
             studentCode: stu?.studentCode || p.studentId.slice(0, 8),
             studentPhone: stu?.phone || '',
             studentEmail: stu?.email || '',
-            itemType: 'course',
-            itemId: p.courseId,
+            itemType: (p.itemType || (p.courseId?.startsWith('series-') ? 'mock_series' : 'course')) as any,
+            itemId: p.itemId || p.courseId,
             paymentType: p.paymentType === 'Instalment 1' ? 'instalment_1' : p.paymentType === 'Instalment 2' ? 'instalment_2' : 'full',
             expectedAmount: p.amount,
             amountReceived: p.status === 'Verified' ? p.amount : null,
             referenceCode: p.receiptNo,
-            paymentChannel: 'upi',
+            paymentChannel: p.paymentMode === 'Net Banking' ? 'bank_transfer' : 'upi',
             paymentMethod: 'upi_manual',
             utr: p.utr,
             screenshotPath: p.screenshot,
@@ -174,15 +227,13 @@ export default function AdminPaymentsPage() {
             rejectReason: p.rejectionReason,
             expiresAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
             createdAt: p.date ? new Date(p.date).toISOString() : new Date().toISOString(),
-          };
-        });
+          });
+        }
+      });
+    } catch {}
 
-      setRequests([...localList, ...feeMapped]);
-    } catch {
-      setRequests([]);
-    } finally {
-      setIsLoading(false);
-    }
+    setRequests(allCombined);
+    setIsLoading(false);
   };
 
   useEffect(() => {
@@ -218,7 +269,12 @@ export default function AdminPaymentsPage() {
       return mat ? mat.title : 'Study Material';
     }
     if (itemType === 'mock_series') {
-      return 'T-TET 2026 Mock Test Series (15 Mocks)';
+      const s = db.mockSeries.find((series) => series.id === itemId);
+      if (s) return s.name;
+      if (itemId === 'series-ttet-paper2-soc') return 'Tripura TET: Paper-II (Social Studies) 2026 Daily Online Mock Tests Series';
+      if (itemId === 'series-ttet-paper2-sci') return 'Tripura TET: Paper-II (Science) 2026 Daily Online Mock Tests Series';
+      if (itemId === 'series-ttet-paper1') return 'Tripura TET: Paper-I 2026 Daily Online Mock Tests Series';
+      return 'T-TET 2026 Mock Test Series';
     }
     return itemId;
   };
@@ -341,15 +397,19 @@ export default function AdminPaymentsPage() {
     setIsProcessingApproval(true);
 
     try {
-      // 1. Try Supabase RPC
+      // 1. Try Supabase RPC approve_payment
       const { createClient } = await import('@/lib/supabase/client');
       const sb = createClient();
-      await sb.rpc('cga_approve_payment', {
-        p_request_id: approvingRequest.id,
-        p_amount_received: amountNum,
-        p_admin_id: session?.userId || null,
-      });
-    } catch {}
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(approvingRequest.id);
+      if (isUuid) {
+        await sb.rpc('approve_payment', {
+          p_request_id: approvingRequest.id,
+          p_amount_received: amountNum,
+        });
+      }
+    } catch (e) {
+      console.warn('[AdminPayments] RPC approve error:', e);
+    }
 
     try {
       // 2. Call context approvePayment to unlock course/series & sync React state
@@ -382,12 +442,16 @@ export default function AdminPaymentsPage() {
     try {
       const { createClient } = await import('@/lib/supabase/client');
       const sb = createClient();
-      await sb.rpc('cga_reject_payment', {
-        p_request_id: rejectingRequest.id,
-        p_reason: rejectReason.trim(),
-        p_admin_id: session?.userId || null,
-      });
-    } catch {}
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rejectingRequest.id);
+      if (isUuid) {
+        await sb.rpc('reject_payment', {
+          p_request_id: rejectingRequest.id,
+          p_reason: rejectReason.trim(),
+        });
+      }
+    } catch (e) {
+      console.warn('[AdminPayments] RPC reject error:', e);
+    }
 
     try {
       await rejectPayment(rejectingRequest.id, rejectReason.trim());

@@ -166,6 +166,7 @@ export interface MCQQuestion {
 export interface MockTest {
   id: string;
   title: string;
+  seriesId?: string;
   subject?: string;
   driveLink?: string;
   languageMode?: 'english_only' | 'bengali_only' | 'bilingual';
@@ -223,6 +224,8 @@ export interface FeePayment {
   reviewedBy?: string;
   reviewedAt?: string;
   rejectionReason?: string;
+  itemType?: string;
+  itemId?: string;
 }
 
 export interface StudentEnrollment {

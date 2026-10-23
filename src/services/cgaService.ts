@@ -266,6 +266,7 @@ const toTest = (r: Row, courseName: string, isStudent = false, hasSubmitted = fa
   return {
     id: r.id,
     title: r.title,
+    seriesId: r.series_id ?? undefined,
     courseId: r.course_id,
     courseName,
     batchName: r.batch_name,
@@ -290,8 +291,8 @@ const toPayment = (r: Row, studentName: string, courseName: string): FeePayment 
   receiptNo: r.receipt_no,
   studentId: r.student_id,
   studentName,
-  courseId: r.course_id,
-  courseName,
+  courseId: r.course_id || r.item_id || '',
+  courseName: courseName || (r.item_type === 'mock_series' ? 'Tripura TET Mock Test Series' : 'Course'),
   amount: Number(r.amount),
   paymentMode: r.payment_mode,
   paymentType: r.payment_type,
@@ -303,6 +304,8 @@ const toPayment = (r: Row, studentName: string, courseName: string): FeePayment 
   reviewedBy: r.reviewed_by ?? undefined,
   reviewedAt: r.reviewed_at ?? undefined,
   rejectionReason: r.rejection_reason ?? undefined,
+  itemType: r.item_type ?? (r.course_id?.startsWith('series-') ? 'mock_series' : 'course'),
+  itemId: r.item_id ?? r.course_id ?? undefined,
 });
 
 const toAttempt = (r: Row, testTitle: string, courseId: string, studentName: string): TestAttempt => ({
@@ -1426,31 +1429,67 @@ export const cgaService = {
   }): Promise<ServiceResult<{ receipt: FeePayment }>> {
     const sb = this.client();
 
+    let effectiveStudentId = p.studentId;
+    const isStudentUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(effectiveStudentId);
+    if (!isStudentUuid) {
+      try {
+        const { data: authData } = await sb.auth.getUser();
+        if (authData?.user?.id) {
+          effectiveStudentId = authData.user.id;
+        }
+      } catch {}
+    }
+
+    const isSeries =
+      p.courseId.startsWith('series-') ||
+      p.courseId.includes('mock') ||
+      p.courseId.includes('ttet-2026') ||
+      p.remarks?.includes('mock_series');
+    const isMaterial = p.courseId.startsWith('mat-') || p.remarks?.includes('material');
+
+    let courseIdForDb: string | null = null;
+    let itemTypeForDb = 'course';
+    let itemIdForDb = p.courseId;
+
+    if (isSeries) {
+      itemTypeForDb = 'mock_series';
+      courseIdForDb = null;
+    } else if (isMaterial) {
+      itemTypeForDb = 'material';
+      courseIdForDb = null;
+    } else {
+      try {
+        const { data: crs } = await sb.from('courses').select('id').eq('id', p.courseId).maybeSingle();
+        if (crs) {
+          courseIdForDb = crs.id;
+        }
+      } catch {}
+    }
+
     // Strict Single Enrollment & Payment Acceptance Policy:
     // One student can enroll for any specific course or mock test only once.
-    // For enrollment, payment will be accepted only once.
-    // One student cannot apply twice for enrolment in course or mocks.
     try {
       const { data: existingRecords } = await sb
         .from('fee_payments')
-        .select('id, status, utr')
-        .eq('student_id', p.studentId)
-        .eq('course_id', p.courseId);
+        .select('id, status, utr, course_id, item_id')
+        .eq('student_id', effectiveStudentId);
 
       const existingActive = (existingRecords || []).find(
-        (r: any) => r.status === 'Pending' || r.status === 'Verified'
+        (r: any) =>
+          ((r.item_id === itemIdForDb) || (r.course_id === p.courseId)) &&
+          (r.status === 'Pending' || r.status === 'Verified')
       );
       if (existingActive) {
         if (existingActive.status === 'Verified') {
           return {
             success: false,
-            error: 'You are already enrolled in this course or mock test. Multiple enrolments are not permitted.',
+            error: 'You are already enrolled in this course or mock test series. Multiple enrolments are not permitted.',
           };
         }
         return {
           success: false,
           error:
-            'A payment verification request for this course or mock test is already pending admin verification. Payment is accepted only once per enrollment.',
+            'A payment verification request for this course or mock test series is already pending admin verification. Payment is accepted only once per enrollment.',
         };
       }
     } catch {}
@@ -1460,7 +1499,10 @@ export const cgaService = {
         const stored = localStorage.getItem('cga_custom_payments');
         const list: FeePayment[] = stored ? JSON.parse(stored) : [];
         const localActive = list.find(
-          (r) => r.studentId === p.studentId && r.courseId === p.courseId && (r.status === 'Pending' || r.status === 'Verified')
+          (r) =>
+            (r.studentId === effectiveStudentId || r.studentId === p.studentId) &&
+            (r.courseId === p.courseId || (r as any).itemId === itemIdForDb) &&
+            (r.status === 'Pending' || r.status === 'Verified')
         );
         if (localActive) {
           if (localActive.status === 'Verified') {
@@ -1483,10 +1525,10 @@ export const cgaService = {
     const newPayment: FeePayment = {
       id: `pay-${Date.now()}`,
       receiptNo,
-      studentId: p.studentId,
+      studentId: effectiveStudentId,
       studentName: p.studentName || 'Student',
       courseId: p.courseId,
-      courseName: p.courseName || 'Course',
+      courseName: p.courseName || (isSeries ? 'Tripura TET Mock Test Series' : 'Course'),
       amount: p.amount,
       paymentMode: p.paymentMode,
       paymentType: p.paymentType,
@@ -1495,39 +1537,111 @@ export const cgaService = {
       status: 'Pending',
       utr: p.utr,
       screenshot: p.screenshotUrl,
+      itemType: itemTypeForDb,
+      itemId: itemIdForDb,
     };
 
-    try {
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(newPayment.id);
-      const insertPayload: Record<string, unknown> = {
-        receipt_no: newPayment.receiptNo,
-        student_id: newPayment.studentId,
-        course_id: newPayment.courseId,
-        amount: newPayment.amount,
-        payment_mode: newPayment.paymentMode,
-        payment_type: newPayment.paymentType,
-        remarks: newPayment.remarks,
-        status: 'Pending',
-        utr: p.utr,
-        screenshot_url: p.screenshotUrl || null,
-      };
-      if (isUuid) insertPayload.id = newPayment.id;
-      const { data: inserted } = await sb
-        .from('fee_payments')
-        .insert(insertPayload)
-        .select()
-        .single();
-      if (inserted && (inserted as { id?: string }).id) {
-        newPayment.id = (inserted as { id: string }).id;
-      }
-    } catch {}
+    let paymentRequestId: string | null = null;
+    const isUuidStudent = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(effectiveStudentId);
 
+    // 1. Insert into payment_requests table
+    if (isUuidStudent) {
+      try {
+        const reqPayload: Record<string, unknown> = {
+          student_id: effectiveStudentId,
+          item_type: itemTypeForDb,
+          item_id: itemIdForDb,
+          payment_type: p.paymentType === 'Instalment 1' ? 'instalment_1' : 'full',
+          expected_amount: p.amount,
+          reference_code: receiptNo,
+          payment_channel: p.paymentMode === 'Net Banking' ? 'bank_transfer' : 'upi',
+          payment_method: p.paymentMode === 'Net Banking' ? 'bank_transfer' : 'upi_manual',
+          utr: p.utr,
+          utr_normalized: p.utr.trim().toUpperCase(),
+          screenshot_path: p.screenshotUrl || null,
+          status: 'pending_review',
+          expires_at: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
+        };
+        const { data: prData, error: prErr } = await sb
+          .from('payment_requests')
+          .insert(reqPayload)
+          .select('id')
+          .single();
+        if (prData?.id) {
+          paymentRequestId = prData.id;
+        }
+        if (prErr) {
+          console.warn('[submitPaymentVerification] payment_requests insert warning:', prErr);
+        }
+      } catch (e) {
+        console.warn('[submitPaymentVerification] payment_requests insert exception:', e);
+      }
+    }
+
+    // 2. Insert into fee_payments table
+    if (isUuidStudent) {
+      try {
+        const insertPayload: Record<string, unknown> = {
+          receipt_no: newPayment.receiptNo,
+          student_id: effectiveStudentId,
+          course_id: courseIdForDb,
+          item_type: itemTypeForDb,
+          item_id: itemIdForDb,
+          amount: newPayment.amount,
+          payment_mode: newPayment.paymentMode,
+          payment_type: newPayment.paymentType,
+          payment_method: newPayment.paymentMode === 'Net Banking' ? 'bank_transfer' : 'upi_manual',
+          date: newPayment.date,
+          remarks: newPayment.remarks,
+          status: 'Pending',
+          utr: p.utr,
+          screenshot_url: p.screenshotUrl || null,
+          payment_request_id: paymentRequestId,
+        };
+        const { data: inserted, error: insertError } = await sb
+          .from('fee_payments')
+          .insert(insertPayload)
+          .select()
+          .single();
+        if (inserted && (inserted as { id?: string }).id) {
+          newPayment.id = (inserted as { id: string }).id;
+        }
+        if (insertError) {
+          console.error('[submitPaymentVerification] fee_payments insert error:', insertError);
+        }
+      } catch (e) {
+        console.error('[submitPaymentVerification] fee_payments exception:', e);
+      }
+    }
+
+    // 3. Fallback client-side state caching
     try {
       if (typeof window !== 'undefined') {
         const stored = localStorage.getItem('cga_custom_payments');
         const list: FeePayment[] = stored ? JSON.parse(stored) : [];
         list.unshift(newPayment);
         localStorage.setItem('cga_custom_payments', JSON.stringify(list));
+
+        const storedRequests = JSON.parse(localStorage.getItem('cga_payment_requests') || '[]');
+        storedRequests.unshift({
+          id: paymentRequestId || newPayment.id,
+          studentId: effectiveStudentId,
+          studentName: p.studentName || 'Student',
+          itemType: itemTypeForDb,
+          itemId: itemIdForDb,
+          paymentType: p.paymentType === 'Instalment 1' ? 'instalment_1' : 'full',
+          expectedAmount: p.amount,
+          referenceCode: receiptNo,
+          paymentChannel: p.paymentMode === 'Net Banking' ? 'bank_transfer' : 'upi',
+          paymentMethod: p.paymentMode === 'Net Banking' ? 'bank_transfer' : 'upi_manual',
+          utr: p.utr,
+          utrNormalized: p.utr.trim().toUpperCase(),
+          screenshotPath: p.screenshotUrl || null,
+          status: 'pending_review',
+          createdAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
+        });
+        localStorage.setItem('cga_payment_requests', JSON.stringify(storedRequests));
       }
     } catch {}
 
@@ -1549,6 +1663,17 @@ export const cgaService = {
         .select()
         .maybeSingle();
       if (data) approvedPayment = data as any;
+    } catch {}
+
+    // Update payment_requests if present
+    try {
+      await sb
+        .from('payment_requests')
+        .update({
+          status: 'approved',
+          reviewed_at: new Date().toISOString(),
+        })
+        .or(`id.eq.${paymentId},reference_code.eq.${paymentId}`);
     } catch {}
 
     try {
@@ -1576,6 +1701,8 @@ export const cgaService = {
           const rList = JSON.parse(storedReqs);
           const req = rList.find((r: any) => r.id === paymentId || r.referenceCode === paymentId);
           if (req) {
+            req.status = 'approved';
+            localStorage.setItem('cga_payment_requests', JSON.stringify(rList));
             approvedPayment = {
               id: req.id,
               receiptNo: req.referenceCode,
@@ -1591,6 +1718,8 @@ export const cgaService = {
               reviewedBy,
               reviewedAt: new Date().toISOString(),
               remarks: `Admin approved. Ref: ${req.referenceCode}`,
+              itemType: req.itemType,
+              itemId: req.itemId,
             };
           }
         }
@@ -1599,28 +1728,38 @@ export const cgaService = {
 
     // Unlock mock series or course in permanent state upon admin verification
     if (approvedPayment) {
-      const isSeries = approvedPayment.courseId?.startsWith('series-') || approvedPayment.remarks?.includes('mock_series');
+      const targetSeriesId = approvedPayment.itemId || approvedPayment.courseId;
+      const isSeries =
+        approvedPayment.itemType === 'mock_series' ||
+        targetSeriesId?.startsWith('series-') ||
+        approvedPayment.remarks?.includes('mock_series');
+
       if (isSeries) {
         try {
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(approvedPayment.id);
           await sb.from('series_enrollments').upsert({
             student_id: approvedPayment.studentId,
-            series_id: approvedPayment.courseId,
-            payment_id: approvedPayment.id,
+            series_id: targetSeriesId,
+            payment_id: isUuid ? approvedPayment.id : null,
             enrolled_at: new Date().toISOString(),
+            access_valid_until: new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString(),
           });
-        } catch {}
+        } catch (e) {
+          console.error('[approvePayment] series_enrollments upsert error:', e);
+        }
 
         try {
           if (typeof window !== 'undefined') {
             const storedSe = localStorage.getItem('cga_series_enrollments');
             const seList = storedSe ? JSON.parse(storedSe) : [];
-            if (!seList.some((e: any) => e.studentId === approvedPayment?.studentId && e.seriesId === approvedPayment?.courseId)) {
+            if (!seList.some((e: any) => e.studentId === approvedPayment?.studentId && e.seriesId === targetSeriesId)) {
               seList.push({
                 id: `ser-enr-${Date.now()}`,
                 studentId: approvedPayment.studentId,
-                seriesId: approvedPayment.courseId,
+                seriesId: targetSeriesId,
                 paymentId: approvedPayment.id,
                 enrolledAt: new Date().toISOString(),
+                accessValidUntil: new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString(),
               });
               localStorage.setItem('cga_series_enrollments', JSON.stringify(seList));
             }
@@ -1637,8 +1776,11 @@ export const cgaService = {
             total_fee: approvedPayment.amount,
             due_amount: 0,
             progress: 0,
+            access_valid_until: new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString(),
           });
-        } catch {}
+        } catch (e) {
+          console.error('[approvePayment] enrollments upsert error:', e);
+        }
       }
     }
 
@@ -1659,6 +1801,17 @@ export const cgaService = {
     } catch {}
 
     try {
+      await sb
+        .from('payment_requests')
+        .update({
+          status: 'rejected',
+          reject_reason: reason,
+          reviewed_at: new Date().toISOString(),
+        })
+        .or(`id.eq.${paymentId},reference_code.eq.${paymentId}`);
+    } catch {}
+
+    try {
       if (typeof window !== 'undefined') {
         const stored = localStorage.getItem('cga_custom_payments');
         if (stored) {
@@ -1669,6 +1822,17 @@ export const cgaService = {
             found.rejectionReason = reason;
             found.reviewedAt = new Date().toISOString();
             localStorage.setItem('cga_custom_payments', JSON.stringify(list));
+          }
+        }
+
+        const storedReqs = localStorage.getItem('cga_payment_requests');
+        if (storedReqs) {
+          const rList = JSON.parse(storedReqs);
+          const foundR = rList.find((r: any) => r.id === paymentId || r.referenceCode === paymentId);
+          if (foundR) {
+            foundR.status = 'rejected';
+            foundR.rejectReason = reason;
+            localStorage.setItem('cga_payment_requests', JSON.stringify(rList));
           }
         }
       }
@@ -1902,13 +2066,36 @@ export const cgaService = {
       }
     }
 
+    let finalSeriesId: string = (t as any).seriesId ?? '';
+    if (!finalSeriesId) {
+      const normTitle = (t.title || '').toLowerCase();
+      const normSubj = (t.subject || '').toLowerCase();
+      const cId = (validCourseId || t.courseId || '').toLowerCase();
+
+      const isP2 = normTitle.includes('paper-ii') || normTitle.includes('paper 2') || normTitle.includes('paper-2') || normTitle.includes('paper ii') || cId.includes('tet-2');
+      const isSocial = normTitle.includes('social') || normTitle.includes('sst') || normTitle.includes('arts') || normTitle.includes('history') || normTitle.includes('geography') || normTitle.includes('civics') || normTitle.includes('political') || normSubj.includes('social') || normSubj.includes('history') || normSubj.includes('geography') || normSubj.includes('political') || cId.includes('sst') || cId.includes('arts');
+      const isScience = normTitle.includes('science') || normTitle.includes('physics') || normTitle.includes('chemistry') || normTitle.includes('biology') || normSubj.includes('science') || cId.includes('sci');
+
+      if (isP2 && isSocial) {
+        finalSeriesId = 'series-ttet-paper2-soc';
+      } else if (isP2 && isScience) {
+        finalSeriesId = 'series-ttet-paper2-sci';
+      } else if (isSocial) {
+        finalSeriesId = 'series-ttet-paper2-soc';
+      } else if (isScience) {
+        finalSeriesId = 'series-ttet-paper2-sci';
+      } else {
+        finalSeriesId = 'series-ttet-paper1';
+      }
+    }
+
     const { error } = await this.client().from('mock_tests').upsert({
       id: t.id,
       title: t.title,
       subject: t.subject ?? null,
       drive_link: t.driveLink ?? null,
       course_id: validCourseId,
-      series_id: (t as any).seriesId ?? null,
+      series_id: finalSeriesId,
       subject_id: (t as any).subjectId ?? null,
       test_type: (t as any).testType ?? 'sectional',
       test_no: (t as any).testNo ?? 1,
