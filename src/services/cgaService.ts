@@ -393,6 +393,14 @@ const toSeriesAttempt = (r: Row, studentName: string, studentCode: string, stude
   rank: r.rank ?? null,
 });
 
+// In-memory cache to make page switching instantaneous across the portal
+let dbCache: { data: CgaDatabase; timestamp: number; sessionKey: string } | null = null;
+let pendingLoadPromise: Promise<CgaDatabase> | null = null;
+
+export function invalidateDbCache(): void {
+  dbCache = null;
+}
+
 // ---------------------------------------------------------------- service
 export const cgaService = {
   client(): SupabaseClient {
@@ -948,58 +956,102 @@ export const cgaService = {
   },
 
   async logout(): Promise<void> {
+    invalidateDbCache();
     await this.client().auth.signOut();
   },
 
   // ============ LOAD EVERYTHING THE CURRENT USER MAY SEE (RLS-filtered) ============
-  async loadDatabase(session: AuthSession | null): Promise<CgaDatabase> {
+  async loadDatabase(session: AuthSession | null, forceRefresh = false): Promise<CgaDatabase> {
+    const sessionKey = `${session?.role || 'anon'}_${session?.userId || 'none'}`;
+    const now = Date.now();
+
+    // 1. High-Speed Memory Cache: Return immediately (0ms) if data is recent (< 30s)
+    if (!forceRefresh && dbCache && dbCache.sessionKey === sessionKey && (now - dbCache.timestamp < 30000)) {
+      return dbCache.data;
+    }
+
+    // 2. Deduplicate concurrent in-flight fetches so multiple callers share 1 network request
+    if (!forceRefresh && pendingLoadPromise) {
+      return pendingLoadPromise;
+    }
+
     const sb = this.client();
-    const one = async (q: PromiseLike<{ data: Row[] | null; error: unknown }>) => (await q).data ?? [];
+    const one = async (q: PromiseLike<{ data: Row[] | null; error: unknown }>): Promise<Row[]> =>
+      ((await q).data ?? []) as Row[];
 
-    const [site, faculty, courses, achievements, seriesRaw, subjectsRaw] = await Promise.all([
-      sb.from('site_content').select('content').eq('id', 1).maybeSingle(),
-      one(sb.from('faculty').select('*').order('name')),
-      one(sb.from('courses').select('*').order('name')),
-      one(sb.from('achievements').select('*')),
-      one(sb.from('mock_series').select('*').order('price')),
-      one(sb.from('mock_subjects').select('*').order('sort_order')),
-    ]);
-
-    let materials: Row[] = [];
-    let tests: Row[] = [];
-    let announcements: Row[] = [];
-    let profiles: Row[] = [];
-    let enrollments: Row[] = [];
-    let payments: Row[] = [];
-    let attempts: Row[] = [];
-    let peers: Row[] = [];
-    let enquiries: Row[] = [];
-    let seriesTestsRaw: Row[] = [];
-    let seriesEnrRaw: Row[] = [];
-    let seriesAttemptsRaw: Row[] = [];
-
-    if (session) {
-      [materials, tests, announcements, profiles, enrollments, payments, attempts, enquiries, seriesTestsRaw, seriesEnrRaw, seriesAttemptsRaw] =
-        await Promise.all([
-          one(sb.from('study_materials').select('*').order('uploaded_date', { ascending: false })),
-          one(sb.from('mock_tests').select('*').is('series_id', null)),
-          one(sb.from('announcements').select('*').order('date', { ascending: false })),
-          one(sb.from('profiles').select('*').order('created_at', { ascending: false })),
-          one(sb.from('enrollments').select('*')),
-          one(sb.from('fee_payments').select('*').order('date', { ascending: false })),
-          one(sb.from('test_attempts').select('*').order('submitted_at', { ascending: false })),
-          session.role === 'ADMIN'
+    const loadTask = (async () => {
+      try {
+        // Fire all queries in a single parallel batch across Supabase REST
+        const [
+          site,
+          faculty,
+          courses,
+          achievements,
+          seriesRaw,
+          subjectsRaw,
+          materials,
+          allMockTestsRaw,
+          announcements,
+          profiles,
+          enrollments,
+          payments,
+          attempts,
+          enquiries,
+          seriesEnrRaw,
+          seriesAttemptsRaw,
+          peersRaw,
+        ]: [
+          any,
+          Row[],
+          Row[],
+          Row[],
+          Row[],
+          Row[],
+          Row[],
+          Row[],
+          Row[],
+          Row[],
+          Row[],
+          Row[],
+          Row[],
+          Row[],
+          Row[],
+          Row[],
+          Row[]
+        ] = await Promise.all([
+          sb.from('site_content').select('content').eq('id', 1).maybeSingle(),
+          one(sb.from('faculty').select('*').order('name')),
+          one(sb.from('courses').select('*').order('name')),
+          one(sb.from('achievements').select('*')),
+          one(sb.from('mock_series').select('*').order('price')),
+          one(sb.from('mock_subjects').select('*').order('sort_order')),
+          session ? one(sb.from('study_materials').select('*').order('uploaded_date', { ascending: false })) : Promise.resolve([] as Row[]),
+          session ? one(sb.from('mock_tests').select('*')) : Promise.resolve([] as Row[]),
+          session ? one(sb.from('announcements').select('*').order('date', { ascending: false })) : Promise.resolve([] as Row[]),
+          session ? one(sb.from('profiles').select('*').order('created_at', { ascending: false })) : Promise.resolve([] as Row[]),
+          session ? one(sb.from('enrollments').select('*')) : Promise.resolve([] as Row[]),
+          session ? one(sb.from('fee_payments').select('*').order('date', { ascending: false })) : Promise.resolve([] as Row[]),
+          session ? one(sb.from('test_attempts').select('*').order('submitted_at', { ascending: false })) : Promise.resolve([] as Row[]),
+          session && session.role === 'ADMIN'
             ? one(sb.from('enquiries').select('*').order('created_at', { ascending: false }))
             : Promise.resolve([] as Row[]),
-          one(sb.from('mock_tests').select('*').not('series_id', 'is', null)),
-          one(sb.from('series_enrollments').select('*')),
-          one(sb.from('mock_attempts').select('*').order('submitted_at', { ascending: false })),
+          session ? one(sb.from('series_enrollments').select('*')) : Promise.resolve([] as Row[]),
+          session ? one(sb.from('mock_attempts').select('*').order('submitted_at', { ascending: false })) : Promise.resolve([] as Row[]),
+          session && session.role === 'STUDENT'
+            ? (async (): Promise<Row[]> => {
+                try {
+                  const r = await sb.rpc('get_peer_attempts');
+                  return (r.data as Row[]) ?? [];
+                } catch {
+                  return [] as Row[];
+                }
+              })()
+            : Promise.resolve([] as Row[]),
         ]);
-      if (session.role === 'STUDENT') {
-        const res = await sb.rpc('get_peer_attempts');
-        peers = (res.data as Row[]) ?? [];
-      }
-    }
+
+        const tests = allMockTestsRaw.filter((t: Row) => !t.series_id);
+        const seriesTestsRaw = allMockTestsRaw.filter((t: Row) => !!t.series_id);
+        const peers = peersRaw;
 
     const facultyList = faculty.map(toFaculty);
     const facultyName = (id: string | null) => facultyList.find((f) => f.id === id)?.name ?? '';
@@ -1202,7 +1254,7 @@ export const cgaService = {
       createdAt: formatStamp(e.created_at),
     }));
 
-    return {
+    const resultDb: CgaDatabase = {
       siteContent: {
         ...INITIAL_SEED_DATA.siteContent,
         ...((site.data?.content as SiteContent) ?? {}),
@@ -1276,6 +1328,21 @@ export const cgaService = {
         return INITIAL_SEED_DATA.mockSubjectPosts || [];
       })(),
     };
+
+    dbCache = {
+      data: resultDb,
+      timestamp: Date.now(),
+      sessionKey,
+    };
+
+    return resultDb;
+      } finally {
+        pendingLoadPromise = null;
+      }
+    })();
+
+    pendingLoadPromise = loadTask;
+    return loadTask;
   },
 
   // ============ PUBLIC ============
@@ -1732,6 +1799,7 @@ export const cgaService = {
   },
 
   async approvePayment(paymentId: string, reviewedBy = 'CGA Administrator'): Promise<ServiceResult> {
+    invalidateDbCache();
     const sb = this.client();
     let approvedPayment: FeePayment | null = null;
     try {
@@ -1871,6 +1939,7 @@ export const cgaService = {
   },
 
   async rejectPayment(paymentId: string, reason: string): Promise<ServiceResult> {
+    invalidateDbCache();
     const sb = this.client();
     try {
       await sb
@@ -2052,12 +2121,14 @@ export const cgaService = {
 
   // ============ ADMIN CRUD (RLS enforces admin-only) ============
   async upsertCourse(c: Course): Promise<ServiceResult> {
+    invalidateDbCache();
     const row = fromCourse(c);
     // let Postgres assign ids for brand-new records created with temporary client ids
     const { error } = await this.client().from('courses').upsert(row);
     return error ? { success: false, error: msg(error, 'Save failed.') } : { success: true };
   },
   async deleteCourse(id: string) {
+    invalidateDbCache();
     const { error } = await this.client().from('courses').delete().eq('id', id);
     return error ? { success: false, error: msg(error, 'Delete failed.') } : { success: true };
   },
@@ -2136,6 +2207,7 @@ export const cgaService = {
   },
 
   async upsertTest(t: MockTest): Promise<ServiceResult> {
+    invalidateDbCache();
     let validCourseId: string | null = null;
     if (t.courseId && t.courseId.trim()) {
       const trimmed = t.courseId.trim();
@@ -2240,6 +2312,7 @@ export const cgaService = {
     return { success: true };
   },
   async deleteTest(id: string): Promise<ServiceResult> {
+    invalidateDbCache();
     // 1. Instantly remove from local storage state so it disappears from UI immediately
     if (typeof window !== 'undefined') {
       try {
@@ -2558,6 +2631,7 @@ export const cgaService = {
 
   async saveSeriesTest(test: SeriesMockTest, isNew?: boolean): Promise<ServiceResult> {
     void isNew;
+    invalidateDbCache();
     const sb = this.client();
     const payload = {
       id: test.id,
@@ -2588,6 +2662,7 @@ export const cgaService = {
   },
 
   async deleteSeriesTest(testId: string): Promise<ServiceResult> {
+    invalidateDbCache();
     const sb = this.client();
     const { error } = await sb.from('mock_tests').delete().eq('id', testId);
     return error ? { success: false, error: msg(error, 'Failed to delete test.') } : { success: true };

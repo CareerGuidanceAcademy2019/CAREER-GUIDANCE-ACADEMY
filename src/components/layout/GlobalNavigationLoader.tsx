@@ -65,18 +65,18 @@ function NavigationLoaderInner() {
           return;
         }
 
-        // If navigation takes more than 120ms (meaning it's not an instantaneous local cache),
-        // show the loading page
+        // If navigation takes more than 400ms (meaning it's genuinely taking time to load),
+        // show the official CGA loading screen
         if (timer) clearTimeout(timer);
         timer = setTimeout(() => {
           setIsNavigating(true);
-        }, 120);
+        }, 400);
 
         // Safety timeout to prevent permanent lock if navigation gets cancelled
         if (safetyTimer) clearTimeout(safetyTimer);
         safetyTimer = setTimeout(() => {
           setIsNavigating(false);
-        }, 12000);
+        }, 8000);
       } catch {
         // Fallback: ignore malformed URLs
       }

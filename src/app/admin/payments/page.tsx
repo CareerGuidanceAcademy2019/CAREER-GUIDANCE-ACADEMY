@@ -33,13 +33,86 @@ import { ReceiptModal } from '@/components/student/ReceiptModal';
 import { CounterEnrollmentModal } from '@/components/admin/CounterEnrollmentModal';
 import { FeePayment } from '@/data/initialSeedData';
 import { MaskedData } from '@/components/ui/MaskedData';
+import { getSupabase } from '@/lib/supabase/client';
+
+function buildInitialRequests(feePayments: FeePayment[], students: any[]): PaymentRequest[] {
+  const result: PaymentRequest[] = [];
+  const seenRefs = new Set<string>();
+  const seenIds = new Set<string>();
+  const seenSignatures = new Set<string>();
+
+  const isDuplicate = (id?: string | null, ref?: string | null, studentId?: string | null, utr?: string | null): boolean => {
+    if (id && seenIds.has(id)) return true;
+    if (ref && seenRefs.has(ref.trim().toUpperCase())) return true;
+    if (studentId && utr) {
+      const sig = `${studentId}_${utr.trim().toUpperCase()}`;
+      if (seenSignatures.has(sig)) return true;
+    }
+    return false;
+  };
+
+  const registerEntry = (req: PaymentRequest) => {
+    if (req.id) seenIds.add(req.id);
+    if (req.referenceCode) seenRefs.add(req.referenceCode.trim().toUpperCase());
+    if (req.studentId && req.utr) seenSignatures.add(`${req.studentId}_${req.utr.trim().toUpperCase()}`);
+  };
+
+  if (typeof window !== 'undefined') {
+    try {
+      const localStored = localStorage.getItem('cga_payment_requests');
+      const localList: PaymentRequest[] = localStored ? JSON.parse(localStored) : [];
+      localList.forEach((r) => {
+        if (!isDuplicate(r.id, r.referenceCode, r.studentId, r.utr)) {
+          registerEntry(r);
+          result.push(r);
+        }
+      });
+    } catch {}
+  }
+
+  (feePayments || []).forEach((p) => {
+    if (!isDuplicate(p.id, p.receiptNo, p.studentId, p.utr)) {
+      const stu = students.find((s) => s.id === p.studentId);
+      const item: PaymentRequest = {
+        id: p.id,
+        studentId: p.studentId,
+        studentName: p.studentName || stu?.name || 'Student',
+        studentCode: stu?.studentCode || p.studentId.slice(0, 8),
+        studentPhone: stu?.phone || '',
+        studentEmail: stu?.email || '',
+        itemType: (p.itemType || (p.courseId?.startsWith('series-') ? 'mock_series' : 'course')) as any,
+        itemId: p.itemId || p.courseId,
+        paymentType: p.paymentType === 'Instalment 1' ? 'instalment_1' : p.paymentType === 'Instalment 2' ? 'instalment_2' : 'full',
+        expectedAmount: p.amount,
+        amountReceived: p.status === 'Verified' ? p.amount : null,
+        referenceCode: p.receiptNo,
+        paymentChannel: p.paymentMode === 'Net Banking' ? 'bank_transfer' : 'upi',
+        paymentMethod: 'upi_manual',
+        utr: p.utr,
+        screenshotPath: p.screenshot,
+        status: p.status === 'Verified' ? 'approved' : p.status === 'Rejected' ? 'rejected' : 'pending_review',
+        reviewedBy: p.reviewedBy,
+        reviewedAt: p.reviewedAt,
+        rejectReason: p.rejectionReason,
+        expiresAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
+        createdAt: p.date ? new Date(p.date).toISOString() : new Date().toISOString(),
+      };
+      registerEntry(item);
+      result.push(item);
+    }
+  });
+
+  return result;
+}
 
 export default function AdminPaymentsPage() {
   const { db, session, showToast, approvePayment, rejectPayment } = useCga();
 
   // State
-  const [requests, setRequests] = useState<PaymentRequest[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [requests, setRequests] = useState<PaymentRequest[]>(() =>
+    buildInitialRequests(db.feePayments || [], db.students || [])
+  );
+  const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<PaymentStatus | 'all'>('pending_review');
   const [searchQuery, setSearchQuery] = useState('');
   const [itemTypeFilter, setItemTypeFilter] = useState<'all' | 'course' | 'material' | 'mock_series'>('all');
@@ -116,20 +189,13 @@ export default function AdminPaymentsPage() {
     };
 
     try {
-      const { createClient } = await import('@/lib/supabase/client');
-      const sb = createClient();
+      const sb = getSupabase();
 
-      // 1. Fetch from payment_requests
-      const { data: prData, error: prError } = await sb
-        .from('payment_requests')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      // 2. Fetch from fee_payments
-      const { data: fpData, error: fpError } = await sb
-        .from('fee_payments')
-        .select('*')
-        .order('date', { ascending: false });
+      // Parallel batch fetching for instantaneous response
+      const [{ data: prData, error: prError }, { data: fpData, error: fpError }] = await Promise.all([
+        sb.from('payment_requests').select('*').order('created_at', { ascending: false }),
+        sb.from('fee_payments').select('*').order('date', { ascending: false }),
+      ]);
 
       // Gather student profiles to augment names
       const studentIds = new Set<string>();

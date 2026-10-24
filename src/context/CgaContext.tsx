@@ -47,7 +47,7 @@ interface CgaContextType {
   toasts: ToastNotice[];
   showToast: (title: string, message?: string, type?: 'success' | 'error' | 'info') => void;
   dismissToast: (id: string) => void;
-  refresh: () => Promise<void>;
+  refresh: (force?: boolean) => Promise<void>;
 
   // Site-wide Single-Submission & Loading Gate
   isGlobalLoading: boolean;
@@ -220,19 +220,23 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const refresh = useCallback(async () => {
-    try {
-      setDb(await cgaService.loadDatabase(sessionRef.current));
-    } catch {
-      showToast('Could not load data', 'Please check your connection and reload the page.', 'error');
-    }
-  }, [showToast]);
+  const refresh = useCallback(
+    async (force = false) => {
+      try {
+        setDb(await cgaService.loadDatabase(sessionRef.current, force));
+      } catch {
+        showToast('Could not load data', 'Please check your connection and reload the page.', 'error');
+      }
+    },
+    [showToast]
+  );
 
   const applySession = useCallback(
     async (next: AuthSession | null) => {
       sessionRef.current = next;
       setSession(next);
-      await refresh();
+      setIsHydrated(true);
+      await refresh(false);
     },
     [refresh]
   );
@@ -240,10 +244,17 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let active = true;
     (async () => {
-      const s = await cgaService.getSession().catch(() => null);
-      if (!active) return;
-      await applySession(s);
-      if (active) setIsHydrated(true);
+      try {
+        const s = await cgaService.getSession().catch(() => null);
+        if (!active) return;
+        sessionRef.current = s;
+        setSession(s);
+        // Hydrate immediately so UI layout mounts in 0ms without full-screen blocking spinners
+        setIsHydrated(true);
+        await refresh(false);
+      } catch {
+        if (active) setIsHydrated(true);
+      }
     })();
     const { data: sub } = cgaService.client().auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT' && sessionRef.current) void applySession(null);
@@ -252,7 +263,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
       active = false;
       sub.subscription.unsubscribe();
     };
-  }, [applySession]);
+  }, [applySession, refresh]);
 
   /** Run a mutation, toast on failure/success, then reload server state. */
   const run = useCallback(
@@ -266,7 +277,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         return false;
       }
       if (ok) showToast(ok.title, ok.message, ok.type ?? 'success');
-      await refresh();
+      await refresh(true);
       return true;
     },
     [refresh, showToast]
