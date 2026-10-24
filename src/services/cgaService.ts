@@ -969,6 +969,11 @@ export const cgaService = {
 
   async logout(): Promise<void> {
     invalidateDbCache();
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.removeItem('cga_auth_session');
+      } catch {}
+    }
     await this.client().auth.signOut();
   },
 

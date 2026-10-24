@@ -30,7 +30,6 @@ import {
   AdminRegisterPayload,
   ServiceResult,
 } from '@/services/cgaService';
-import { CgaLoadingScreen } from '@/components/ui/CgaLoadingScreen';
 
 export interface ToastNotice {
   id: string;
@@ -183,23 +182,16 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
    * with full pointer-event blocking so duplicate clicks are physically impossible.
    */
   const withSingleSubmit = useCallback(
-    async <T,>(action: () => Promise<T>, options?: { showGlobalLoader?: boolean }): Promise<T | undefined> => {
+    async <T,>(action: () => Promise<T>): Promise<T | undefined> => {
       if (isActionLockedRef.current) {
         console.warn('[CgaContext] Blocked duplicate submission: another request is in progress.');
         return undefined;
       }
       isActionLockedRef.current = true;
-      const showLoader = options?.showGlobalLoader !== false;
-      if (showLoader) {
-        setIsGlobalLoading(true);
-      }
       try {
         return await action();
       } finally {
         isActionLockedRef.current = false;
-        if (showLoader) {
-          setIsGlobalLoading(false);
-        }
       }
     },
     []
@@ -235,6 +227,15 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
     async (next: AuthSession | null) => {
       sessionRef.current = next;
       setSession(next);
+      if (typeof window !== 'undefined') {
+        try {
+          if (next) {
+            sessionStorage.setItem('cga_auth_session', JSON.stringify(next));
+          } else {
+            sessionStorage.removeItem('cga_auth_session');
+          }
+        } catch {}
+      }
       setIsHydrated(true);
       await refresh(false);
     },
@@ -243,13 +244,37 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let active = true;
+
+    // 0ms instant hydration from sessionStorage (eliminates any layout spinner)
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = sessionStorage.getItem('cga_auth_session');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && parsed.userId) {
+            sessionRef.current = parsed;
+            setSession(parsed);
+            setIsHydrated(true);
+          }
+        }
+      } catch {}
+    }
+
     (async () => {
       try {
         const s = await cgaService.getSession().catch(() => null);
         if (!active) return;
         sessionRef.current = s;
         setSession(s);
-        // Hydrate immediately so UI layout mounts in 0ms without full-screen blocking spinners
+        if (typeof window !== 'undefined') {
+          try {
+            if (s) {
+              sessionStorage.setItem('cga_auth_session', JSON.stringify(s));
+            } else {
+              sessionStorage.removeItem('cga_auth_session');
+            }
+          } catch {}
+        }
         setIsHydrated(true);
         await refresh(false);
       } catch {
@@ -1361,7 +1386,6 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
       }}
     >
       {children}
-      {isGlobalLoading && <CgaLoadingScreen fullScreen />}
     </CgaContext.Provider>
   );
 }

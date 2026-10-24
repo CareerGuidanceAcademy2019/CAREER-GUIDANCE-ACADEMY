@@ -2,26 +2,27 @@
 
 import React, { useEffect, useState, Suspense } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { CgaLoadingScreen } from '@/components/ui/CgaLoadingScreen';
 
-function NavigationLoaderInner() {
+function NavigationProgressInner() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [isSlowNavigating, setIsSlowNavigating] = useState(false);
-  const [isTopBarLoading, setIsTopBarLoading] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
 
-  // Clear loading states whenever the route path or query changes
+  // Clear loading state immediately whenever the route changes
   useEffect(() => {
-    setIsSlowNavigating(false);
-    setIsTopBarLoading(false);
+    setIsNavigating(false);
   }, [pathname, searchParams]);
 
   useEffect(() => {
-    let topBarTimer: NodeJS.Timeout | null = null;
-    let slowTimer: NodeJS.Timeout | null = null;
+    let timer: NodeJS.Timeout | null = null;
     let safetyTimer: NodeJS.Timeout | null = null;
 
     const handleAnchorClick = (e: MouseEvent) => {
+      // Don't intercept special clicks (cmd/ctrl click, right click, etc.)
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) {
+        return;
+      }
+
       const target = (e.target as HTMLElement)?.closest('a');
       if (!target) return;
 
@@ -35,12 +36,11 @@ function NavigationLoaderInner() {
         downloadAttr !== null ||
         href.startsWith('mailto:') ||
         href.startsWith('tel:') ||
-        href.startsWith('javascript:')
+        href.startsWith('javascript:') ||
+        href.startsWith('#')
       ) {
         return;
       }
-
-      if (href.startsWith('#')) return;
 
       const isInternal = href.startsWith('/') || href.startsWith(window.location.origin);
       if (!isInternal) return;
@@ -56,24 +56,18 @@ function NavigationLoaderInner() {
           return;
         }
 
-        // Tier 1: Fast top glowing line after 80ms for instant tactile feedback
-        if (topBarTimer) clearTimeout(topBarTimer);
-        topBarTimer = setTimeout(() => {
-          setIsTopBarLoading(true);
-        }, 80);
-
-        // Tier 2: Official CGA Logo loading screen only if navigation genuinely takes > 1200ms
-        if (slowTimer) clearTimeout(slowTimer);
-        slowTimer = setTimeout(() => {
-          setIsSlowNavigating(true);
-        }, 1200);
+        // Show slim default navigation progress only if loading takes longer than usual (> 150ms)
+        // Fast transitions (< 150ms) remain completely instant with zero indicator
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => {
+          setIsNavigating(true);
+        }, 150);
 
         // Safety timeout to reset if navigation was cancelled
         if (safetyTimer) clearTimeout(safetyTimer);
         safetyTimer = setTimeout(() => {
-          setIsSlowNavigating(false);
-          setIsTopBarLoading(false);
-        }, 8000);
+          setIsNavigating(false);
+        }, 5000);
       } catch {}
     };
 
@@ -81,35 +75,28 @@ function NavigationLoaderInner() {
 
     return () => {
       document.removeEventListener('click', handleAnchorClick, { capture: true });
-      if (topBarTimer) clearTimeout(topBarTimer);
-      if (slowTimer) clearTimeout(slowTimer);
+      if (timer) clearTimeout(timer);
       if (safetyTimer) clearTimeout(safetyTimer);
     };
   }, []);
 
-  return (
-    <>
-      {/* Sleek top progress bar */}
-      {isTopBarLoading && !isSlowNavigating && (
-        <div
-          role="progressbar"
-          aria-label="Loading page"
-          className="fixed top-0 left-0 right-0 h-[3px] z-[9999] overflow-hidden bg-transparent pointer-events-none"
-        >
-          <div className="h-full w-full bg-gradient-to-r from-[#0056b3] via-cyan-400 to-[#ea580c] animate-pulse" />
-        </div>
-      )}
+  if (!isNavigating) return null;
 
-      {/* Official CGA Loading Screen when navigation genuinely takes longer than 1.2s */}
-      {isSlowNavigating && <CgaLoadingScreen fullScreen />}
-    </>
+  return (
+    <div
+      role="progressbar"
+      aria-label="Loading page"
+      className="fixed top-0 left-0 right-0 h-[2.5px] z-[99999] overflow-hidden bg-transparent pointer-events-none"
+    >
+      <div className="h-full w-full bg-gradient-to-r from-[#0056b3] via-sky-400 to-[#ea580c] animate-pulse" />
+    </div>
   );
 }
 
 export function GlobalNavigationLoader() {
   return (
     <Suspense fallback={null}>
-      <NavigationLoaderInner />
+      <NavigationProgressInner />
     </Suspense>
   );
 }
