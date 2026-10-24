@@ -24,6 +24,10 @@ import {
   Layers,
   Crop,
   HardDrive,
+  BookOpen,
+  PlusCircle,
+  ListPlus,
+  FileQuestion,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
 import { ParsedMCQ, generateMCQTemplateCsv, validateParsedQuestions } from '@/lib/mcqParser';
@@ -53,6 +57,38 @@ export default function AdminMockTestQuestionsPage() {
 
   // Drag over target for UI feedback
   const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
+
+  // Delete All Questions Modal state
+  const [deleteAllModalOpen, setDeleteAllModalOpen] = useState(false);
+  const [deleteFromDbAlso, setDeleteFromDbAlso] = useState(true);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
+
+  // Comprehension / Passage Builder Modal state
+  const [passageModalOpen, setPassageModalOpen] = useState(false);
+  const [editingPassage, setEditingPassage] = useState<{
+    id?: string;
+    position?: number;
+    title?: string;
+    passageText: string;
+    imagePath?: string | null;
+    imageAlt?: string | null;
+    rangeFrom: number;
+    rangeTo: number;
+    selectedQuestionIds: string[];
+    generateBlankCount: number;
+  }>({
+    passageText: '',
+    rangeFrom: 1,
+    rangeTo: 1,
+    selectedQuestionIds: [],
+    generateBlankCount: 0,
+  });
+
+  // Import mode state (Append vs Replace)
+  const [importMode, setImportMode] = useState<'append' | 'replace'>('append');
+  const [autoCreatePassage, setAutoCreatePassage] = useState(false);
+  const [importPassageTitle, setImportPassageTitle] = useState('');
+  const [importPassageText, setImportPassageText] = useState('');
 
   // Paste import state
   const [pastedText, setPastedText] = useState('');
@@ -360,6 +396,216 @@ export default function AdminMockTestQuestionsPage() {
     }
   };
 
+  // Delete All Questions Action
+  const handleDeleteAllQuestions = async () => {
+    setIsDeletingAll(true);
+    try {
+      if (deleteFromDbAlso) {
+        const res = await fetch(`/api/admin/mock-tests/questions?testId=${encodeURIComponent(testId)}`, {
+          method: 'DELETE',
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Failed to clear questions from database.');
+        }
+      }
+      setQuestions([]);
+      setQuestionGroups([]);
+      setActiveQIndex(0);
+      setDeleteAllModalOpen(false);
+      showToast('All Questions Deleted', 'All loaded questions and passages have been cleared. You can now load fresh questions.', 'success');
+      fetchStorageUsage();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete questions';
+      showToast('Delete Error', msg, 'error');
+    } finally {
+      setIsDeletingAll(false);
+    }
+  };
+
+  // Add Blank Question Action
+  const handleAddBlankQuestion = (linkedGroupId?: string) => {
+    const newIdx = questions.length;
+    const newQ: ParsedMCQ = {
+      id: `q-${Date.now()}-${newIdx}`,
+      position: newIdx + 1,
+      question: '',
+      options: ['Option A', 'Option B', 'Option C', 'Option D'],
+      correctOptionIndex: 0,
+      explanation: '',
+      groupId: linkedGroupId || null,
+      needsDiagram: false,
+      confidence: 'high',
+      warnings: [],
+    };
+    setQuestions((prev) => [...prev, newQ]);
+    setActiveQIndex(newIdx);
+    showToast('Question Added', `Question ${newIdx + 1} added to test.`, 'success');
+  };
+
+  // Open Comprehension Passage Modal
+  const handleOpenPassageModal = (groupToEdit?: MockQuestionGroup) => {
+    if (groupToEdit) {
+      const linked = questions.filter((q) => q.groupId === groupToEdit.id);
+      const minPos = linked.length > 0 ? Math.min(...linked.map((q) => q.position)) : 1;
+      const maxPos = linked.length > 0 ? Math.max(...linked.map((q) => q.position)) : Math.max(1, minPos);
+      setEditingPassage({
+        id: groupToEdit.id,
+        position: groupToEdit.position,
+        title: groupToEdit.imageAlt || '',
+        passageText: groupToEdit.passageText || '',
+        imagePath: groupToEdit.imagePath || null,
+        imageAlt: groupToEdit.imageAlt || 'Passage diagram',
+        rangeFrom: minPos,
+        rangeTo: maxPos,
+        selectedQuestionIds: linked.map((q) => q.id),
+        generateBlankCount: 0,
+      });
+    } else {
+      const defaultFrom = questions.length > 0 ? Math.max(1, questions.length - 4) : 1;
+      const defaultTo = Math.max(1, questions.length);
+      setEditingPassage({
+        title: `Comprehension Section ${questionGroups.length + 1}`,
+        passageText: 'Directions: Read the following passage carefully and answer the questions that follow:\n\n',
+        imagePath: null,
+        imageAlt: 'Comprehension Diagram',
+        rangeFrom: defaultFrom,
+        rangeTo: defaultTo,
+        selectedQuestionIds: [],
+        generateBlankCount: 0,
+      });
+    }
+    setPassageModalOpen(true);
+  };
+
+  // Save Comprehension Passage Modal Action
+  const handleSavePassageModal = () => {
+    if (!editingPassage.passageText.trim()) {
+      showToast('Validation Error', 'Passage text cannot be empty.', 'error');
+      return;
+    }
+
+    const grpId = editingPassage.id || `grp-${Date.now()}`;
+    const newGroup: MockQuestionGroup = {
+      id: grpId,
+      testId,
+      position: editingPassage.position || questionGroups.length + 1,
+      passageText: editingPassage.passageText.trim(),
+      imagePath: editingPassage.imagePath || null,
+      imageAlt: editingPassage.title?.trim() || editingPassage.imageAlt || 'Comprehension passage',
+    };
+
+    setQuestionGroups((prev) => {
+      const exists = prev.some((g) => g.id === grpId);
+      if (exists) {
+        return prev.map((g) => (g.id === grpId ? newGroup : g));
+      }
+      return [...prev, newGroup];
+    });
+
+    let updatedQuestions = [...questions];
+
+    if (editingPassage.generateBlankCount > 0) {
+      const startPos = updatedQuestions.length;
+      for (let i = 0; i < editingPassage.generateBlankCount; i++) {
+        updatedQuestions.push({
+          id: `q-gen-${Date.now()}-${i}`,
+          position: startPos + i + 1,
+          question: '',
+          options: ['Option A', 'Option B', 'Option C', 'Option D'],
+          correctOptionIndex: 0,
+          explanation: '',
+          groupId: grpId,
+          needsDiagram: false,
+          confidence: 'high',
+          warnings: [],
+        });
+      }
+    }
+
+    const from = Math.max(1, editingPassage.rangeFrom);
+    const to = Math.max(from, editingPassage.rangeTo);
+
+    updatedQuestions = updatedQuestions.map((q, idx) => {
+      const pos = idx + 1;
+      const inRange = pos >= from && pos <= to;
+      const inSelectedList = editingPassage.selectedQuestionIds.includes(q.id);
+
+      if (inRange || inSelectedList) {
+        return { ...q, groupId: grpId };
+      } else if (editingPassage.id && q.groupId === editingPassage.id) {
+        return { ...q, groupId: null };
+      }
+      return q;
+    });
+
+    setQuestions(updatedQuestions);
+    setPassageModalOpen(false);
+    showToast(
+      'Passage Saved',
+      `Comprehension passage configured and linked to questions Q${from}–${Math.max(to, updatedQuestions.length)}.`,
+      'success'
+    );
+  };
+
+  // Helper to process incoming parsed questions with Append vs Replace and optional Passage grouping
+  const applyImportedQuestions = (incoming: ParsedMCQ[], label: string) => {
+    if (!incoming || incoming.length === 0) {
+      showToast('Empty Import', 'No questions found in the provided input.', 'info');
+      return;
+    }
+
+    let targetGroupId: string | null = null;
+    if (autoCreatePassage && importPassageText.trim()) {
+      const newGrpId = `grp-${Date.now()}`;
+      const newGroup: MockQuestionGroup = {
+        id: newGrpId,
+        testId,
+        position: questionGroups.length + 1,
+        passageText: importPassageText.trim(),
+        imagePath: null,
+        imageAlt: importPassageTitle.trim() || 'Comprehension Passage',
+      };
+      setQuestionGroups((prev) => [...prev, newGroup]);
+      targetGroupId = newGrpId;
+    }
+
+    const preparedIncoming = incoming.map((q) => ({
+      ...q,
+      groupId: targetGroupId || q.groupId || null,
+    }));
+
+    if (importMode === 'append' && questions.length > 0) {
+      const startIndex = questions.length;
+      const renumbered = preparedIncoming.map((q, idx) => ({
+        ...q,
+        position: startIndex + idx + 1,
+      }));
+      setQuestions((prev) => [...prev, ...renumbered]);
+      setActiveQIndex(startIndex);
+      showToast(
+        'Questions Appended',
+        `Appended ${incoming.length} questions (Q${startIndex + 1}–Q${startIndex + incoming.length})${targetGroupId ? ' linked to new comprehension passage' : ''}. Total: ${startIndex + incoming.length} questions.`,
+        'success'
+      );
+    } else {
+      setQuestions(preparedIncoming);
+      setActiveQIndex(0);
+      showToast(
+        'Questions Loaded',
+        `Loaded ${incoming.length} questions into test${targetGroupId ? ' linked to comprehension passage' : ''}.`,
+        'success'
+      );
+    }
+
+    setPastedText('');
+    setPastedAnswerKey('');
+    setImportPassageText('');
+    setImportPassageTitle('');
+    setAutoCreatePassage(false);
+    setActiveTab('review');
+  };
+
   // Parse Text Action
   const handleParseText = async () => {
     if (!pastedText.trim()) return;
@@ -383,10 +629,7 @@ export default function AdminMockTestQuestionsPage() {
       }
 
       const data = await res.json();
-      setQuestions(data.questions || []);
-      setActiveTab('review');
-      setActiveQIndex(0);
-      showToast('Questions Parsed', `Extracted ${data.questions?.length || 0} questions into the review screen.`, 'success');
+      applyImportedQuestions(data.questions || [], 'Pasted text');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to parse text';
       showToast('Parsing Failed', msg, 'error');
@@ -418,10 +661,7 @@ export default function AdminMockTestQuestionsPage() {
       }
 
       const data = await res.json();
-      setQuestions(data.questions || []);
-      setActiveTab('review');
-      setActiveQIndex(0);
-      showToast('File Imported', `Extracted ${data.questions?.length || 0} questions into review.`, 'success');
+      applyImportedQuestions(data.questions || [], 'File');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to parse file';
       showToast('Import Error', msg, 'error');
@@ -507,6 +747,25 @@ export default function AdminMockTestQuestionsPage() {
             className="px-4 py-2.5 rounded-xl border border-blue-200 bg-blue-50 text-[#0056b3] hover:bg-blue-100 text-xs font-extrabold cursor-pointer inline-flex items-center gap-1.5"
           >
             <Eye className="w-4 h-4" /> Preview Test (CBT &amp; Checklist)
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleOpenPassageModal()}
+            className="px-4 py-2.5 rounded-xl border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 text-xs font-extrabold cursor-pointer inline-flex items-center gap-1.5"
+            title="Create or configure a Reading Comprehension passage"
+          >
+            <BookOpen className="w-4 h-4" /> Add Comprehension / Passage
+          </button>
+
+          <button
+            type="button"
+            disabled={questions.length === 0}
+            onClick={() => setDeleteAllModalOpen(true)}
+            className="px-4 py-2.5 rounded-xl border border-red-200 bg-red-50 text-[#dc2626] hover:bg-red-100 text-xs font-extrabold cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50"
+            title="Delete all loaded questions to re-upload or re-edit"
+          >
+            <Trash2 className="w-4 h-4" /> Delete All Questions
           </button>
 
           <button
@@ -658,6 +917,40 @@ export default function AdminMockTestQuestionsPage() {
               </div>
             </div>
 
+            {/* Quick Actions in Sidebar */}
+            <div className="grid grid-cols-3 gap-1.5 pt-1 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => handleAddBlankQuestion()}
+                className="py-1.5 px-2 rounded-xl bg-blue-50 text-[#0056b3] hover:bg-blue-100 text-[11px] font-extrabold flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                title="Add 1 blank MCQ to the test"
+              >
+                <Plus className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">Add MCQ</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleOpenPassageModal()}
+                className="py-1.5 px-2 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 text-[11px] font-extrabold flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                title="Create a Comprehension Passage section and link questions"
+              >
+                <BookOpen className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">Passage</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={questions.length === 0}
+                onClick={() => setDeleteAllModalOpen(true)}
+                className="py-1.5 px-2 rounded-xl bg-red-50 text-[#dc2626] hover:bg-red-100 text-[11px] font-extrabold flex items-center justify-center gap-1 cursor-pointer transition-colors disabled:opacity-40"
+                title="Delete all loaded questions"
+              >
+                <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">Delete All</span>
+              </button>
+            </div>
+
             {/* Checklist summary alert if warnings */}
             {validation.hasErrors && (
               <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-800 space-y-1">
@@ -671,35 +964,50 @@ export default function AdminMockTestQuestionsPage() {
             )}
 
             {/* Questions Grid */}
-            <div className="grid grid-cols-5 gap-2 max-h-[500px] overflow-y-auto pr-1">
-              {questions.map((q, idx) => {
-                const isActive = idx === activeQIndex;
-                const needsDiag = q.needsDiagram && !q.imagePath;
+            {questions.length === 0 ? (
+              <div className="p-6 text-center border-2 border-dashed border-slate-200 rounded-2xl text-xs text-slate-500 space-y-2">
+                <FileQuestion className="w-6 h-6 text-slate-400 mx-auto" />
+                <p className="font-bold">No questions loaded yet</p>
+                <p className="text-[11px] text-slate-400">Click &quot;Add MCQ&quot; above, or paste questions to start.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-5 gap-2 max-h-[500px] overflow-y-auto pr-1">
+                {questions.map((q, idx) => {
+                  const isActive = idx === activeQIndex;
+                  const needsDiag = q.needsDiagram && !q.imagePath;
+                  const isPassageQ = Boolean(q.groupId);
 
-                let color = 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50';
-                if (isActive) {
-                  color = 'bg-[#0056b3] text-white border-[#0056b3] font-black shadow-xs';
-                } else if (needsDiag) {
-                  color = 'bg-amber-50 text-amber-800 border-amber-300 font-bold';
-                } else if (q.imagePath) {
-                  color = 'bg-blue-50 text-[#0056b3] border-blue-200 font-bold';
-                }
+                  let color = 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50';
+                  if (isActive) {
+                    color = 'bg-[#0056b3] text-white border-[#0056b3] font-black shadow-xs';
+                  } else if (needsDiag) {
+                    color = 'bg-amber-50 text-amber-800 border-amber-300 font-bold';
+                  } else if (isPassageQ) {
+                    color = 'bg-purple-50 text-purple-800 border-purple-200 font-bold';
+                  } else if (q.imagePath) {
+                    color = 'bg-blue-50 text-[#0056b3] border-blue-200 font-bold';
+                  }
 
-                return (
-                  <button
-                    key={q.id || idx}
-                    type="button"
-                    onClick={() => setActiveQIndex(idx)}
-                    className={`h-9 rounded-xl border text-xs flex items-center justify-center relative cursor-pointer transition-all ${color}`}
-                  >
-                    <span>{idx + 1}</span>
-                    {q.imagePath && !isActive && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#0056b3] absolute top-1 right-1" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+                  return (
+                    <button
+                      key={q.id || idx}
+                      type="button"
+                      onClick={() => setActiveQIndex(idx)}
+                      className={`h-9 rounded-xl border text-xs flex items-center justify-center relative cursor-pointer transition-all ${color}`}
+                      title={isPassageQ ? `Question ${idx + 1} (Linked to Comprehension Passage)` : `Question ${idx + 1}`}
+                    >
+                      <span>{idx + 1}</span>
+                      {isPassageQ && !isActive && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-purple-600 absolute top-1 left-1" title="Passage question" />
+                      )}
+                      {q.imagePath && !isActive && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#0056b3] absolute top-1 right-1" title="Diagram attached" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Active Question Editor */}
@@ -707,9 +1015,16 @@ export default function AdminMockTestQuestionsPage() {
             {currentQ ? (
               <div className="space-y-6">
                 <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
-                  <span className="text-sm font-extrabold text-[#0056b3]">
-                    Editing Question {activeQIndex + 1} of {questions.length}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-extrabold text-[#0056b3]">
+                      Editing Question {activeQIndex + 1} of {questions.length}
+                    </span>
+                    {currentQ.groupId && (
+                      <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 text-[10px] font-extrabold inline-flex items-center gap-1">
+                        <BookOpen className="w-3 h-3 text-purple-600" /> Comprehension
+                      </span>
+                    )}
+                  </div>
 
                   <div className="flex items-center gap-2">
                     <button
@@ -728,7 +1043,116 @@ export default function AdminMockTestQuestionsPage() {
                     >
                       Next
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const deletedQNum = activeQIndex + 1;
+                        setQuestions((prev) => {
+                          const next = prev.filter((_, i) => i !== activeQIndex);
+                          return next.map((q, i) => ({ ...q, position: i + 1 }));
+                        });
+                        setActiveQIndex((prev) => Math.max(0, Math.min(prev, questions.length - 2)));
+                        showToast('Question Removed', `Question ${deletedQNum} deleted.`, 'info');
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg bg-red-50 text-[#dc2626] hover:bg-red-100 text-xs font-bold cursor-pointer inline-flex items-center gap-1"
+                      title="Delete this question"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
+                </div>
+
+                {/* Comprehension / Passage Association Card */}
+                <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/70 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <BookOpen className="w-4 h-4 text-purple-700" />
+                      <span className="text-xs font-extrabold text-slate-800">
+                        Comprehension / Passage Assignment:
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleOpenPassageModal()}
+                      className="px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 text-[11px] font-extrabold inline-flex items-center gap-1 cursor-pointer border border-purple-200"
+                    >
+                      <Plus className="w-3 h-3" /> New Comprehension Passage
+                    </button>
+                  </div>
+
+                  {(() => {
+                    const linkedGroup = questionGroups.find((g) => g.id === currentQ.groupId);
+
+                    if (linkedGroup) {
+                      return (
+                        <div className="p-3.5 bg-white rounded-xl border border-purple-200 space-y-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-xs font-extrabold text-purple-900 flex items-center gap-1.5">
+                              <span>📖 Passage #{linkedGroup.position}: {linkedGroup.imageAlt || 'Reading Comprehension'}</span>
+                            </span>
+                            <div className="flex items-center gap-2 text-xs">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenPassageModal(linkedGroup)}
+                                className="text-[11px] font-bold text-purple-700 hover:underline cursor-pointer"
+                              >
+                                Edit Passage / Range
+                              </button>
+                              <span className="text-slate-300">|</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setQuestions((prev) => {
+                                    const copy = [...prev];
+                                    copy[activeQIndex] = { ...copy[activeQIndex], groupId: null };
+                                    return copy;
+                                  });
+                                  showToast('Unlinked', `Question ${currentQ.position} unlinked from passage.`, 'info');
+                                }}
+                                className="text-[11px] font-bold text-red-600 hover:underline cursor-pointer"
+                              >
+                                Unlink from Passage
+                              </button>
+                            </div>
+                          </div>
+                          <p className="text-xs text-slate-600 line-clamp-2 font-mono bg-purple-50/50 p-2 rounded-lg border border-purple-100">
+                            {linkedGroup.passageText}
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-500 bg-white p-3 rounded-xl border border-slate-200">
+                        <span>Standalone MCQ (Not linked to any comprehension passage).</span>
+                        {questionGroups.length > 0 && (
+                          <select
+                            value=""
+                            onChange={(e) => {
+                              const grpId = e.target.value;
+                              if (grpId) {
+                                setQuestions((prev) => {
+                                  const copy = [...prev];
+                                  copy[activeQIndex] = { ...copy[activeQIndex], groupId: grpId };
+                                  return copy;
+                                });
+                                showToast('Linked', `Question ${currentQ.position} linked to passage.`, 'success');
+                              }
+                            }}
+                            className="px-2.5 py-1 rounded-lg border border-slate-200 text-xs font-bold bg-slate-50"
+                          >
+                            <option value="">Link to Existing Passage...</option>
+                            {questionGroups.map((g, gIdx) => (
+                              <option key={g.id} value={g.id}>
+                                Passage #{gIdx + 1}: {g.imageAlt || (g.passageText || '').slice(0, 30)}...
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Question Statement */}
@@ -1142,6 +1566,75 @@ or
                 />
               </div>
 
+              {/* Import Mode & Comprehension Section Options */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 text-xs">
+                <div>
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-700 block mb-1.5">
+                    Import Mode
+                  </span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setImportMode('append')}
+                      className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
+                        importMode === 'append'
+                          ? 'bg-blue-50 border-[#0056b3] text-[#0056b3] font-bold shadow-xs'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100 font-medium'
+                      }`}
+                    >
+                      <span className="block font-extrabold text-[11px]">Append (Keep Qs)</span>
+                      <span className="text-[10px] text-slate-500">
+                        Add after {questions.length} existing Qs
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setImportMode('replace')}
+                      className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
+                        importMode === 'replace'
+                          ? 'bg-amber-50 border-amber-500 text-amber-900 font-bold shadow-xs'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100 font-medium'
+                      }`}
+                    >
+                      <span className="block font-extrabold text-[11px]">Replace All</span>
+                      <span className="text-[10px] text-slate-500">Clear existing Qs first</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Comprehension Passage Grouping */}
+                <div className="pt-2 border-t border-slate-200/70 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer font-extrabold text-purple-950">
+                    <input
+                      type="checkbox"
+                      checked={autoCreatePassage}
+                      onChange={(e) => setAutoCreatePassage(e.target.checked)}
+                      className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500"
+                    />
+                    <span>Group as Comprehension / Reading Passage</span>
+                  </label>
+
+                  {autoCreatePassage && (
+                    <div className="space-y-2 pt-1 animate-in fade-in duration-150">
+                      <input
+                        type="text"
+                        value={importPassageTitle}
+                        onChange={(e) => setImportPassageTitle(e.target.value)}
+                        placeholder="Passage Reference (e.g. Directions: Q.11–Q.20 Comprehension)"
+                        className="w-full p-2.5 rounded-xl border border-purple-200 text-xs font-semibold bg-white"
+                      />
+                      <textarea
+                        rows={4}
+                        value={importPassageText}
+                        onChange={(e) => setImportPassageText(e.target.value)}
+                        placeholder="Paste or write the reading comprehension passage or case study text here..."
+                        className="w-full p-2.5 rounded-xl border border-purple-200 text-xs font-mono leading-relaxed bg-white"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <button
                 type="button"
                 disabled={isParsing || !pastedText.trim()}
@@ -1149,7 +1642,7 @@ or
                 className="w-full py-3.5 rounded-xl bg-[#0056b3] hover:bg-blue-700 text-white text-xs font-extrabold cursor-pointer inline-flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {isParsing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                Parse and Send to Review Screen
+                {importMode === 'append' && questions.length > 0 ? 'Append Questions to Review Screen' : 'Parse and Send to Review Screen'}
               </button>
             </div>
           </div>
@@ -1485,6 +1978,247 @@ or
               >
                 {uploadingImage ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
                 Process and Attach
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete All Questions Confirmation Modal */}
+      {deleteAllModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3 text-red-600 pb-3 border-b border-slate-100">
+              <div className="w-10 h-10 rounded-2xl bg-red-100 flex items-center justify-center text-[#dc2626] shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-base text-slate-900">Delete All Loaded Questions?</h3>
+                <p className="text-xs text-slate-500">This action clears all loaded questions in this mock test.</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs text-slate-600 leading-relaxed">
+              <p>
+                Are you sure you want to delete all <strong className="text-slate-900">{questions.length} loaded questions</strong> from this test?
+              </p>
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-800 space-y-1">
+                <p className="font-bold">⚠️ What will happen:</p>
+                <p>• All {questions.length} questions will be removed from your review screen.</p>
+                <p>• All linked comprehension passages will be unlinked and cleared.</p>
+                <p>• You can start fresh and paste or upload new question sets or comprehensions.</p>
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800 pt-1">
+                <input
+                  type="checkbox"
+                  checked={deleteFromDbAlso}
+                  onChange={(e) => setDeleteFromDbAlso(e.target.checked)}
+                  className="w-4 h-4 rounded text-red-600 focus:ring-red-500"
+                />
+                <span>Also wipe previously saved questions from the database for this test</span>
+              </label>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={isDeletingAll}
+                onClick={() => setDeleteAllModalOpen(false)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs cursor-pointer hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel / Keep Questions
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingAll}
+                onClick={handleDeleteAllQuestions}
+                className="px-5 py-2 rounded-xl bg-[#dc2626] hover:bg-red-700 text-white font-extrabold text-xs cursor-pointer inline-flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+              >
+                {isDeletingAll ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                Yes, Delete All ({questions.length})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Comprehension / Passage Builder Modal */}
+      {passageModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-7 space-y-5 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+                  <BookOpen className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-slate-900">
+                    {editingPassage.id ? 'Edit Comprehension Passage' : 'Add Comprehension / Reading Passage'}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Group multiple questions under a common reading comprehension passage, case study, or data table.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPassageModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              {/* Passage Title / Instructions */}
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Passage Title &amp; Candidate Instructions
+                </label>
+                <input
+                  type="text"
+                  value={editingPassage.title || ''}
+                  onChange={(e) => setEditingPassage((p) => ({ ...p, title: e.target.value }))}
+                  placeholder="e.g. Directions (Q. 11 to 20): Read the following passage carefully and answer the questions:"
+                  className="w-full p-3 rounded-xl border border-slate-200 font-semibold focus:ring-2 focus:ring-[#0056b3]"
+                />
+              </div>
+
+              {/* Passage Text */}
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Passage Content (Supports English, Bengali, LaTeX formulas, and Markdown tables)
+                </label>
+                <textarea
+                  rows={6}
+                  value={editingPassage.passageText}
+                  onChange={(e) => setEditingPassage((p) => ({ ...p, passageText: e.target.value }))}
+                  placeholder="Paste or write the comprehension passage text, historical narrative, poem, or scientific study here..."
+                  className="w-full p-3 rounded-xl border border-slate-200 font-mono text-xs leading-relaxed focus:ring-2 focus:ring-[#0056b3]"
+                />
+                {editingPassage.passageText && (
+                  <div className="mt-2 p-3 bg-slate-50 rounded-xl border border-slate-100 text-slate-700 max-h-36 overflow-y-auto">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Preview Render:</span>
+                    <MathText text={editingPassage.passageText} />
+                  </div>
+                )}
+              </div>
+
+              {/* Target Questions Association */}
+              <div className="p-4 bg-purple-50/70 rounded-2xl border border-purple-200 space-y-3">
+                <span className="font-extrabold text-xs text-purple-950 block">
+                  Question Range &amp; Linking for this Passage
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Range Inputs */}
+                  <div className="p-3 bg-white rounded-xl border border-purple-200 space-y-1.5">
+                    <span className="text-[11px] font-bold text-slate-700 block">
+                      Link Question Range (e.g. Q11 to Q20):
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-500">From Q</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={Math.max(1, questions.length)}
+                        value={editingPassage.rangeFrom}
+                        onChange={(e) => setEditingPassage((p) => ({ ...p, rangeFrom: Number(e.target.value) }))}
+                        className="w-16 p-1.5 rounded-lg border border-slate-200 text-center font-bold"
+                      />
+                      <span className="text-xs font-bold text-slate-500">To Q</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={Math.max(1, questions.length + 50)}
+                        value={editingPassage.rangeTo}
+                        onChange={(e) => setEditingPassage((p) => ({ ...p, rangeTo: Number(e.target.value) }))}
+                        className="w-16 p-1.5 rounded-lg border border-slate-200 text-center font-bold"
+                      />
+                    </div>
+                    <span className="text-[10px] text-slate-500 block">
+                      Total loaded questions: {questions.length}
+                    </span>
+                  </div>
+
+                  {/* Or Generate Blank Questions */}
+                  <div className="p-3 bg-white rounded-xl border border-purple-200 space-y-1.5">
+                    <span className="text-[11px] font-bold text-slate-700 block">
+                      Or Generate Blank MCQs for this Passage:
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={0}
+                        max={30}
+                        value={editingPassage.generateBlankCount}
+                        onChange={(e) => setEditingPassage((p) => ({ ...p, generateBlankCount: Number(e.target.value) }))}
+                        className="w-16 p-1.5 rounded-lg border border-slate-200 text-center font-bold"
+                      />
+                      <span className="text-xs font-semibold text-slate-600">new blank questions</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 block">
+                      Appends blank MCQs immediately linked to this passage.
+                    </span>
+                  </div>
+                </div>
+
+                {/* Individual Question Badges */}
+                {questions.length > 0 && (
+                  <div className="pt-2 border-t border-purple-200/60 space-y-1.5">
+                    <span className="text-[11px] font-bold text-slate-700 block">
+                      Or Toggle Questions Individually:
+                    </span>
+                    <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto pr-1">
+                      {questions.map((q, idx) => {
+                        const pos = idx + 1;
+                        const inRange = pos >= editingPassage.rangeFrom && pos <= editingPassage.rangeTo;
+                        const isSelected = inRange || editingPassage.selectedQuestionIds.includes(q.id);
+
+                        return (
+                          <button
+                            key={q.id || idx}
+                            type="button"
+                            onClick={() => {
+                              setEditingPassage((p) => {
+                                const list = p.selectedQuestionIds;
+                                const nextList = isSelected
+                                  ? list.filter((id) => id !== q.id)
+                                  : [...list, q.id];
+                                return { ...p, selectedQuestionIds: nextList };
+                              });
+                            }}
+                            className={`px-2 py-0.5 rounded text-[11px] font-bold border transition-all cursor-pointer ${
+                              isSelected
+                                ? 'bg-purple-600 text-white border-purple-600 shadow-2xs'
+                                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            Q{pos}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setPassageModalOpen(false)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs cursor-pointer hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSavePassageModal}
+                className="px-6 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-extrabold text-xs cursor-pointer inline-flex items-center gap-1.5 shadow-sm"
+              >
+                <Check className="w-4 h-4" /> Save Comprehension Section
               </button>
             </div>
           </div>

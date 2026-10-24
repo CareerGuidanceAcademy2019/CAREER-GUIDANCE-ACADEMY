@@ -260,3 +260,68 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+export async function DELETE(request: Request) {
+  const adminId = await requireAdmin();
+  if (!adminId) {
+    return NextResponse.json({ error: 'Unauthorized. Administrator access required.' }, { status: 403 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const testId = searchParams.get('testId');
+  if (!testId) {
+    return NextResponse.json({ error: 'Missing testId parameter.' }, { status: 400 });
+  }
+
+  try {
+    const supabaseAdmin = createAdminSupabase();
+
+    // 1. Fetch existing image paths to clean up storage
+    const [existingQRes, existingGroupRes] = await Promise.all([
+      supabaseAdmin.from('mock_questions').select('id, image_path, options').eq('test_id', testId),
+      supabaseAdmin.from('mock_question_groups').select('id, image_path').eq('test_id', testId),
+    ]);
+
+    const pathsToDelete = new Set<string>();
+    for (const g of existingGroupRes.data || []) {
+      if (g.image_path) pathsToDelete.add(g.image_path);
+    }
+    for (const q of existingQRes.data || []) {
+      if (q.image_path) pathsToDelete.add(q.image_path);
+      if (Array.isArray(q.options)) {
+        for (const opt of q.options) {
+          if (typeof opt === 'object' && opt !== null) {
+            if (opt.image_path) pathsToDelete.add(opt.image_path);
+            if (opt.imagePath) pathsToDelete.add(opt.imagePath);
+          }
+        }
+      }
+    }
+
+    if (pathsToDelete.size > 0) {
+      await supabaseAdmin.storage.from('mock-question-images').remove(Array.from(pathsToDelete));
+    }
+
+    // 2. Delete all questions and question groups from database
+    await supabaseAdmin.from('mock_questions').delete().eq('test_id', testId);
+    await supabaseAdmin.from('mock_question_groups').delete().eq('test_id', testId);
+
+    // 3. Reset question_count and questions array on mock_tests
+    await supabaseAdmin
+      .from('mock_tests')
+      .update({
+        question_count: 0,
+        questions: [],
+      })
+      .eq('id', testId);
+
+    return NextResponse.json({
+      success: true,
+      message: 'All questions and passages successfully deleted for this test.',
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to delete questions';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
