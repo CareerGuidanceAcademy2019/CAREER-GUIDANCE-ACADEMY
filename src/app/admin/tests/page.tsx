@@ -27,6 +27,9 @@ import {
   Eye,
   HardDrive,
   Download,
+  Search,
+  Filter,
+  Layers,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCga } from '@/context/CgaContext';
@@ -36,6 +39,346 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { CustomCheckSvg, CustomCrossSvg } from '@/components/ui/CustomIcons';
 import { parseRawQuestionsText } from '@/lib/mcqParser';
 import { MockTestStorageMeter } from '@/components/admin/MockTestStorageMeter';
+
+export interface MockSubjectItem {
+  name: string;
+  label: string;
+  langMode: 'english_only' | 'bengali_only' | 'bilingual';
+  seriesId: string;
+  defaultCourseId?: string;
+  defaultTitle: string;
+}
+
+export interface MockSubjectGroup {
+  group: string;
+  seriesId: string;
+  defaultCourseId?: string;
+  items: MockSubjectItem[];
+}
+
+export const ALL_MOCK_SUBJECT_GROUPS: MockSubjectGroup[] = [
+  {
+    group: '🎯 Tripura TET: Paper-I 2026 (Classes I to V — ₹399 Dedicated Mock Series)',
+    seriesId: 'series-ttet-paper1',
+    defaultCourseId: 'crs-tet-1-online',
+    items: [
+      {
+        name: 'Child Development & Pedagogy',
+        label: 'Child Development & Pedagogy (CDP) [Bilingual]',
+        langMode: 'bilingual',
+        seriesId: 'series-ttet-paper1',
+        defaultCourseId: 'crs-tet-1-online',
+        defaultTitle: 'Tripura TET Paper-I: Child Development & Pedagogy Mock #01',
+      },
+      {
+        name: 'Language – I (English)',
+        label: 'Language – I (English) [English Only]',
+        langMode: 'english_only',
+        seriesId: 'series-ttet-paper1',
+        defaultCourseId: 'crs-tet-1-online',
+        defaultTitle: 'Tripura TET Paper-I: Language – I (English) Mock #01',
+      },
+      {
+        name: 'Language – II (Bengali)',
+        label: 'Language – II (Bengali) [Bengali Only]',
+        langMode: 'bengali_only',
+        seriesId: 'series-ttet-paper1',
+        defaultCourseId: 'crs-tet-1-online',
+        defaultTitle: 'Tripura TET Paper-I: Language – II (Bengali) Mock #01',
+      },
+      {
+        name: 'Mathematics (Content & Pedagogy)',
+        label: 'Mathematics (Content & Pedagogy) [Bilingual]',
+        langMode: 'bilingual',
+        seriesId: 'series-ttet-paper1',
+        defaultCourseId: 'crs-tet-1-online',
+        defaultTitle: 'Tripura TET Paper-I: Mathematics (Content & Pedagogy) Mock #01',
+      },
+      {
+        name: 'Environmental Studies (EVS)',
+        label: 'Environmental Studies (EVS) [Bilingual]',
+        langMode: 'bilingual',
+        seriesId: 'series-ttet-paper1',
+        defaultCourseId: 'crs-tet-1-online',
+        defaultTitle: 'Tripura TET Paper-I: Environmental Studies (EVS) Mock #01',
+      },
+      {
+        name: 'Tripura TET Paper-I Full Length Mock',
+        label: 'Full-Length Simulated Paper [Bilingual]',
+        langMode: 'bilingual',
+        seriesId: 'series-ttet-paper1',
+        defaultCourseId: 'crs-tet-1-online',
+        defaultTitle: 'Tripura TET: Paper-I 2026 Full-Length Simulated Mock #01',
+      },
+    ],
+  },
+  {
+    group: '🔬 Tripura TET: Paper-II Science & Math (Classes VI to VIII — ₹499 Dedicated Series)',
+    seriesId: 'series-ttet-paper2-sci',
+    defaultCourseId: 'crs-tet-2-sci-online',
+    items: [
+      {
+        name: 'Child Development & Pedagogy',
+        label: 'Child Development & Pedagogy (CDP) [Bilingual]',
+        langMode: 'bilingual',
+        seriesId: 'series-ttet-paper2-sci',
+        defaultCourseId: 'crs-tet-2-sci-online',
+        defaultTitle: 'Tripura TET Paper-II (Science): Child Development & Pedagogy Mock #01',
+      },
+      {
+        name: 'Language – I (English)',
+        label: 'Language – I (English) [English Only]',
+        langMode: 'english_only',
+        seriesId: 'series-ttet-paper2-sci',
+        defaultCourseId: 'crs-tet-2-sci-online',
+        defaultTitle: 'Tripura TET Paper-II (Science): Language – I (English) Mock #01',
+      },
+      {
+        name: 'Language – II (Bengali)',
+        label: 'Language – II (Bengali) [Bengali Only]',
+        langMode: 'bengali_only',
+        seriesId: 'series-ttet-paper2-sci',
+        defaultCourseId: 'crs-tet-2-sci-online',
+        defaultTitle: 'Tripura TET Paper-II (Science): Language – II (Bengali) Mock #01',
+      },
+      {
+        name: 'Mathematics & Science Pedagogy',
+        label: 'Mathematics & Science Pedagogy [Bilingual]',
+        langMode: 'bilingual',
+        seriesId: 'series-ttet-paper2-sci',
+        defaultCourseId: 'crs-tet-2-sci-online',
+        defaultTitle: 'Tripura TET Paper-II: Mathematics & Science Pedagogy Mock #01',
+      },
+      {
+        name: 'Science (Physics, Chemistry & Biology)',
+        label: 'Science (Physics, Chemistry & Biology) [Bilingual]',
+        langMode: 'bilingual',
+        seriesId: 'series-ttet-paper2-sci',
+        defaultCourseId: 'crs-tet-2-sci-online',
+        defaultTitle: 'Tripura TET Paper-II: Science (Physics, Chemistry & Biology) Mock #01',
+      },
+      {
+        name: 'Tripura TET Paper-II Science Full Length Mock',
+        label: 'Full-Length Science Simulated Paper [Bilingual]',
+        langMode: 'bilingual',
+        seriesId: 'series-ttet-paper2-sci',
+        defaultCourseId: 'crs-tet-2-sci-online',
+        defaultTitle: 'Tripura TET: Paper-II (Science) 2026 Full-Length Simulated Mock #01',
+      },
+    ],
+  },
+  {
+    group: '📚 Tripura TET: Paper-II Social Studies (Classes VI to VIII — ₹499 Dedicated Series)',
+    seriesId: 'series-ttet-paper2-soc',
+    defaultCourseId: 'crs-tet-2-sst-online',
+    items: [
+      {
+        name: 'Child Development & Pedagogy',
+        label: 'Child Development & Pedagogy (CDP) [Bilingual]',
+        langMode: 'bilingual',
+        seriesId: 'series-ttet-paper2-soc',
+        defaultCourseId: 'crs-tet-2-sst-online',
+        defaultTitle: 'Tripura TET Paper-II (Social Studies): Child Development & Pedagogy Mock #01',
+      },
+      {
+        name: 'Language – I (English)',
+        label: 'Language – I (English) [English Only]',
+        langMode: 'english_only',
+        seriesId: 'series-ttet-paper2-soc',
+        defaultCourseId: 'crs-tet-2-sst-online',
+        defaultTitle: 'Tripura TET Paper-II (Social Studies): Language – I (English) Mock #01',
+      },
+      {
+        name: 'Language – II (Bengali)',
+        label: 'Language – II (Bengali) [Bengali Only]',
+        langMode: 'bengali_only',
+        seriesId: 'series-ttet-paper2-soc',
+        defaultCourseId: 'crs-tet-2-sst-online',
+        defaultTitle: 'Tripura TET Paper-II (Social Studies): Language – II (Bengali) Mock #01',
+      },
+      {
+        name: 'History & Pedagogical Issues',
+        label: 'History & Pedagogical Issues [Bilingual]',
+        langMode: 'bilingual',
+        seriesId: 'series-ttet-paper2-soc',
+        defaultCourseId: 'crs-tet-2-sst-online',
+        defaultTitle: 'Tripura TET Paper-II: History & Pedagogical Issues Mock #01',
+      },
+      {
+        name: 'Geography & Environment',
+        label: 'Geography & Environment [Bilingual]',
+        langMode: 'bilingual',
+        seriesId: 'series-ttet-paper2-soc',
+        defaultCourseId: 'crs-tet-2-sst-online',
+        defaultTitle: 'Tripura TET Paper-II: Geography & Environment Mock #01',
+      },
+      {
+        name: 'Political Science & Civics',
+        label: 'Political Science & Civics [Bilingual]',
+        langMode: 'bilingual',
+        seriesId: 'series-ttet-paper2-soc',
+        defaultCourseId: 'crs-tet-2-sst-online',
+        defaultTitle: 'Tripura TET Paper-II: Political Science & Civics Mock #01',
+      },
+      {
+        name: 'Tripura TET Paper-II Social Studies Full Length Mock',
+        label: 'Full-Length Social Studies Simulated Paper [Bilingual]',
+        langMode: 'bilingual',
+        seriesId: 'series-ttet-paper2-soc',
+        defaultCourseId: 'crs-tet-2-sst-online',
+        defaultTitle: 'Tripura TET: Paper-II (Social Studies) 2026 Full-Length Simulated Mock #01',
+      },
+    ],
+  },
+  {
+    group: '🎓 TRBT STGT (Graduate Teachers Examination — ₹499 Series)',
+    seriesId: 'series-stgt-soc',
+    defaultCourseId: 'crs-stgt-sst-online',
+    items: [
+      {
+        name: 'STGT Social Science (History, Geography, Polity, Economics)',
+        label: 'STGT Social Science (History, Geography, Polity, Economics) [Bilingual]',
+        langMode: 'bilingual',
+        seriesId: 'series-stgt-soc',
+        defaultCourseId: 'crs-stgt-sst-online',
+        defaultTitle: 'TRBT STGT: Social Science (History, Geography, Polity, Economics) Mock #01',
+      },
+      {
+        name: 'STGT Pure Science (Physics, Chemistry, Mathematics)',
+        label: 'STGT Pure Science (Physics, Chemistry, Mathematics) [Bilingual]',
+        langMode: 'bilingual',
+        seriesId: 'series-stgt-pure-sci',
+        defaultCourseId: 'crs-stgt-pure-sci-online',
+        defaultTitle: 'TRBT STGT: Pure Science (Physics, Chemistry, Mathematics) Mock #01',
+      },
+      {
+        name: 'STGT Biological Science (Botany, Zoology, Physiology)',
+        label: 'STGT Biological Science (Botany, Zoology, Physiology) [Bilingual]',
+        langMode: 'bilingual',
+        seriesId: 'series-stgt-bio-sci',
+        defaultCourseId: 'crs-stgt-bio-sci-online',
+        defaultTitle: 'TRBT STGT: Biological Science (Botany, Zoology, Physiology) Mock #01',
+      },
+    ],
+  },
+  {
+    group: '🏛️ State Civil Services (TCS / TPS & TPSC Combined — ₹499/₹599 Series)',
+    seriesId: 'series-tpsc-combined',
+    defaultCourseId: 'crs-tpsc-combined-online',
+    items: [
+      {
+        name: 'General Studies & North-East / Tripura GK',
+        label: 'General Studies & North-East / Tripura GK [Bilingual]',
+        langMode: 'bilingual',
+        seriesId: 'series-tpsc-combined',
+        defaultCourseId: 'crs-tpsc-combined-online',
+        defaultTitle: 'TPSC Combined & TCS/TPS: General Studies & Tripura GK Mock #01',
+      },
+      {
+        name: 'General English & Comprehension',
+        label: 'General English & Comprehension [English Only]',
+        langMode: 'english_only',
+        seriesId: 'series-tpsc-combined',
+        defaultCourseId: 'crs-tpsc-combined-online',
+        defaultTitle: 'TPSC Combined: General English & Comprehension Mock #01',
+      },
+      {
+        name: 'Quantitative Aptitude & Mental Ability',
+        label: 'Quantitative Aptitude & Mental Ability [Bilingual]',
+        langMode: 'bilingual',
+        seriesId: 'series-tpsc-combined',
+        defaultCourseId: 'crs-tpsc-combined-online',
+        defaultTitle: 'TPSC Combined & JRBT: Aptitude & Mental Ability Mock #01',
+      },
+      {
+        name: 'TCS/TPS Officers Prelims Simulation',
+        label: 'TCS / TPS Officers Prelims Simulation [Bilingual]',
+        langMode: 'bilingual',
+        seriesId: 'series-tcs-tps',
+        defaultCourseId: 'crs-tcs-tps-online',
+        defaultTitle: 'TCS / TPS Civil & Police Service Prelims Simulation Mock #01',
+      },
+    ],
+  },
+  {
+    group: '🏦 Central Competitive (Banking IBPS/SBI, SSC & Railway — ₹399 Series)',
+    seriesId: 'series-banking-ssc',
+    defaultCourseId: 'crs-banking-online',
+    items: [
+      {
+        name: 'Quantitative Aptitude & Numerical Ability',
+        label: 'Quantitative Aptitude & Numerical Ability [Bilingual]',
+        langMode: 'bilingual',
+        seriesId: 'series-banking-ssc',
+        defaultCourseId: 'crs-banking-online',
+        defaultTitle: 'Banking & SSC: Quantitative Aptitude Speed Drill Mock #01',
+      },
+      {
+        name: 'Reasoning Ability & Logical Deduction',
+        label: 'Reasoning Ability & Logical Deduction [Bilingual]',
+        langMode: 'bilingual',
+        seriesId: 'series-banking-ssc',
+        defaultCourseId: 'crs-banking-online',
+        defaultTitle: 'Banking & SSC: Reasoning Ability & Puzzles Mock #01',
+      },
+      {
+        name: 'English Language & Comprehension',
+        label: 'English Language & Comprehension [English Only]',
+        langMode: 'english_only',
+        seriesId: 'series-banking-ssc',
+        defaultCourseId: 'crs-banking-online',
+        defaultTitle: 'Banking & SSC: English Language & Verbal Ability Mock #01',
+      },
+      {
+        name: 'General & Banking Awareness',
+        label: 'General & Banking Awareness [Bilingual]',
+        langMode: 'bilingual',
+        seriesId: 'series-banking-ssc',
+        defaultCourseId: 'crs-banking-online',
+        defaultTitle: 'Banking & SSC: General & Financial Awareness Mock #01',
+      },
+    ],
+  },
+  {
+    group: '🏫 School Board Foundation (Classes VII to X — TBSE & CBSE — ₹299 Series)',
+    seriesId: 'series-school-foundation',
+    defaultCourseId: 'crs-school-10',
+    items: [
+      {
+        name: 'Class X Mathematics (Standard & Basic)',
+        label: 'Class X Mathematics (Standard & Basic) [Bilingual]',
+        langMode: 'bilingual',
+        seriesId: 'series-school-foundation',
+        defaultCourseId: 'crs-school-10',
+        defaultTitle: 'Class X Board Foundation: Mathematics Chapter Mock #01',
+      },
+      {
+        name: 'Class X Science (Physics, Chemistry, Biology)',
+        label: 'Class X Science (Physics, Chemistry, Biology) [Bilingual]',
+        langMode: 'bilingual',
+        seriesId: 'series-school-foundation',
+        defaultCourseId: 'crs-school-10',
+        defaultTitle: 'Class X Board Foundation: Science Chapter Mock #01',
+      },
+      {
+        name: 'Class IX Science & Mathematics',
+        label: 'Class IX Science & Mathematics [Bilingual]',
+        langMode: 'bilingual',
+        seriesId: 'series-school-foundation',
+        defaultCourseId: 'crs-school-9',
+        defaultTitle: 'Class IX Foundation: Science & Mathematics Mock #01',
+      },
+      {
+        name: 'Classes VII - VIII Science & Math',
+        label: 'Classes VII - VIII Foundation Science & Math [Bilingual]',
+        langMode: 'bilingual',
+        seriesId: 'series-school-foundation',
+        defaultCourseId: 'crs-school-7',
+        defaultTitle: 'Classes VII - VIII Foundation: Science & Math Mock #01',
+      },
+    ],
+  },
+];
 
 export default function AdminMockTestsPage() {
   const {
@@ -88,21 +431,37 @@ export default function AdminMockTestsPage() {
   const [explanation, setExplanation] = useState('');
   const [explanationBn, setExplanationBn] = useState('');
 
+  // Target Access Scope for Create/Edit Modal:
+  // 'mock_series_only' = Standalone mock series package only
+  // 'course_only' = Specific classroom or online batch only
+  // 'combined' = Both mock series and course students permitted
+  const [modalTargetScope, setModalTargetScope] = useState<'mock_series_only' | 'course_only' | 'combined'>('mock_series_only');
+
+  // Filters for Tab 1 Mock Tests
+  const [testSearchQuery, setTestSearchQuery] = useState('');
+  const [testScopeFilter, setTestScopeFilter] = useState<'all' | 'mock_series' | 'course' | 'combined'>('all');
+  const [testSeriesFilter, setTestSeriesFilter] = useState<string>('all');
+  const [testStatusFilter, setTestStatusFilter] = useState<'all' | 'Published' | 'Draft'>('all');
+
   const openCreateModal = () => {
-    const firstCourse = db.courses[0];
     setIsNew(true);
     setPastedText('');
     setParseError('');
     setImportMode('upload');
+    setModalTargetScope('mock_series_only');
+
+    const defaultSeries = (db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL)[0];
+    const defaultSubj = ALL_MOCK_SUBJECT_GROUPS[0].items[0];
+
     setEditingTest({
       id: `mock-${Date.now()}`,
-      title: '',
-      seriesId: 'series-ttet-paper1',
-      subject: 'Child Development & Pedagogy',
-      languageMode: 'bilingual',
-      courseId: firstCourse?.id || '',
-      courseName: firstCourse?.name || 'Open to All Batches',
-      batchName: firstCourse?.batchName || 'Institute-wide (All Students)',
+      title: defaultSubj.defaultTitle,
+      seriesId: defaultSeries.id,
+      subject: defaultSubj.name,
+      languageMode: defaultSubj.langMode,
+      courseId: '',
+      courseName: 'Dedicated Mock Test Series Package',
+      batchName: `${defaultSeries.name} (Dedicated Mock Series Students)`,
       durationMinutes: 30,
       totalMarks: 30,
       marksPerQuestion: 1,
@@ -377,8 +736,45 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
       return;
     }
 
+    const seriesObj = (db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL).find(
+      (s) => s.id === editingTest.seriesId
+    );
+
+    let finalCourseId = editingTest.courseId;
+    let finalCourseName = editingTest.courseName;
+    let finalBatchName = editingTest.batchName;
+
+    if (modalTargetScope === 'mock_series_only') {
+      finalCourseId = '';
+      finalCourseName = seriesObj?.name || 'Dedicated Mock Test Series Package';
+      finalBatchName = `${seriesObj?.name || 'Mock Series'} (Enrolled Students Only)`;
+    } else if (modalTargetScope === 'course_only') {
+      const crs = db.courses.find((c) => c.id === editingTest.courseId);
+      if (!crs) {
+        showToast('Course Batch Required', 'Please select a specific course batch for this test.', 'error');
+        return;
+      }
+      finalCourseId = crs.id;
+      finalCourseName = crs.name;
+      finalBatchName = crs.batchName;
+    } else if (modalTargetScope === 'combined') {
+      const crs = db.courses.find((c) => c.id === editingTest.courseId);
+      finalCourseId = crs?.id || '';
+      finalCourseName = crs?.name || 'Course Batch';
+      finalBatchName = `${seriesObj?.name || 'Mock Series'} + ${crs?.batchName || 'Course Batch'}`;
+    }
+
     const computedMarks = editingTest.questions.length * editingTest.marksPerQuestion;
-    const ok = await saveMockTest({ ...editingTest, totalMarks: computedMarks }, isNew);
+    const ok = await saveMockTest(
+      {
+        ...editingTest,
+        totalMarks: computedMarks,
+        courseId: finalCourseId,
+        courseName: finalCourseName,
+        batchName: finalBatchName,
+      },
+      isNew
+    );
     if (ok) {
       setEditingTest(null);
     }
@@ -404,13 +800,64 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
     );
   };
 
-  const handleSubjectChange = (subj: string) => {
+  const handleSubjectChange = (val: string) => {
     if (!editingTest) return;
-    const mode = getSubjectLanguageMode(subj);
+
+    let targetSeriesId = editingTest.seriesId || 'series-ttet-paper1';
+    let targetSubjName = val;
+
+    if (val.includes(':::')) {
+      const parts = val.split(':::');
+      targetSeriesId = parts[0];
+      targetSubjName = parts[1];
+    }
+
+    let foundItem: MockSubjectItem | undefined;
+    for (const grp of ALL_MOCK_SUBJECT_GROUPS) {
+      const match = grp.items.find(
+        (it) => it.name === targetSubjName && (!val.includes(':::') || it.seriesId === targetSeriesId)
+      );
+      if (match) {
+        foundItem = match;
+        targetSeriesId = match.seriesId;
+        break;
+      }
+    }
+
+    const mode = foundItem ? foundItem.langMode : getSubjectLanguageMode(targetSubjName);
+    const seriesObj = (db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL).find(
+      (s) => s.id === targetSeriesId
+    );
+
+    let newCourseId = editingTest.courseId;
+    let newCourseName = editingTest.courseName;
+    let newBatchName = editingTest.batchName;
+
+    if (modalTargetScope === 'mock_series_only') {
+      newCourseId = '';
+      newCourseName = seriesObj?.name || 'Dedicated Mock Test Series Package';
+      newBatchName = `${seriesObj?.name || 'Mock Series'} (Enrolled Students Only)`;
+    } else if (modalTargetScope === 'course_only') {
+      const matchedCrs = db.courses.find((c) => c.id === foundItem?.defaultCourseId) || db.courses[0];
+      newCourseId = matchedCrs?.id || '';
+      newCourseName = matchedCrs?.name || '';
+      newBatchName = matchedCrs?.batchName || '';
+    } else if (modalTargetScope === 'combined') {
+      const matchedCrs = db.courses.find((c) => c.id === foundItem?.defaultCourseId) || db.courses[0];
+      newCourseId = matchedCrs?.id || '';
+      newCourseName = matchedCrs?.name || '';
+      newBatchName = `${seriesObj?.name || 'Mock Series'} & ${matchedCrs?.batchName || 'Course'}`;
+    }
+
     setEditingTest({
       ...editingTest,
-      subject: subj,
+      seriesId: targetSeriesId,
+      subject: targetSubjName,
       languageMode: mode,
+      courseId: newCourseId,
+      courseName: newCourseName,
+      batchName: newBatchName,
+      title: editingTest.title ? editingTest.title : foundItem?.defaultTitle || `${seriesObj?.name || 'Mock'}: ${targetSubjName} Mock #01`,
     });
   };
 
@@ -502,191 +949,336 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
       </div>
 
       {/* ==================== TAB 1: BATCH MOCK TESTS ==================== */}
-      {activeAdminTab === 'tests' && (
-        <div className="space-y-8">
-          {/* Mock Tests Grid or Clean Empty State */}
-          {db.mockTests.length === 0 ? (
-            <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center shadow-2xs space-y-4">
-              <div className="w-14 h-14 rounded-2xl bg-blue-50 text-[#0056b3] flex items-center justify-center mx-auto">
-                <ClipboardCheck className="w-7 h-7" />
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-base font-extrabold text-[#0a0e2a]">No Mock Tests Active</h3>
-                <p className="text-xs text-slate-500 max-w-md mx-auto">
-                  The mock test section is currently empty. You can create a new mock test using the button below and launch it whenever you are ready.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={openCreateModal}
-                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-bold cursor-pointer shadow-sm transition-all"
-              >
-                <Plus className="w-4 h-4" /> Create &amp; Upload Mock Test
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {db.mockTests.map((test) => {
-                const langMode =
-                  test.languageMode ||
-                  (test.subject ? getSubjectLanguageMode(test.subject) : getSubjectLanguageMode(test.title));
+      {activeAdminTab === 'tests' && (() => {
+        const filteredAdminTests = db.mockTests.filter((test) => {
+          if (testSearchQuery.trim()) {
+            const q = testSearchQuery.toLowerCase();
+            const mTitle = (test.title || '').toLowerCase().includes(q);
+            const mSubj = (test.subject || '').toLowerCase().includes(q);
+            const mBatch = (test.batchName || '').toLowerCase().includes(q);
+            if (!mTitle && !mSubj && !mBatch) return false;
+          }
 
-                return (
-                  <div
-                    key={test.id}
-                    className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-2xs flex flex-col justify-between hover:border-blue-300 transition-all hover:shadow-md"
+          const isMockOnly = Boolean(
+            test.seriesId &&
+              (!test.courseId ||
+                test.courseName?.includes('Mock') ||
+                test.batchName?.includes('Mock Series') ||
+                test.batchName?.includes('Enrolled Students Only'))
+          );
+          const isCourseOnly = Boolean(test.courseId && !test.seriesId && !test.courseName?.includes('Mock'));
+          const isCombined = Boolean(test.seriesId && test.courseId && !isMockOnly);
+
+          if (testScopeFilter === 'mock_series' && !isMockOnly) return false;
+          if (testScopeFilter === 'course' && !isCourseOnly) return false;
+          if (testScopeFilter === 'combined' && !isCombined) return false;
+
+          if (testSeriesFilter !== 'all' && test.seriesId !== testSeriesFilter) return false;
+          if (testStatusFilter !== 'all' && test.status !== testStatusFilter) return false;
+
+          return true;
+        });
+
+        return (
+          <div className="space-y-8">
+            {/* Search, Scope & Series Filter Bar */}
+            <div className="bg-white rounded-3xl border border-slate-200 p-4 shadow-2xs space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <Filter className="w-4 h-4 text-[#0056b3]" />
+                  <span className="font-extrabold text-xs text-[#0a0e2a] uppercase tracking-wider">
+                    Filter Mock Tests by Scope, Series & Exam Status
+                  </span>
+                </div>
+                <span className="text-xs font-bold text-slate-500">
+                  Showing {filteredAdminTests.length} of {db.mockTests.length} mock tests
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                {/* Search */}
+                <div className="relative">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    value={testSearchQuery}
+                    onChange={(e) => setTestSearchQuery(e.target.value)}
+                    placeholder="Search mock tests by title, subject..."
+                    className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                  />
+                </div>
+
+                {/* Scope Filter */}
+                <div>
+                  <select
+                    value={testScopeFilter}
+                    onChange={(e) => setTestScopeFilter(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
                   >
-                    <div className="space-y-3">
-                      {/* Top Header Row */}
-                      <div className="flex items-center justify-between gap-2">
-                        <span
-                          className="px-2.5 py-1 rounded-full bg-blue-50 text-[#0056b3] text-[11px] font-extrabold truncate max-w-[170px]"
-                          title={test.batchName}
-                        >
-                          {test.batchName}
-                        </span>
-                        <span
-                          className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
-                            test.status === 'Published'
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              : 'bg-amber-50 text-[#ea580c] border border-amber-200'
-                          }`}
-                        >
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              test.status === 'Published' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
-                            }`}
-                          />
-                          {test.status === 'Published' ? 'Launched' : 'Draft / Scheduled'}
-                        </span>
-                      </div>
+                    <option value="all">All Access Scopes</option>
+                    <option value="mock_series">🎯 Mock Test Series Only (Standalone)</option>
+                    <option value="course">🎓 Course Batch Only</option>
+                    <option value="combined">🤝 Combined Access (Series + Course)</option>
+                  </select>
+                </div>
 
-                      {/* Title & Stats */}
-                      <div>
-                        <h2
-                          className="text-sm sm:text-base font-extrabold text-[#0a0e2a] line-clamp-2 min-h-[2.75rem] leading-snug"
-                          title={test.title}
-                        >
-                          {test.title}
-                        </h2>
-                        <p className="text-xs text-slate-500 mt-1">
-                          {test.questions.length} Questions • {test.totalMarks} Marks • {test.durationMinutes} Mins • -
-                          {test.negativeMarking} Negative
-                        </p>
-                      </div>
+                {/* Specific Series Filter */}
+                <div>
+                  <select
+                    value={testSeriesFilter}
+                    onChange={(e) => setTestSeriesFilter(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                  >
+                    <option value="all">All Series Packages (All Exams)</option>
+                    {(db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL).map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} (₹{s.price})
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-                      {/* Language Mode Badge */}
-                      <div className="flex items-center gap-1.5 min-h-[1.5rem]">
-                        {langMode === 'english_only' && (
-                          <span className="px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-700 text-[10px] font-bold border border-indigo-200">
-                            English Only
-                          </span>
-                        )}
-                        {langMode === 'bengali_only' && (
-                          <span className="px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200 font-sans">
-                            Bengali Only (বাংলা)
-                          </span>
-                        )}
-                        {langMode === 'bilingual' && (
-                          <span className="px-2 py-0.5 rounded-lg bg-purple-50 text-purple-700 text-[10px] font-bold border border-purple-200">
-                            Bilingual (English and Bengali)
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Admin Launch Date Manager (Inline) */}
-                      <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-xs space-y-1">
-                        <div className="flex items-center justify-between text-slate-500 text-[11px]">
-                          <span className="font-bold flex items-center gap-1">
-                            <Calendar className="w-3.5 h-3.5 text-[#0056b3]" /> Launch Date
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-medium">Admin Managed</span>
-                        </div>
-                        <input
-                          type="date"
-                          value={test.scheduledDate || ''}
-                          onChange={(e) => handleQuickDateChange(test, e.target.value)}
-                          className="w-full bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 font-semibold text-xs text-slate-800 cursor-pointer focus:ring-1 focus:ring-[#0056b3]"
-                          title="Click to change the scheduled launch date"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Card Actions Footer */}
-                    <div className="pt-3.5 mt-3.5 border-t border-slate-100 space-y-2">
-                      {/* Row 1: Core Content Editors (Grid of 3 buttons) */}
-                      <div className="grid grid-cols-3 gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsNew(false);
-                            setEditingTest({ ...test });
-                          }}
-                          className="h-8 px-2 rounded-xl bg-blue-50 text-[#0056b3] hover:bg-blue-100 text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors"
-                          title="Edit Mock Test Details & Questions"
-                        >
-                          <Edit2 className="w-3.5 h-3.5 shrink-0" />
-                          <span className="truncate">Edit</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => router.push(`/admin/mock-tests/${test.id}/questions`)}
-                          className="h-8 px-2 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors"
-                          title="Diagrams, Uploads & Questions Review"
-                        >
-                          <ImageIcon className="w-3.5 h-3.5 shrink-0" />
-                          <span className="truncate">Diagrams</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => router.push(`/admin/mock-tests/${test.id}/preview`)}
-                          className="h-8 px-2 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors"
-                          title="Preview Test & Checklist"
-                        >
-                          <Eye className="w-3.5 h-3.5 shrink-0" />
-                          <span className="truncate">Preview</span>
-                        </button>
-                      </div>
-
-                      {/* Row 2: Launch/Unpublish + Archive ZIP + Delete */}
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => togglePublish(test)}
-                          className={`h-8 flex-1 px-3 rounded-xl text-[11px] font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap ${
-                            test.status === 'Published'
-                              ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                              : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
-                          }`}
-                        >
-                          <Send className="w-3.5 h-3.5 shrink-0" />
-                          <span>{test.status === 'Published' ? 'Unpublish' : 'Launch Now'}</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            window.open(`/api/admin/mock-tests/archive?testId=${encodeURIComponent(test.id)}`, '_blank')
-                          }
-                          className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center cursor-pointer transition-colors shrink-0"
-                          title="Download self-contained offline ZIP archive"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteTarget(test)}
-                          className="w-8 h-8 rounded-xl bg-red-50 text-[#dc2626] hover:bg-red-100 flex items-center justify-center cursor-pointer transition-colors shrink-0"
-                          title="Delete Mock Test"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+                {/* Status Filter */}
+                <div>
+                  <select
+                    value={testStatusFilter}
+                    onChange={(e) => setTestStatusFilter(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                  >
+                    <option value="all">All Launch Statuses</option>
+                    <option value="Published">Launched / Live</option>
+                    <option value="Draft">Draft / Scheduled</option>
+                  </select>
+                </div>
+              </div>
             </div>
-          )}
+
+            {/* Mock Tests Grid or Clean Empty State */}
+            {filteredAdminTests.length === 0 ? (
+              <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center shadow-2xs space-y-4">
+                <div className="w-14 h-14 rounded-2xl bg-blue-50 text-[#0056b3] flex items-center justify-center mx-auto">
+                  <ClipboardCheck className="w-7 h-7" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-base font-extrabold text-[#0a0e2a]">
+                    {db.mockTests.length === 0 ? 'No Mock Tests Active' : 'No Matching Mock Tests'}
+                  </h3>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto">
+                    {db.mockTests.length === 0
+                      ? 'The mock test section is currently empty. You can create a new mock test using the button below and launch it whenever you are ready.'
+                      : 'No mock tests match your current search and scope filters. Try clearing filters or search query.'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={openCreateModal}
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-bold cursor-pointer shadow-sm transition-all"
+                >
+                  <Plus className="w-4 h-4" /> Create &amp; Upload Mock Test
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredAdminTests.map((test) => {
+                  const langMode =
+                    test.languageMode ||
+                    (test.subject ? getSubjectLanguageMode(test.subject) : getSubjectLanguageMode(test.title));
+
+                  const isMockOnly = Boolean(
+                    test.seriesId &&
+                      (!test.courseId ||
+                        test.courseName?.includes('Mock') ||
+                        test.batchName?.includes('Mock Series') ||
+                        test.batchName?.includes('Enrolled Students Only'))
+                  );
+                  const isCourseOnly = Boolean(test.courseId && !test.seriesId && !test.courseName?.includes('Mock'));
+
+                  return (
+                    <div
+                      key={test.id}
+                      className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-2xs flex flex-col justify-between hover:border-blue-300 transition-all hover:shadow-md"
+                    >
+                      <div className="space-y-3">
+                        {/* Top Header Row */}
+                        <div className="flex items-center justify-between gap-2">
+                          <span
+                            className="px-2.5 py-1 rounded-full bg-blue-50 text-[#0056b3] text-[11px] font-extrabold truncate max-w-[170px]"
+                            title={test.batchName}
+                          >
+                            {test.batchName}
+                          </span>
+                          <span
+                            className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+                              test.status === 'Published'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-amber-50 text-[#ea580c] border border-amber-200'
+                            }`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                test.status === 'Published' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+                              }`}
+                            />
+                            {test.status === 'Published' ? 'Launched' : 'Draft / Scheduled'}
+                          </span>
+                        </div>
+
+                        {/* Title & Stats */}
+                        <div>
+                          <h2
+                            className="text-sm sm:text-base font-extrabold text-[#0a0e2a] line-clamp-2 min-h-[2.75rem] leading-snug"
+                            title={test.title}
+                          >
+                            {test.title}
+                          </h2>
+                          <p className="text-xs text-slate-500 mt-1">
+                            {test.questions.length} Questions • {test.totalMarks} Marks • {test.durationMinutes} Mins • -
+                            {test.negativeMarking} Negative
+                          </p>
+                        </div>
+
+                        {/* Access Scope & Strict Enrolled-Only Badges */}
+                        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                          {isMockOnly ? (
+                            <span className="px-2 py-0.5 rounded-full bg-blue-50 text-[#0056b3] border border-blue-200 text-[10px] font-extrabold flex items-center gap-1">
+                              🎯 Mock Series Only
+                            </span>
+                          ) : isCourseOnly ? (
+                            <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-extrabold flex items-center gap-1">
+                              🎓 Course Batch Only
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-800 border border-purple-200 text-[10px] font-extrabold flex items-center gap-1">
+                              🤝 Combined Access
+                            </span>
+                          )}
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold flex items-center gap-1">
+                            <Lock className="w-2.5 h-2.5" /> Enrolled Students Only
+                          </span>
+                        </div>
+
+                        {/* Language Mode Badge */}
+                        <div className="flex items-center gap-1.5 min-h-[1.5rem]">
+                          {langMode === 'english_only' && (
+                            <span className="px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-700 text-[10px] font-bold border border-indigo-200">
+                              English Only
+                            </span>
+                          )}
+                          {langMode === 'bengali_only' && (
+                            <span className="px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200 font-sans">
+                              Bengali Only (বাংলা)
+                            </span>
+                          )}
+                          {langMode === 'bilingual' && (
+                            <span className="px-2 py-0.5 rounded-lg bg-purple-50 text-purple-700 text-[10px] font-bold border border-purple-200">
+                              Bilingual (English and Bengali)
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Admin Launch Date Manager (Inline) */}
+                        <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-xs space-y-1">
+                          <div className="flex items-center justify-between text-slate-500 text-[11px]">
+                            <span className="font-bold flex items-center gap-1">
+                              <Calendar className="w-3.5 h-3.5 text-[#0056b3]" /> Launch Date
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-medium">Admin Managed</span>
+                          </div>
+                          <input
+                            type="date"
+                            value={test.scheduledDate || ''}
+                            onChange={(e) => handleQuickDateChange(test, e.target.value)}
+                            className="w-full bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 font-semibold text-xs text-slate-800 cursor-pointer focus:ring-1 focus:ring-[#0056b3]"
+                            title="Click to change the scheduled launch date"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Card Actions Footer */}
+                      <div className="pt-3.5 mt-3.5 border-t border-slate-100 space-y-2">
+                        {/* Row 1: Core Content Editors (Grid of 3 buttons) */}
+                        <div className="grid grid-cols-3 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsNew(false);
+                              const isMock = Boolean(
+                                test.seriesId &&
+                                  (!test.courseId ||
+                                    test.courseName?.includes('Mock') ||
+                                    test.batchName?.includes('Mock Series') ||
+                                    test.batchName?.includes('Enrolled Students Only'))
+                              );
+                              const isCourse = Boolean(test.courseId && !test.seriesId && !test.courseName?.includes('Mock'));
+                              const scope = isMock ? 'mock_series_only' : isCourse ? 'course_only' : 'combined';
+                              setModalTargetScope(scope);
+                              setEditingTest({ ...test });
+                            }}
+                            className="h-8 px-2 rounded-xl bg-blue-50 text-[#0056b3] hover:bg-blue-100 text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                            title="Edit Mock Test Details & Questions"
+                          >
+                            <Edit2 className="w-3.5 h-3.5 shrink-0" />
+                            <span className="truncate">Edit</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => router.push(`/admin/mock-tests/${test.id}/questions`)}
+                            className="h-8 px-2 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                            title="Diagrams, Uploads & Questions Review"
+                          >
+                            <ImageIcon className="w-3.5 h-3.5 shrink-0" />
+                            <span className="truncate">Diagrams</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => router.push(`/admin/mock-tests/${test.id}/preview`)}
+                            className="h-8 px-2 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                            title="Preview Test & Checklist"
+                          >
+                            <Eye className="w-3.5 h-3.5 shrink-0" />
+                            <span className="truncate">Preview</span>
+                          </button>
+                        </div>
+
+                        {/* Row 2: Launch/Unpublish + Archive ZIP + Delete */}
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => togglePublish(test)}
+                            className={`h-8 flex-1 px-3 rounded-xl text-[11px] font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap ${
+                              test.status === 'Published'
+                                ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                                : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
+                            }`}
+                          >
+                            <Send className="w-3.5 h-3.5 shrink-0" />
+                            <span>{test.status === 'Published' ? 'Unpublish' : 'Launch Now'}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              window.open(`/api/admin/mock-tests/archive?testId=${encodeURIComponent(test.id)}`, '_blank')
+                            }
+                            className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center cursor-pointer transition-colors shrink-0"
+                            title="Download self-contained offline ZIP archive"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteTarget(test)}
+                            className="w-8 h-8 rounded-xl bg-red-50 text-[#dc2626] hover:bg-red-100 flex items-center justify-center cursor-pointer transition-colors shrink-0"
+                            title="Delete Mock Test"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
           {/* Batch Rank List & Results Table */}
           <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-2xs space-y-4">
@@ -757,7 +1349,8 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
             )}
           </div>
         </div>
-      )}
+      );
+    })()}
 
       {/* ==================== TAB 2: TRIPURA TET DAILY MOCK SERIES PACKAGES ==================== */}
       {activeAdminTab === 'series' && (
@@ -1121,6 +1714,124 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
 
             {/* Test Metadata & Scheduling Settings */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+              {/* 1. Scope Selector Cards */}
+              <div className="sm:col-span-2">
+                <label className="font-extrabold text-xs text-slate-700 block mb-1.5 uppercase tracking-wider">
+                  Mock Test Target &amp; Student Access Scope *
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModalTargetScope('mock_series_only');
+                      const sObj = (db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL).find(
+                        (s) => s.id === editingTest.seriesId
+                      ) || (db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL)[0];
+                      setEditingTest({
+                        ...editingTest,
+                        seriesId: sObj.id,
+                        courseId: '',
+                        courseName: 'Dedicated Mock Test Series Package',
+                        batchName: `${sObj.name} (Dedicated Mock Series Students)`,
+                      });
+                    }}
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                      modalTargetScope === 'mock_series_only'
+                        ? 'bg-blue-50/90 border-[#0056b3] ring-2 ring-[#0056b3]/20 shadow-xs'
+                        : 'bg-white border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-extrabold text-[#0a0e2a] flex items-center gap-1.5">
+                          🎯 Mock Series Only
+                        </span>
+                        {modalTargetScope === 'mock_series_only' && <Check className="w-3.5 h-3.5 text-[#0056b3]" />}
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-1 leading-snug">
+                        Mock Test Section Only. Students enrolled in the standalone mock test package (plus enrolled course students with mock tests) have access.
+                      </p>
+                    </div>
+                    <span className="mt-2 text-[9px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800 self-start">
+                      Dedicated Mock Series
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModalTargetScope('course_only');
+                      const firstCourse = db.courses[0];
+                      setEditingTest({
+                        ...editingTest,
+                        courseId: firstCourse?.id || '',
+                        courseName: firstCourse?.name || 'Classroom Batch',
+                        batchName: firstCourse?.batchName || 'Regular Batch',
+                      });
+                    }}
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                      modalTargetScope === 'course_only'
+                        ? 'bg-blue-50/90 border-[#0056b3] ring-2 ring-[#0056b3]/20 shadow-xs'
+                        : 'bg-white border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-extrabold text-[#0a0e2a] flex items-center gap-1.5">
+                          🎓 Course Batch Only
+                        </span>
+                        {modalTargetScope === 'course_only' && <Check className="w-3.5 h-3.5 text-[#0056b3]" />}
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-1 leading-snug">
+                        Exclusive only for students enrolled in a specific classroom or online batch (e.g. TCS/TPS, TPSC, STGT regular batches).
+                      </p>
+                    </div>
+                    <span className="mt-2 text-[9px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 self-start">
+                      Course Enrolled Only
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModalTargetScope('combined');
+                      const sObj = (db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL).find(
+                        (s) => s.id === editingTest.seriesId
+                      ) || (db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL)[0];
+                      const firstCourse = db.courses[0];
+                      setEditingTest({
+                        ...editingTest,
+                        seriesId: sObj.id,
+                        courseId: firstCourse?.id || '',
+                        courseName: firstCourse?.name || 'Classroom Batch',
+                        batchName: `${sObj.name} & ${firstCourse?.batchName || 'Batch'}`,
+                      });
+                    }}
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                      modalTargetScope === 'combined'
+                        ? 'bg-blue-50/90 border-[#0056b3] ring-2 ring-[#0056b3]/20 shadow-xs'
+                        : 'bg-white border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-extrabold text-[#0a0e2a] flex items-center gap-1.5">
+                          🤝 Combined Access
+                        </span>
+                        {modalTargetScope === 'combined' && <Check className="w-3.5 h-3.5 text-[#0056b3]" />}
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-1 leading-snug">
+                        Dual Access: Permits BOTH candidates enrolled in the Mock Test Series AND students enrolled in the Course Batch to attempt.
+                      </p>
+                    </div>
+                    <span className="mt-2 text-[9px] font-bold px-2 py-0.5 rounded bg-purple-100 text-purple-800 self-start">
+                      Mock Series + Course
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Title Input */}
               <div className="sm:col-span-2">
                 <label className="font-bold text-slate-700 block mb-1">Mock Test Title *</label>
                 <input
@@ -1128,32 +1839,44 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                   required
                   value={editingTest.title}
                   onChange={(e) => setEditingTest({ ...editingTest, title: e.target.value })}
-                  placeholder="e.g. Tripura TET Paper-I: Child Development & Pedagogy Mock #01"
+                  placeholder="e.g. Tripura TET: Paper-I 2026 — Daily Online Mock #01"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
                 />
               </div>
 
-              {/* Subject Selection with automatic language rule */}
+              {/* Subject & Category Selection (Grouped by Specific Mock Test) */}
               <div>
                 <label className="font-bold text-slate-700 block mb-1">
-                  Subject & Category *
+                  Subject &amp; Category (Specific Mock Tests) *
                 </label>
                 <select
-                  value={editingTest.subject || 'Child Development & Pedagogy'}
+                  value={`${editingTest.seriesId || 'series-ttet-paper1'}:::${editingTest.subject || 'Child Development & Pedagogy'}`}
                   onChange={(e) => handleSubjectChange(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-semibold"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
                 >
-                  <option value="Child Development & Pedagogy">Child Development & Pedagogy (CDP) [Bilingual]</option>
-                  <option value="Mathematics">Mathematics (Content & Pedagogy) [Bilingual]</option>
-                  <option value="Environmental Studies">Environmental Studies (EVS) [Bilingual]</option>
-                  <option value="Science">Science (Physics, Chemistry & Biology) [Bilingual]</option>
-                  <option value="History">History & Pedagogical Issues [Bilingual]</option>
-                  <option value="Geography">Geography & Environment [Bilingual]</option>
-                  <option value="Political Science">Political Science & Civics [Bilingual]</option>
-                  <option value="English">Language – I (English) [English Only]</option>
-                  <option value="Bengali">Language – II (Bengali) [Bengali Only]</option>
-                  <option value="Full Length">Full-Length Simulated Paper [Bilingual]</option>
+                  {ALL_MOCK_SUBJECT_GROUPS.map((grp) => (
+                    <optgroup key={grp.seriesId} label={grp.group}>
+                      {grp.items.map((it) => (
+                        <option key={`${it.seriesId}:::${it.name}`} value={`${it.seriesId}:::${it.name}`}>
+                          {it.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                  {/* Fallback for any legacy subject not in groups */}
+                  {!ALL_MOCK_SUBJECT_GROUPS.some((g) =>
+                    g.items.some((it) => it.seriesId === editingTest.seriesId && it.name === editingTest.subject)
+                  ) && (
+                    <optgroup label="Other Subject">
+                      <option value={`${editingTest.seriesId || 'series-ttet-paper1'}:::${editingTest.subject || 'Custom'}`}>
+                        {editingTest.subject || 'Custom Subject'}
+                      </option>
+                    </optgroup>
+                  )}
                 </select>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Selecting a subject auto-configures the series, language mode, and default matching course.
+                </p>
               </div>
 
               {/* Scheduled Launch Date */}
@@ -1169,6 +1892,179 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                   onChange={(e) => setEditingTest({ ...editingTest, scheduledDate: e.target.value })}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-semibold"
                 />
+              </div>
+
+              {/* Scope Tailored Target Selectors */}
+              {modalTargetScope === 'mock_series_only' && (
+                <div className="sm:col-span-2">
+                  <label className="font-bold text-slate-700 block mb-1 flex items-center justify-between">
+                    <span>Target Mock Test Series Package *</span>
+                    <span className="text-[10px] text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+                      Mock Test Section Only
+                    </span>
+                  </label>
+                  <select
+                    value={editingTest.seriesId || 'series-ttet-paper1'}
+                    onChange={(e) => {
+                      const sObj = (db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL).find(
+                        (s) => s.id === e.target.value
+                      );
+                      setEditingTest({
+                        ...editingTest,
+                        seriesId: e.target.value,
+                        courseId: '',
+                        courseName: sObj?.name || 'Dedicated Mock Test Series Package',
+                        batchName: `${sObj?.name || 'Mock Series'} (Enrolled Students Only)`,
+                      });
+                    }}
+                    className="w-full px-3 py-2.5 rounded-xl border border-blue-200 bg-white font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                  >
+                    {(db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL).map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} (₹{s.price}/-) — {s.classRange}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Strict access control: only students enrolled in this series package (and enrolled course students with mock tests included) will be permitted to attempt this test.
+                  </p>
+                </div>
+              )}
+
+              {modalTargetScope === 'course_only' && (
+                <div className="sm:col-span-2">
+                  <label className="font-bold text-slate-700 block mb-1 flex items-center justify-between">
+                    <span>Target Course &amp; Batch *</span>
+                    <span className="text-[10px] text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                      Course Batch Enrolled Only
+                    </span>
+                  </label>
+                  <select
+                    required
+                    value={editingTest.courseId || ''}
+                    onChange={(e) => {
+                      const crs = db.courses.find((c) => c.id === e.target.value);
+                      setEditingTest({
+                        ...editingTest,
+                        courseId: e.target.value,
+                        courseName: crs?.name || '',
+                        batchName: crs?.batchName || '',
+                      });
+                    }}
+                    className="w-full px-3 py-2.5 rounded-xl border border-amber-300 bg-white font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  >
+                    <option value="">-- Select Enrolled Course Batch --</option>
+                    {db.courses.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} — ({c.batchName} • {c.mode})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Strict access control: only candidates enrolled in this specific course batch will have access to attempt.
+                  </p>
+                </div>
+              )}
+
+              {modalTargetScope === 'combined' && (
+                <>
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">
+                      Target Mock Test Series Package *
+                    </label>
+                    <select
+                      value={editingTest.seriesId || 'series-ttet-paper1'}
+                      onChange={(e) => {
+                        setEditingTest({
+                          ...editingTest,
+                          seriesId: e.target.value,
+                        });
+                      }}
+                      className="w-full px-3 py-2 rounded-xl border border-blue-200 bg-white font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                    >
+                      {(db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL).map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} (₹{s.price})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Target Course &amp; Batch *</label>
+                    <select
+                      value={editingTest.courseId || ''}
+                      onChange={(e) => {
+                        const crs = db.courses.find((c) => c.id === e.target.value);
+                        setEditingTest({
+                          ...editingTest,
+                          courseId: e.target.value,
+                          courseName: crs?.name || '',
+                          batchName: crs?.batchName || '',
+                        });
+                      }}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-semibold text-slate-800"
+                    >
+                      <option value="">-- Select Matching Course Batch --</option>
+                      {db.courses.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} ({c.batchName})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
+
+              {/* Real-time Access Guarantee Banner */}
+              <div className="sm:col-span-2 p-3.5 rounded-2xl bg-gradient-to-r from-blue-900 to-indigo-900 text-white shadow-sm flex items-start gap-3">
+                <Lock className="w-4 h-4 text-amber-300 shrink-0 mt-0.5" />
+                <div className="space-y-1 text-xs">
+                  <span className="font-extrabold text-amber-300 block">
+                    🛡️ Strict Enrolled-Only Access Guarantee Enforced
+                  </span>
+                  <p className="text-slate-200 text-[11px] leading-relaxed">
+                    {modalTargetScope === 'mock_series_only' && (
+                      <>
+                        Only candidates who enrolled in{' '}
+                        <strong>
+                          {(db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL).find(
+                            (s) => s.id === editingTest.seriesId
+                          )?.name || 'the selected mock series package'}
+                        </strong>{' '}
+                        (or students whose enrolled course includes mock tests) will be permitted to attempt this test. Unenrolled students are completely blocked.
+                      </>
+                    )}
+                    {modalTargetScope === 'course_only' && (
+                      <>
+                        Only students enrolled in{' '}
+                        <strong>
+                          {db.courses.find((c) => c.id === editingTest.courseId)?.name ||
+                            editingTest.courseName ||
+                            'the selected course batch'}
+                        </strong>{' '}
+                        will have access to attempt. Unenrolled students and candidates in other courses cannot attempt.
+                      </>
+                    )}
+                    {modalTargetScope === 'combined' && (
+                      <>
+                        Candidates enrolled in either the{' '}
+                        <strong>
+                          {(db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL).find(
+                            (s) => s.id === editingTest.seriesId
+                          )?.name || 'Mock Series Package'}
+                        </strong>{' '}
+                        OR the{' '}
+                        <strong>
+                          {db.courses.find((c) => c.id === editingTest.courseId)?.name ||
+                            editingTest.courseName ||
+                            'Course Batch'}
+                        </strong>{' '}
+                        will have access to attempt. Unenrolled students are strictly blocked.
+                      </>
+                    )}
+                  </p>
+                </div>
               </div>
 
               {/* Question Paper Google Drive Link */}
@@ -1218,55 +2114,6 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                     </div>
                   </div>
                 )}
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Target Mock Test Series Package *
-                </label>
-                <select
-                  value={editingTest.seriesId || 'series-ttet-paper1'}
-                  onChange={(e) => {
-                    setEditingTest({
-                      ...editingTest,
-                      seriesId: e.target.value,
-                    });
-                  }}
-                  className="w-full px-3 py-2 rounded-xl border border-blue-200 bg-white font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
-                >
-                  {(db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL).map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.id})
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[10px] text-slate-500 mt-1">
-                  Strict access control: only students enrolled in this series will be permitted to attempt this test.
-                </p>
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Target Course & Batch (Optional)</label>
-                <select
-                  value={editingTest.courseId || ''}
-                  onChange={(e) => {
-                    const crs = db.courses.find((c) => c.id === e.target.value);
-                    setEditingTest({
-                      ...editingTest,
-                      courseId: e.target.value,
-                      courseName: crs?.name || (e.target.value ? editingTest.courseName : 'Open to All Batches'),
-                      batchName: crs?.batchName || (e.target.value ? editingTest.batchName : 'Institute-wide (All Students)'),
-                    });
-                  }}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-semibold"
-                >
-                  <option value="">Open to All Batches (Institute-wide)</option>
-                  {db.courses.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({c.batchName})
-                    </option>
-                  ))}
-                </select>
               </div>
 
               <div className="grid grid-cols-3 gap-2">

@@ -241,7 +241,135 @@ export const MOCK_SERIES_INITIAL: MockSeries[] = [
     status: 'Open',
     startsOn: 'Flexible / Admin Scheduled (Launch on Demand)',
   },
+  {
+    id: 'series-stgt-soc',
+    slug: 'trbt-stgt-social-science',
+    name: 'TRBT STGT (Social Science) Daily Online Mock Tests Series',
+    classRange: 'Graduate Teachers (Secondary Level)',
+    stream: 'Social Science (History, Geography, Polity & Economics)',
+    price: 499,
+    batchLabel: '2026 Batch',
+    description: 'Comprehensive Daily Online Mock Tests Series for TRBT STGT Social Science. Features full-length and sectional simulated exams with merit ranking and detailed pedagogical answers.',
+    highlights: [
+      'Weekly Scheduled Online Practice Tests',
+      'Full Syllabus Coverage (History, Geography, Polity, Economics)',
+      'Simulated State-Level Performance Analysis & Merit Ranks',
+      'OMR Sheet & CBT Timed Interface',
+      'Bilingual Questions in English & Bengali'
+    ],
+    status: 'Open',
+    startsOn: 'Flexible / Admin Scheduled (Launch on Demand)',
+  },
+  {
+    id: 'series-stgt-pure-sci',
+    slug: 'trbt-stgt-pure-science',
+    name: 'TRBT STGT (Pure Science) Daily Online Mock Tests Series',
+    classRange: 'Graduate Teachers (Secondary Level)',
+    stream: 'Pure Science (Physics, Chemistry & Mathematics)',
+    price: 499,
+    batchLabel: '2026 Batch',
+    description: 'Specialized Mock Tests Series for TRBT STGT Pure Science candidates focusing on problem-solving speed, numerical precision, and conceptual accuracy.',
+    highlights: [
+      'Regular Sectional Mock Tests (Physics, Chemistry, Maths)',
+      '02 Full Length Simulated Papers with Step-by-Step Solutions',
+      'Formula Sheets & Shortcut Techniques Discussion',
+      'Bilingual Questions in English & Bengali'
+    ],
+    status: 'Open',
+    startsOn: 'Flexible / Admin Scheduled (Launch on Demand)',
+  },
+  {
+    id: 'series-stgt-bio-sci',
+    slug: 'trbt-stgt-biological-science',
+    name: 'TRBT STGT (Biological Science) Daily Online Mock Tests Series',
+    classRange: 'Graduate Teachers (Secondary Level)',
+    stream: 'Biological Science (Botany, Zoology & Physiology)',
+    price: 499,
+    batchLabel: '2026 Batch',
+    description: 'High-yield mock series for TRBT STGT Biological Science with diagram-oriented MCQs and taxonomy classification drills.',
+    highlights: [
+      'Botany, Zoology & Human Physiology Mock Tests',
+      'High-Yield Diagram-Based Practice Questions',
+      'Detailed Explanations & Model Solutions',
+      'Bilingual Questions in English & Bengali'
+    ],
+    status: 'Open',
+    startsOn: 'Flexible / Admin Scheduled (Launch on Demand)',
+  },
+  {
+    id: 'series-tpsc-combined',
+    slug: 'tpsc-combined-jrbt',
+    name: 'TPSC Combined Services & JRBT Mock Tests Series',
+    classRange: 'Graduates & 10+2 Aspirants',
+    stream: 'General Studies, Tripura GK, Aptitude & English',
+    price: 499,
+    batchLabel: '2026 Batch',
+    description: 'Complete mock test series for TPSC Combined Competitive Examinations and JRBT Group-C / Group-D posts.',
+    highlights: [
+      'Tripura GK & Current Affairs Speed Drills',
+      'Quantitative Aptitude & Logical Reasoning Tests',
+      'General English Grammar & Comprehension',
+      'Bilingual Questions (English subjects in English)'
+    ],
+    status: 'Open',
+    startsOn: 'Flexible / Admin Scheduled (Launch on Demand)',
+  },
+  {
+    id: 'series-tcs-tps',
+    slug: 'tcs-tps-officers',
+    name: 'TCS / TPS Civil & Police Services Mock Tests Series',
+    classRange: 'Graduate Aspirants',
+    stream: 'State Civil Services & Police Services',
+    price: 599,
+    batchLabel: '2026 Batch',
+    description: 'Premier mock exam series simulating the exact pattern, negative marking, and depth of Tripura Civil Service & Police Service preliminary examinations.',
+    highlights: [
+      'Comprehensive General Studies Paper Simulations',
+      'State-Level Merit Percentile & Accuracy Analysis',
+      'Tripura Heritage, Geography & Administrative Drills',
+      'Curated by Senior Officers & Faculty Mentors'
+    ],
+    status: 'Open',
+    startsOn: 'Flexible / Admin Scheduled (Launch on Demand)',
+  },
+  {
+    id: 'series-banking-ssc',
+    slug: 'banking-ibps-ssc-railway',
+    name: 'Central Competitive (Banking IBPS/SBI, SSC & Railway) Mock Series',
+    classRange: 'Graduates & 10+2 Aspirants',
+    stream: 'Banking, SSC & Railway Competitive Exams',
+    price: 399,
+    batchLabel: '2026 Batch',
+    description: 'High-speed CBT test series for IBPS PO/Clerk, SBI, SSC CGL/CHSL, and Railway RRB recruitment exams.',
+    highlights: [
+      'Timed Sectional Speed Quizzes with Negative Marking',
+      'Data Interpretation & High-Level Reasoning Drills',
+      'All-India Standard Question Bank with Explanations',
+      'Bilingual Interface (English Language in English)'
+    ],
+    status: 'Open',
+    startsOn: 'Flexible / Admin Scheduled (Launch on Demand)',
+  },
+  {
+    id: 'series-school-foundation',
+    slug: 'school-board-foundation',
+    name: 'TBSE & CBSE School Board Mock Tests Series (Classes VII - X)',
+    classRange: 'Classes VII, VIII, IX & X',
+    stream: 'School Board Foundation (TBSE & CBSE)',
+    price: 299,
+    batchLabel: '2026 Batch',
+    description: 'Board-pattern chapter-wise and term-end simulated examinations for Classes VII, VIII, IX & X adhering to TBSE and CBSE curricula.',
+    highlights: [
+      'Chapter-Wise Diagnostic Tests for Mathematics & Science',
+      'Mid-Term & Pre-Board Simulated Question Papers',
+      'Step-by-Step Marking and Feedback',
+      'Bilingual Support for TBSE Bengali & English Medium'
+    ],
+    status: 'Open',
+    startsOn: 'Flexible / Admin Scheduled (Launch on Demand)',
+  },
 ];
+
 
 export const MOCK_SUBJECTS_INITIAL: MockSubject[] = [
   // Paper-I Subjects (Banner 1: CDP, ENGLISH, BENGALI, MATH, EVS)

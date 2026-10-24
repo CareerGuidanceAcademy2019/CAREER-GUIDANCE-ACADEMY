@@ -29,6 +29,59 @@ const TET_P2_SOC_KEYS = new Set([
   'crs-tet-2-arts',
 ]);
 
+const STGT_SOC_KEYS = new Set([
+  'series-stgt-soc',
+  'crs-stgt-sst-online',
+  'crs-stgt-sst-offline',
+  'crs-stgt-sst',
+]);
+
+const STGT_PURE_SCI_KEYS = new Set([
+  'series-stgt-pure-sci',
+  'crs-stgt-pure-sci-online',
+  'crs-stgt-pure-sci-offline',
+  'crs-stgt-pure-sci',
+]);
+
+const STGT_BIO_SCI_KEYS = new Set([
+  'series-stgt-bio-sci',
+  'crs-stgt-bio-sci-online',
+  'crs-stgt-bio-sci-offline',
+  'crs-stgt-bio-sci',
+]);
+
+const TPSC_COMBINED_KEYS = new Set([
+  'series-tpsc-combined',
+  'crs-tpsc-combined-online',
+  'crs-tpsc-combined-offline',
+  'crs-tpsc-combined',
+  'crs-jrbt-online',
+  'crs-jrbt-offline',
+  'crs-jrbt',
+]);
+
+const TCS_TPS_KEYS = new Set([
+  'series-tcs-tps',
+  'crs-tcs-tps-online',
+  'crs-tcs-tps-offline',
+  'crs-tcs-tps',
+]);
+
+const BANKING_SSC_KEYS = new Set([
+  'series-banking-ssc',
+  'crs-banking-online',
+  'crs-banking-offline',
+  'crs-banking',
+]);
+
+const SCHOOL_FOUNDATION_KEYS = new Set([
+  'series-school-foundation',
+  'crs-school-7',
+  'crs-school-8',
+  'crs-school-9',
+  'crs-school-10',
+]);
+
 function getMatchingAllowedKeys(targetKey: string, title?: string): { keys: Set<string>; sectionLabel: string } {
   const normKey = targetKey?.toLowerCase() || '';
   const normTitle = title?.toLowerCase() || '';
@@ -43,8 +96,51 @@ function getMatchingAllowedKeys(targetKey: string, title?: string): { keys: Set<
   if (TET_P1_KEYS.has(normKey)) {
     return { keys: TET_P1_KEYS, sectionLabel: 'Tripura TET Paper-I' };
   }
+  if (STGT_SOC_KEYS.has(normKey)) {
+    return { keys: STGT_SOC_KEYS, sectionLabel: 'TRBT STGT (Social Science)' };
+  }
+  if (STGT_PURE_SCI_KEYS.has(normKey)) {
+    return { keys: STGT_PURE_SCI_KEYS, sectionLabel: 'TRBT STGT (Pure Science)' };
+  }
+  if (STGT_BIO_SCI_KEYS.has(normKey)) {
+    return { keys: STGT_BIO_SCI_KEYS, sectionLabel: 'TRBT STGT (Biological Science)' };
+  }
+  if (TPSC_COMBINED_KEYS.has(normKey)) {
+    return { keys: TPSC_COMBINED_KEYS, sectionLabel: 'TPSC Combined Services & JRBT' };
+  }
+  if (TCS_TPS_KEYS.has(normKey)) {
+    return { keys: TCS_TPS_KEYS, sectionLabel: 'TCS / TPS Civil & Police Services' };
+  }
+  if (BANKING_SSC_KEYS.has(normKey)) {
+    return { keys: BANKING_SSC_KEYS, sectionLabel: 'Banking IBPS/SBI, SSC & Railway' };
+  }
+  if (SCHOOL_FOUNDATION_KEYS.has(normKey)) {
+    return { keys: SCHOOL_FOUNDATION_KEYS, sectionLabel: 'School Foundation Wings (Classes VII-X)' };
+  }
 
-  // 2. Strict Title / Subject Fallback (Check Paper 2 Social & Science BEFORE Paper 1)
+  // 2. Strict Title / Subject Fallback
+  if (normTitle.includes('bio') && (normTitle.includes('stgt') || normTitle.includes('botany') || normTitle.includes('zoology'))) {
+    return { keys: STGT_BIO_SCI_KEYS, sectionLabel: 'TRBT STGT (Biological Science)' };
+  }
+  if (normTitle.includes('pure') && (normTitle.includes('stgt') || normTitle.includes('physics') || normTitle.includes('chemistry'))) {
+    return { keys: STGT_PURE_SCI_KEYS, sectionLabel: 'TRBT STGT (Pure Science)' };
+  }
+  if (normTitle.includes('stgt')) {
+    return { keys: STGT_SOC_KEYS, sectionLabel: 'TRBT STGT (Social Science)' };
+  }
+  if (normTitle.includes('tcs') || normTitle.includes('tps') || normTitle.includes('police service')) {
+    return { keys: TCS_TPS_KEYS, sectionLabel: 'TCS / TPS Civil & Police Services' };
+  }
+  if (normTitle.includes('tpsc') || normTitle.includes('jrbt')) {
+    return { keys: TPSC_COMBINED_KEYS, sectionLabel: 'TPSC Combined Services & JRBT' };
+  }
+  if (normTitle.includes('banking') || normTitle.includes('ibps') || normTitle.includes('sbi') || normTitle.includes('railway') || normTitle.includes('cgl')) {
+    return { keys: BANKING_SSC_KEYS, sectionLabel: 'Banking IBPS/SBI, SSC & Railway' };
+  }
+  if (normTitle.includes('tbse') || normTitle.includes('cbse') || normTitle.includes('class x') || normTitle.includes('class 10') || normTitle.includes('class ix') || normTitle.includes('class 9')) {
+    return { keys: SCHOOL_FOUNDATION_KEYS, sectionLabel: 'School Foundation Wings (Classes VII-X)' };
+  }
+
   if (
     normTitle.includes('social') ||
     normTitle.includes('arts') ||

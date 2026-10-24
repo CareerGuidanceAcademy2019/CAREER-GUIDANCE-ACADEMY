@@ -84,6 +84,13 @@ export default function StudentMockTestsPage() {
       'crs-tet-2-sst',
       'series-ttet-paper2-soc',
     ],
+    'series-stgt-soc': ['crs-stgt-sst-online', 'crs-stgt-sst-offline', 'crs-stgt-sst', 'series-stgt-soc'],
+    'series-stgt-pure-sci': ['crs-stgt-pure-sci-online', 'crs-stgt-pure-sci-offline', 'crs-stgt-pure-sci', 'series-stgt-pure-sci'],
+    'series-stgt-bio-sci': ['crs-stgt-bio-sci-online', 'crs-stgt-bio-sci-offline', 'crs-stgt-bio-sci', 'series-stgt-bio-sci'],
+    'series-tpsc-combined': ['crs-tpsc-combined-online', 'crs-tpsc-combined-offline', 'crs-tpsc-combined', 'crs-jrbt-online', 'crs-jrbt-offline', 'crs-jrbt', 'series-tpsc-combined'],
+    'series-tcs-tps': ['crs-tcs-tps-online', 'crs-tcs-tps-offline', 'crs-tcs-tps', 'series-tcs-tps'],
+    'series-banking-ssc': ['crs-banking-online', 'crs-banking-offline', 'crs-banking', 'series-banking-ssc'],
+    'series-school-foundation': ['crs-school-7', 'crs-school-8', 'crs-school-9', 'crs-school-10', 'series-school-foundation'],
   };
 
   const isStudentEnrolledInSeries = (seriesId: string) => {
@@ -134,7 +141,30 @@ export default function StudentMockTestsPage() {
     const title = (test.title || '').toLowerCase();
     const subject = (test.subject || '').toLowerCase();
 
-    // Check Paper 2 Social Science / Arts first
+    // Check specific categories
+    if (title.includes('bio') && (title.includes('stgt') || subject.includes('botany') || subject.includes('zoology') || subject.includes('biology'))) {
+      return isStudentEnrolledInSeries('series-stgt-bio-sci');
+    }
+    if (title.includes('pure') && (title.includes('stgt') || subject.includes('physics') || subject.includes('chemistry'))) {
+      return isStudentEnrolledInSeries('series-stgt-pure-sci');
+    }
+    if (title.includes('stgt')) {
+      return isStudentEnrolledInSeries('series-stgt-soc');
+    }
+    if (title.includes('tcs') || title.includes('tps') || title.includes('police service')) {
+      return isStudentEnrolledInSeries('series-tcs-tps');
+    }
+    if (title.includes('tpsc') || title.includes('jrbt')) {
+      return isStudentEnrolledInSeries('series-tpsc-combined');
+    }
+    if (title.includes('banking') || title.includes('ibps') || title.includes('sbi') || title.includes('railway') || title.includes('cgl')) {
+      return isStudentEnrolledInSeries('series-banking-ssc');
+    }
+    if (title.includes('tbse') || title.includes('cbse') || title.includes('class x') || title.includes('class 10') || title.includes('class ix') || title.includes('class 9')) {
+      return isStudentEnrolledInSeries('series-school-foundation');
+    }
+
+    // Check Paper 2 Social Science / Arts
     if (
       title.includes('social') ||
       title.includes('arts') ||
@@ -167,7 +197,8 @@ export default function StudentMockTestsPage() {
       return isStudentEnrolledInSeries('series-ttet-paper1');
     }
 
-    return isStudentEnrolledInSeries('series-ttet-paper1');
+    // Strict Access Control: Unenrolled students are never granted access
+    return false;
   };
 
   const isStudentEnrolledInPost = (post: MockSubjectPost) => {
@@ -289,7 +320,7 @@ export default function StudentMockTestsPage() {
       setIsStartingTest(false);
       showToast(
         'Access Restricted',
-        'You are enrolled in Tripura TET Paper-I. To appear for other mock exams, please enrol in that course.',
+        'Only students enrolled in this specific mock test series or matching course have permission to attempt this test.',
         'error'
       );
       return;
@@ -363,13 +394,21 @@ export default function StudentMockTestsPage() {
       } else {
         const errJson = await res.json().catch(() => null);
         setIsStartingTest(false);
-        if (errJson?.error) {
-          showToast('Cannot Start Test', errJson.error, 'error');
-          return;
-        }
+        showToast(
+          'Access Denied',
+          errJson?.error || 'You do not have permission or this test is not currently available.',
+          'error'
+        );
+        return;
       }
     } catch {
       setIsStartingTest(false);
+      showToast(
+        'Connection Error',
+        'Could not verify test enrollment access with the server. Please check your network and try again.',
+        'error'
+      );
+      return;
     }
 
     // Fallback to local test state ONLY if it contains valid questions
@@ -1587,20 +1626,47 @@ export default function StudentMockTestsPage() {
                   ...(db.mockTests || []).map((mt) => {
                     const cId = (mt.courseId || '').toLowerCase();
                     const title = (mt.title || '').toLowerCase();
-                    const existingSeries = mt.seriesId;
-                    let mappedSeries = existingSeries || 'series-ttet-paper1';
-                    if (!existingSeries) {
-                      if (
-                        cId.includes('arts') ||
-                        cId.includes('soc') ||
-                        cId.includes('sst') ||
-                        title.includes('social') ||
-                        title.includes('arts') ||
-                        title.includes('sst')
+                    const subj = (mt.subject || '').toLowerCase();
+                    const combined = `${cId} ${title} ${subj}`;
+                    let mappedSeries = mt.seriesId;
+                    if (!mappedSeries) {
+                      if (combined.includes('bio') && combined.includes('stgt')) {
+                        mappedSeries = 'series-stgt-bio-sci';
+                      } else if (combined.includes('pure') || (combined.includes('stgt') && (combined.includes('sci') || combined.includes('math')))) {
+                        mappedSeries = 'series-stgt-pure-sci';
+                      } else if (combined.includes('stgt') && (combined.includes('soc') || combined.includes('arts') || combined.includes('sst'))) {
+                        mappedSeries = 'series-stgt-soc';
+                      } else if (combined.includes('tpsc') || combined.includes('jrbt')) {
+                        mappedSeries = 'series-tpsc-combined';
+                      } else if (combined.includes('tcs') || combined.includes('tps')) {
+                        mappedSeries = 'series-tcs-tps';
+                      } else if (combined.includes('banking') || combined.includes('ibps') || combined.includes('sbi') || combined.includes('ssc')) {
+                        mappedSeries = 'series-banking-ssc';
+                      } else if (combined.includes('school') || combined.includes('foundation') || combined.includes('class-') || combined.includes('class 7') || combined.includes('class 8') || combined.includes('class 9') || combined.includes('class 10')) {
+                        mappedSeries = 'series-school-foundation';
+                      } else if (
+                        combined.includes('arts') ||
+                        combined.includes('soc') ||
+                        combined.includes('sst') ||
+                        combined.includes('history') ||
+                        combined.includes('geography') ||
+                        combined.includes('political')
                       ) {
                         mappedSeries = 'series-ttet-paper2-soc';
-                      } else if (cId.includes('sci') || title.includes('science') || title.includes('math')) {
+                      } else if (
+                        combined.includes('sci') ||
+                        combined.includes('math')
+                      ) {
                         mappedSeries = 'series-ttet-paper2-sci';
+                      } else if (
+                        combined.includes('tet 1') ||
+                        combined.includes('tet-1') ||
+                        combined.includes('paper 1') ||
+                        combined.includes('paper-1') ||
+                        combined.includes('paper-i') ||
+                        combined.includes('evs')
+                      ) {
+                        mappedSeries = 'series-ttet-paper1';
                       }
                     }
                     return {

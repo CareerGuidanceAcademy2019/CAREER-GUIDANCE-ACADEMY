@@ -2155,20 +2155,36 @@ export const cgaService = {
       const normSubj = (t.subject || '').toLowerCase();
       const cId = (validCourseId || t.courseId || '').toLowerCase();
 
-      const isP2 = normTitle.includes('paper-ii') || normTitle.includes('paper 2') || normTitle.includes('paper-2') || normTitle.includes('paper ii') || cId.includes('tet-2');
-      const isSocial = normTitle.includes('social') || normTitle.includes('sst') || normTitle.includes('arts') || normTitle.includes('history') || normTitle.includes('geography') || normTitle.includes('civics') || normTitle.includes('political') || normSubj.includes('social') || normSubj.includes('history') || normSubj.includes('geography') || normSubj.includes('political') || cId.includes('sst') || cId.includes('arts');
-      const isScience = normTitle.includes('science') || normTitle.includes('physics') || normTitle.includes('chemistry') || normTitle.includes('biology') || normSubj.includes('science') || cId.includes('sci');
-
-      if (isP2 && isSocial) {
-        finalSeriesId = 'series-ttet-paper2-soc';
-      } else if (isP2 && isScience) {
-        finalSeriesId = 'series-ttet-paper2-sci';
-      } else if (isSocial) {
-        finalSeriesId = 'series-ttet-paper2-soc';
-      } else if (isScience) {
-        finalSeriesId = 'series-ttet-paper2-sci';
+      if (normTitle.includes('bio') && (normTitle.includes('stgt') || normSubj.includes('botany') || normSubj.includes('zoology') || cId.includes('bio'))) {
+        finalSeriesId = 'series-stgt-bio-sci';
+      } else if (normTitle.includes('pure') && (normTitle.includes('stgt') || normSubj.includes('physics') || normSubj.includes('chemistry') || cId.includes('pure'))) {
+        finalSeriesId = 'series-stgt-pure-sci';
+      } else if (normTitle.includes('stgt') || cId.includes('stgt')) {
+        finalSeriesId = 'series-stgt-soc';
+      } else if (normTitle.includes('tcs') || normTitle.includes('tps') || cId.includes('tcs') || cId.includes('tps')) {
+        finalSeriesId = 'series-tcs-tps';
+      } else if (normTitle.includes('tpsc') || normTitle.includes('jrbt') || cId.includes('tpsc') || cId.includes('jrbt')) {
+        finalSeriesId = 'series-tpsc-combined';
+      } else if (normTitle.includes('banking') || normTitle.includes('ibps') || normTitle.includes('sbi') || cId.includes('banking')) {
+        finalSeriesId = 'series-banking-ssc';
+      } else if (normTitle.includes('tbse') || normTitle.includes('cbse') || normTitle.includes('school') || cId.includes('school')) {
+        finalSeriesId = 'series-school-foundation';
       } else {
-        finalSeriesId = 'series-ttet-paper1';
+        const isP2 = normTitle.includes('paper-ii') || normTitle.includes('paper 2') || normTitle.includes('paper-2') || normTitle.includes('paper ii') || cId.includes('tet-2');
+        const isSocial = normTitle.includes('social') || normTitle.includes('sst') || normTitle.includes('arts') || normTitle.includes('history') || normTitle.includes('geography') || normTitle.includes('civics') || normTitle.includes('political') || normSubj.includes('social') || normSubj.includes('history') || normSubj.includes('geography') || normSubj.includes('political') || cId.includes('sst') || cId.includes('arts');
+        const isScience = normTitle.includes('science') || normTitle.includes('physics') || normTitle.includes('chemistry') || normTitle.includes('biology') || normSubj.includes('science') || cId.includes('sci');
+
+        if (isP2 && isSocial) {
+          finalSeriesId = 'series-ttet-paper2-soc';
+        } else if (isP2 && isScience) {
+          finalSeriesId = 'series-ttet-paper2-sci';
+        } else if (isSocial) {
+          finalSeriesId = 'series-ttet-paper2-soc';
+        } else if (isScience) {
+          finalSeriesId = 'series-ttet-paper2-sci';
+        } else {
+          finalSeriesId = 'series-ttet-paper1';
+        }
       }
     }
 
