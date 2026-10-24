@@ -283,6 +283,10 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
         // Record payment verification in Supabase Postgres and local state
         const res = await submitPaymentVerification({
           courseId: target.itemId,
+          courseName: target.title,
+          itemType: target.itemType,
+          itemId: target.itemId,
+          referenceCode: referenceCode,
           amount: currentAmount,
           paymentMode: channel === 'upi' ? 'UPI' : 'Net Banking',
           paymentType: selectedPlan === 'instalment_1' ? 'Instalment 1' : 'Full Payment',
@@ -298,8 +302,14 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
         }
       }
 
-      // Also persist to localStorage cache
+      // Sync to localStorage cache without creating duplicates
       const storedRequests = JSON.parse(localStorage.getItem('cga_payment_requests') || '[]');
+      const filteredRequests = storedRequests.filter(
+        (r: any) =>
+          r.referenceCode !== referenceCode &&
+          r.reference_code !== referenceCode &&
+          !(r.studentId === currentStudent?.id && r.utr === utr)
+      );
       const newRequest = {
         id: requestId,
         studentId: currentStudent?.id || 'demo-student',
@@ -322,8 +332,8 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
         expiresAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
       };
 
-      storedRequests.unshift(newRequest);
-      localStorage.setItem('cga_payment_requests', JSON.stringify(storedRequests));
+      filteredRequests.unshift(newRequest);
+      localStorage.setItem('cga_payment_requests', JSON.stringify(filteredRequests));
 
       setIsSubmitting(false);
       setStep('success');

@@ -31,7 +31,9 @@ export default function ResetPasswordPage() {
   const [busy, setBusy] = useState(false);
 
   // Fallback direct verification fields (for users without email link or expired links)
+  const [directMethod, setDirectMethod] = useState<'otp' | 'phone'>('otp');
   const [email, setEmail] = useState('');
+  const [otp, setOtp] = useState('');
   const [phoneOrCode, setPhoneOrCode] = useState('');
 
   // Handle Supabase recovery links (both PKCE ?code= and implicit #access_token=)
@@ -140,9 +142,17 @@ export default function ResetPasswordPage() {
       return;
     }
 
-    if (!phoneOrCode.trim()) {
-      setError('Please enter your registered 10-digit phone number or Student ID code for verification.');
-      return;
+    if (directMethod === 'otp') {
+      const cleanOtp = otp.replace(/\D/g, '').trim();
+      if (cleanOtp.length < 6) {
+        setError('Please enter the 6-digit OTP code sent to your email.');
+        return;
+      }
+    } else {
+      if (!phoneOrCode.trim()) {
+        setError('Please enter your registered 10-digit phone number or Student ID code for verification.');
+        return;
+      }
     }
 
     if (password.length < 8) {
@@ -163,22 +173,37 @@ export default function ResetPasswordPage() {
 
     setBusy(true);
     try {
-      const resp = await fetch('/api/auth/reset-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: email.trim().toLowerCase(),
-          phoneOrCode: phoneOrCode.trim(),
-          newPassword: password,
-        }),
-      });
+      if (directMethod === 'otp') {
+        const cleanOtp = otp.replace(/\D/g, '').trim();
+        const res = await cgaService.verifyRecoveryOtp(
+          email.trim().toLowerCase(),
+          cleanOtp,
+          password
+        );
 
-      const data = await resp.json().catch(() => ({}));
+        if (!res.success) {
+          setError(res.error || 'Invalid or expired OTP code. Please check your email.');
+          setBusy(false);
+          return;
+        }
+      } else {
+        const resp = await fetch('/api/auth/reset-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: email.trim().toLowerCase(),
+            phoneOrCode: phoneOrCode.trim(),
+            newPassword: password,
+          }),
+        });
 
-      if (!resp.ok || !data.success) {
-        setError(data.error || 'Identity verification failed. Please check your credentials or contact admissions.');
-        setBusy(false);
-        return;
+        const data = await resp.json().catch(() => ({}));
+
+        if (!resp.ok || !data.success) {
+          setError(data.error || 'Identity verification failed. Please check your credentials or contact admissions.');
+          setBusy(false);
+          return;
+        }
       }
 
       setDone(true);
@@ -324,6 +349,37 @@ export default function ResetPasswordPage() {
                 </div>
               )}
 
+              <div className="flex rounded-2xl bg-slate-100 p-1 gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDirectMethod('otp');
+                    setError('');
+                  }}
+                  className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    directMethod === 'otp'
+                      ? 'bg-[#0056b3] text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Email 6-Digit OTP
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDirectMethod('phone');
+                    setError('');
+                  }}
+                  className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    directMethod === 'phone'
+                      ? 'bg-[#0056b3] text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Phone / Student ID
+                </button>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Registered Email Address</label>
                 <input
@@ -336,18 +392,38 @@ export default function ResetPasswordPage() {
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Registered 10-Digit Mobile No. or Student ID
-                </label>
-                <input
-                  type="text"
-                  value={phoneOrCode}
-                  onChange={(e) => setPhoneOrCode(e.target.value)}
-                  placeholder="e.g. 9876543210 or CGA-2026-001"
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
-                />
-              </div>
+              {directMethod === 'otp' ? (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-slate-700">6-Digit Security OTP Code</label>
+                    <Link href="/forgot-password" className="text-[11px] text-[#0056b3] font-bold hover:underline">
+                      Need a code? Request here
+                    </Link>
+                  </div>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={8}
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                    placeholder="Enter 6-digit OTP code"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-mono tracking-widest font-bold focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Registered 10-Digit Mobile No. or Student ID
+                  </label>
+                  <input
+                    type="text"
+                    value={phoneOrCode}
+                    onChange={(e) => setPhoneOrCode(e.target.value)}
+                    placeholder="e.g. 9876543210 or CGA-2026-001"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">New Password</label>

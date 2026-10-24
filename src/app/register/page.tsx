@@ -3,10 +3,11 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { UserPlus, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { UserPlus, AlertCircle, CheckCircle2, KeyRound, RefreshCw, Sparkles, Mail } from 'lucide-react';
 import { PublicHeader } from '@/components/layout/PublicHeader';
 import { PublicFooter } from '@/components/layout/PublicFooter';
 import { useCga } from '@/context/CgaContext';
+import { cgaService } from '@/services/cgaService';
 import { isEmail, normalizePhone } from '@/lib/names';
 import { PasswordStrengthMeter } from '@/components/ui/PasswordStrengthMeter';
 import { evaluatePasswordStrength } from '@/lib/passwordPolicy';
@@ -31,6 +32,10 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [confirmEmailSent, setConfirmEmailSent] = useState(false);
+  const [confirmOtp, setConfirmOtp] = useState('');
+  const [confirmOtpBusy, setConfirmOtpBusy] = useState(false);
+  const [confirmOtpError, setConfirmOtpError] = useState('');
+  const [confirmOtpSuccess, setConfirmOtpSuccess] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -116,24 +121,127 @@ export default function RegisterPage() {
     router.push('/student/dashboard');
   };
 
+  const handleVerifySignupOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setConfirmOtpError('');
+
+    const cleanOtp = confirmOtp.replace(/\D/g, '').trim();
+    if (cleanOtp.length < 6) {
+      setConfirmOtpError('Please enter the full 6-digit confirmation code sent to your email.');
+      return;
+    }
+
+    setConfirmOtpBusy(true);
+    try {
+      const res = await cgaService.verifySignupOtp(email.trim().toLowerCase(), cleanOtp);
+      if (!res.success) {
+        setConfirmOtpError(res.error || 'Invalid or expired confirmation code. Please check your email.');
+        setConfirmOtpBusy(false);
+        return;
+      }
+      setConfirmOtpSuccess(true);
+    } catch {
+      setConfirmOtpError('Network error verifying confirmation code. Please try again.');
+    } finally {
+      setConfirmOtpBusy(false);
+    }
+  };
+
   if (confirmEmailSent) {
     return (
       <div className="min-h-screen flex flex-col bg-slate-50">
         <PublicHeader />
         <main className="flex-1 flex items-center justify-center py-12 px-4">
-          <div className="max-w-md w-full bg-white rounded-3xl shadow-xl border border-slate-200 p-8 text-center space-y-4">
-            <CheckCircle2 className="w-12 h-12 text-emerald-600 mx-auto" />
-            <h1 className="text-xl font-extrabold text-[#0a0e2a]">Confirm your email</h1>
-            <p className="text-sm text-slate-600">
-              We sent a confirmation link to <strong>{email}</strong>. Open it to activate your
-              account, then sign in.
-            </p>
-            <Link
-              href="/login"
-              className="inline-block w-full py-3 rounded-xl bg-[#0056b3] text-white font-bold text-sm"
-            >
-              Go to Login
-            </Link>
+          <div className="max-w-md w-full bg-white rounded-3xl shadow-xl border border-slate-200 p-8 space-y-5">
+            <div className="text-center space-y-2">
+              <div className="w-14 h-14 rounded-full bg-blue-100 text-[#0056b3] flex items-center justify-center mx-auto">
+                <Mail className="w-7 h-7" />
+              </div>
+              <h1 className="text-xl font-extrabold text-[#0a0e2a]">Confirm Your Email</h1>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                We sent a 6-digit confirmation code and activation link to{' '}
+                <strong className="text-slate-900">{email}</strong>.
+              </p>
+            </div>
+
+            {confirmOtpSuccess ? (
+              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-center space-y-3">
+                <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-emerald-900">Email Verified Successfully!</h3>
+                  <p className="text-xs text-emerald-700 mt-1">
+                    Your student account is now fully active. You can now sign in using your registered email address or your 10-digit mobile number ({phone}) with your password.
+                  </p>
+                </div>
+                <Link
+                  href="/login"
+                  className="inline-flex items-center justify-center w-full py-3 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white font-bold text-sm shadow-md transition-all cursor-pointer"
+                >
+                  Sign In to Student Portal
+                </Link>
+              </div>
+            ) : (
+              <form onSubmit={handleVerifySignupOtp} className="space-y-4" noValidate>
+                {confirmOtpError && (
+                  <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 flex items-center gap-2 text-xs font-semibold text-[#dc2626]">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{confirmOtpError}</span>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Enter 6-Digit Email OTP Code
+                  </label>
+                  <div className="relative">
+                    <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={8}
+                      value={confirmOtp}
+                      onChange={(e) => setConfirmOtp(e.target.value.replace(/\D/g, ''))}
+                      placeholder="e.g. 123456"
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm font-mono tracking-widest font-bold focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                      autoComplete="one-time-code"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={confirmOtpBusy}
+                  className="w-full py-3 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] disabled:opacity-60 text-white font-bold text-sm shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+                >
+                  {confirmOtpBusy ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Verifying Code…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 text-amber-300" />
+                      <span>Verify Email &amp; Activate Account</span>
+                    </>
+                  )}
+                </button>
+
+                <div className="pt-2 text-center space-y-2 border-t border-slate-100">
+                  <p className="text-[11px] text-slate-500">
+                    Already clicked the verification link in your email app?
+                  </p>
+                  <Link
+                    href="/login"
+                    className="inline-block text-xs font-bold text-[#0056b3] hover:underline"
+                  >
+                    Proceed Directly to Login →
+                  </Link>
+                </div>
+              </form>
+            )}
           </div>
         </main>
         <PublicFooter />

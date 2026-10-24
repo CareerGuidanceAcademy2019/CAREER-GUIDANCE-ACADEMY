@@ -92,6 +92,10 @@ interface CgaContextType {
     utr: string;
     screenshotUrl?: string;
     remarks?: string;
+    referenceCode?: string;
+    courseName?: string;
+    itemType?: string;
+    itemId?: string;
   }) => Promise<{ success: boolean; receipt?: FeePayment; error?: string }>;
   approvePayment: (paymentId: string) => Promise<{ success: boolean; error?: string }>;
   rejectPayment: (paymentId: string, reason: string) => Promise<{ success: boolean; error?: string }>;
@@ -512,7 +516,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
       const srs = db.mockSeries.find((s) => s.id === params.courseId);
       const studentId = sessionRef.current?.userId || 'std-1';
       const studentName = sessionRef.current?.name || 'Student';
-      const courseName = crs?.name || srs?.name || 'Tripura TET Mock Test Series';
+      const courseName = params.courseName || crs?.name || srs?.name || 'Tripura TET Mock Test Series';
 
       const res = await cgaService.submitPaymentVerification({
         studentId,
@@ -525,6 +529,9 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         utr: params.utr,
         screenshotUrl: params.screenshotUrl,
         remarks: params.remarks,
+        referenceCode: params.referenceCode,
+        itemType: params.itemType,
+        itemId: params.itemId,
       });
 
       if (!res.success || !res.receipt) {

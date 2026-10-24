@@ -86,6 +86,34 @@ export default function AdminPaymentsPage() {
     setIsLoading(true);
     let allCombined: PaymentRequest[] = [];
     const seenRefs = new Set<string>();
+    const seenIds = new Set<string>();
+    const seenSignatures = new Set<string>();
+
+    const registerEntry = (req: PaymentRequest) => {
+      if (req.id) seenIds.add(req.id);
+      if (req.referenceCode) {
+        seenRefs.add(req.referenceCode.trim().toUpperCase());
+      }
+      if (req.studentId && req.utr) {
+        const sig = `${req.studentId}_${req.utr.trim().toUpperCase()}`;
+        seenSignatures.add(sig);
+      }
+    };
+
+    const isDuplicate = (
+      id?: string | null,
+      ref?: string | null,
+      studentId?: string | null,
+      utr?: string | null
+    ): boolean => {
+      if (id && seenIds.has(id)) return true;
+      if (ref && seenRefs.has(ref.trim().toUpperCase())) return true;
+      if (studentId && utr) {
+        const sig = `${studentId}_${utr.trim().toUpperCase()}`;
+        if (seenSignatures.has(sig)) return true;
+      }
+      return false;
+    };
 
     try {
       const { createClient } = await import('@/lib/supabase/client');
@@ -122,43 +150,45 @@ export default function AdminPaymentsPage() {
       // Map payment_requests
       if (!prError && prData) {
         prData.forEach((r: any) => {
-          const prof = profileMap[r.student_id];
-          seenRefs.add(r.reference_code);
-          allCombined.push({
-            id: r.id,
-            studentId: r.student_id,
-            studentName: prof?.name || 'Student',
-            studentCode: prof?.student_code || r.student_id?.slice(0, 8),
-            studentPhone: prof?.phone || '',
-            studentEmail: prof?.email || '',
-            itemType: r.item_type,
-            itemId: r.item_id,
-            paymentType: r.payment_type,
-            expectedAmount: Number(r.expected_amount),
-            referenceCode: r.reference_code,
-            paymentChannel: r.payment_channel,
-            paymentMethod: r.payment_method || 'upi_manual',
-            utr: r.utr,
-            utrNormalized: r.utr_normalized,
-            amountReceived: r.amount_received ? Number(r.amount_received) : null,
-            screenshotPath: r.screenshot_path,
-            status: r.status,
-            reviewedBy: r.reviewed_by,
-            reviewedAt: r.reviewed_at,
-            rejectReason: r.reject_reason,
-            expiresAt: r.expires_at,
-            createdAt: r.created_at,
-          });
+          if (!isDuplicate(r.id, r.reference_code, r.student_id, r.utr)) {
+            const prof = profileMap[r.student_id];
+            const item: PaymentRequest = {
+              id: r.id,
+              studentId: r.student_id,
+              studentName: prof?.name || 'Student',
+              studentCode: prof?.student_code || r.student_id?.slice(0, 8),
+              studentPhone: prof?.phone || '',
+              studentEmail: prof?.email || '',
+              itemType: r.item_type,
+              itemId: r.item_id,
+              paymentType: r.payment_type,
+              expectedAmount: Number(r.expected_amount),
+              referenceCode: r.reference_code,
+              paymentChannel: r.payment_channel,
+              paymentMethod: r.payment_method || 'upi_manual',
+              utr: r.utr,
+              utrNormalized: r.utr_normalized,
+              amountReceived: r.amount_received ? Number(r.amount_received) : null,
+              screenshotPath: r.screenshot_path,
+              status: r.status,
+              reviewedBy: r.reviewed_by,
+              reviewedAt: r.reviewed_at,
+              rejectReason: r.reject_reason,
+              expiresAt: r.expires_at,
+              createdAt: r.created_at,
+            };
+            registerEntry(item);
+            allCombined.push(item);
+          }
         });
       }
 
-      // Map fee_payments (merge any that aren't already in seenRefs)
+      // Map fee_payments (merge any that aren't already represented)
       if (!fpError && fpData) {
         fpData.forEach((p: any) => {
-          if (!seenRefs.has(p.receipt_no)) {
-            seenRefs.add(p.receipt_no);
+          if (!isDuplicate(p.id, p.receipt_no, p.student_id, p.utr)) {
             const prof = profileMap[p.student_id];
-            allCombined.push({
+            const item: PaymentRequest = {
               id: p.id,
               studentId: p.student_id,
               studentName: prof?.name || 'Student',
@@ -181,7 +211,9 @@ export default function AdminPaymentsPage() {
               rejectReason: p.rejection_reason,
               expiresAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
               createdAt: p.date ? new Date(p.date).toISOString() : new Date().toISOString(),
-            });
+            };
+            registerEntry(item);
+            allCombined.push(item);
           }
         });
       }
@@ -189,22 +221,21 @@ export default function AdminPaymentsPage() {
       console.warn('[AdminPayments] Error fetching from Supabase:', e);
     }
 
-    // Merge with localStorage and db.feePayments
+    // Merge with localStorage and db.feePayments without duplicates
     try {
       const localStored = localStorage.getItem('cga_payment_requests');
       const localList: PaymentRequest[] = localStored ? JSON.parse(localStored) : [];
       localList.forEach((r) => {
-        if (!seenRefs.has(r.referenceCode)) {
-          seenRefs.add(r.referenceCode);
+        if (!isDuplicate(r.id, r.referenceCode, r.studentId, r.utr)) {
+          registerEntry(r);
           allCombined.push(r);
         }
       });
 
       (db.feePayments || []).forEach((p) => {
-        if (!seenRefs.has(p.receiptNo)) {
-          seenRefs.add(p.receiptNo);
+        if (!isDuplicate(p.id, p.receiptNo, p.studentId, p.utr)) {
           const stu = db.students.find((s) => s.id === p.studentId);
-          allCombined.push({
+          const item: PaymentRequest = {
             id: p.id,
             studentId: p.studentId,
             studentName: p.studentName || stu?.name || 'Student',
@@ -227,7 +258,9 @@ export default function AdminPaymentsPage() {
             rejectReason: p.rejectionReason,
             expiresAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
             createdAt: p.date ? new Date(p.date).toISOString() : new Date().toISOString(),
-          });
+          };
+          registerEntry(item);
+          allCombined.push(item);
         }
       });
     } catch {}

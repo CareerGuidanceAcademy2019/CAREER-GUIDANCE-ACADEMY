@@ -463,28 +463,53 @@ export const cgaService = {
     let email = parsed.value;
     if (parsed.kind === 'phone') {
       try {
-        const { data, error } = await sb.rpc('resolve_login_email', {
+        const res = await fetch('/api/auth/resolve-phone', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: parsed.value }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data?.email) {
+          email = data.email;
+        } else {
+          const { data: rpcEmail } = await sb.rpc('resolve_login_email', {
+            p_identifier: parsed.value,
+            p_password: password,
+          });
+          if (rpcEmail) {
+            email = rpcEmail as string;
+          } else {
+            return {
+              success: false,
+              error: data?.error || 'No account found with this mobile number. Please check the number or sign in with your email.',
+            };
+          }
+        }
+      } catch {
+        const { data: rpcEmail } = await sb.rpc('resolve_login_email', {
           p_identifier: parsed.value,
           p_password: password,
         });
-        if (!error && data) {
-          email = data as string;
+        if (rpcEmail) {
+          email = rpcEmail as string;
         } else {
           return { success: false, error: 'Invalid phone number or password.' };
         }
-      } catch {
-        return { success: false, error: 'Invalid phone number or password.' };
       }
     }
 
     const { error } = await sb.auth.signInWithPassword({ email, password });
     if (error) {
+      const isUnconfirmed =
+        error.message === 'Email not confirmed' ||
+        /not confirmed/i.test(error.message) ||
+        /confirmation/i.test(error.message);
+
       return {
         success: false,
-        error:
-          error.message === 'Email not confirmed'
-            ? 'Please confirm your email address using the link we sent you, then sign in.'
-            : `Invalid ${parsed.kind === 'phone' ? 'phone number' : 'email'} or password.`,
+        error: isUnconfirmed
+          ? 'Email Verification Required: Please confirm your email address using the link or OTP code sent to your email, then sign in.'
+          : `Invalid ${parsed.kind === 'phone' ? 'phone number' : 'email'} or password. Please check your credentials.`,
       };
     }
 
@@ -868,6 +893,53 @@ export const cgaService = {
       return { success: false, error: 'Too many requests. Please wait a minute and try again.' };
     }
     return { success: true };
+  },
+
+  /** Verifies email recovery OTP code and updates user password in database */
+  async verifyRecoveryOtp(
+    email: string,
+    otp: string,
+    newPassword?: string
+  ): Promise<ServiceResult<{ message?: string }>> {
+    try {
+      const res = await fetch('/api/auth/verify-recovery-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          otp: otp.trim(),
+          newPassword,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        return { success: false, error: data.error || 'Invalid or expired OTP code. Please check your email.' };
+      }
+      return { success: true, message: data.message };
+    } catch {
+      return { success: false, error: 'Network error verifying recovery OTP. Please try again.' };
+    }
+  },
+
+  /** Verifies student signup confirmation OTP code to activate account */
+  async verifySignupOtp(email: string, otp: string): Promise<ServiceResult<{ message?: string }>> {
+    try {
+      const res = await fetch('/api/auth/verify-signup-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          otp: otp.trim(),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        return { success: false, error: data.error || 'Invalid or expired confirmation code. Please check your email.' };
+      }
+      return { success: true, message: data.message };
+    } catch {
+      return { success: false, error: 'Network error verifying confirmation code. Please try again.' };
+    }
   },
 
   async updatePassword(newPassword: string): Promise<ServiceResult> {
@@ -1426,6 +1498,9 @@ export const cgaService = {
     utr: string;
     screenshotUrl?: string;
     remarks?: string;
+    referenceCode?: string;
+    itemType?: string;
+    itemId?: string;
   }): Promise<ServiceResult<{ receipt: FeePayment }>> {
     const sb = this.client();
 
@@ -1441,15 +1516,16 @@ export const cgaService = {
     }
 
     const isSeries =
+      p.itemType === 'mock_series' ||
       p.courseId.startsWith('series-') ||
       p.courseId.includes('mock') ||
       p.courseId.includes('ttet-2026') ||
       p.remarks?.includes('mock_series');
-    const isMaterial = p.courseId.startsWith('mat-') || p.remarks?.includes('material');
+    const isMaterial = p.itemType === 'material' || p.courseId.startsWith('mat-') || p.remarks?.includes('material');
 
     let courseIdForDb: string | null = null;
-    let itemTypeForDb = 'course';
-    let itemIdForDb = p.courseId;
+    let itemTypeForDb = p.itemType || (isSeries ? 'mock_series' : isMaterial ? 'material' : 'course');
+    let itemIdForDb = p.itemId || p.courseId;
 
     if (isSeries) {
       itemTypeForDb = 'mock_series';
@@ -1520,7 +1596,7 @@ export const cgaService = {
       } catch {}
     }
 
-    const receiptNo = `${PAYMENT_SETTINGS.receiptPrefix}${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const receiptNo = p.referenceCode || `${PAYMENT_SETTINGS.receiptPrefix}${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
     const newPayment: FeePayment = {
       id: `pay-${Date.now()}`,
@@ -1614,21 +1690,28 @@ export const cgaService = {
       }
     }
 
-    // 3. Fallback client-side state caching
+    // 3. Fallback client-side state caching (deduplicated against existing local records)
     try {
       if (typeof window !== 'undefined') {
         const stored = localStorage.getItem('cga_custom_payments');
         const list: FeePayment[] = stored ? JSON.parse(stored) : [];
-        list.unshift(newPayment);
-        localStorage.setItem('cga_custom_payments', JSON.stringify(list));
+        const filteredList = list.filter(
+          (item) => item.receiptNo !== receiptNo && item.id !== newPayment.id && !(item.studentId === effectiveStudentId && item.utr === p.utr)
+        );
+        filteredList.unshift(newPayment);
+        localStorage.setItem('cga_custom_payments', JSON.stringify(filteredList));
 
         const storedRequests = JSON.parse(localStorage.getItem('cga_payment_requests') || '[]');
-        storedRequests.unshift({
+        const filteredRequests = storedRequests.filter(
+          (r: any) => r.referenceCode !== receiptNo && r.reference_code !== receiptNo && !(r.studentId === effectiveStudentId && r.utr === p.utr)
+        );
+        filteredRequests.unshift({
           id: paymentRequestId || newPayment.id,
           studentId: effectiveStudentId,
           studentName: p.studentName || 'Student',
           itemType: itemTypeForDb,
           itemId: itemIdForDb,
+          itemTitle: p.courseName || newPayment.courseName,
           paymentType: p.paymentType === 'Instalment 1' ? 'instalment_1' : 'full',
           expectedAmount: p.amount,
           referenceCode: receiptNo,
@@ -1641,7 +1724,7 @@ export const cgaService = {
           createdAt: new Date().toISOString(),
           expiresAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
         });
-        localStorage.setItem('cga_payment_requests', JSON.stringify(storedRequests));
+        localStorage.setItem('cga_payment_requests', JSON.stringify(filteredRequests));
       }
     } catch {}
 
