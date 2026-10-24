@@ -603,6 +603,12 @@ export const cgaService = {
       if (/user already registered/i.test(msg) || /already exists/i.test(msg) || /identity/i.test(msg)) {
         return { success: false, error: 'An account with this email address already exists. Please sign in.' };
       }
+      if (/rate limit/i.test(msg)) {
+        return {
+          success: false,
+          error: 'Verification email limit reached for this hour. Please wait a few minutes before trying again.',
+        };
+      }
       if (/database error/i.test(msg)) {
         const phone = meta.phone ? normalizePhone(meta.phone) : '';
         const phoneTaken = phone ? !(await this.isPhoneAvailable(phone)) : false;
