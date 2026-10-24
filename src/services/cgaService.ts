@@ -466,7 +466,7 @@ export const cgaService = {
   async login(identifier: string, password: string): Promise<ServiceResult<{ session: AuthSession }>> {
     const sb = this.client();
     const parsed = parseIdentifier(identifier);
-    if (!parsed) return { success: false, error: 'Enter a valid email address or 10-digit mobile number.' };
+    if (!parsed) return { success: false, error: 'Enter a valid registered email address.' };
 
     let email = parsed.value;
     if (parsed.kind === 'phone') {
@@ -517,7 +517,7 @@ export const cgaService = {
         success: false,
         error: isUnconfirmed
           ? 'Email Verification Required: Please confirm your email address using the link or OTP code sent to your email, then sign in.'
-          : `Invalid ${parsed.kind === 'phone' ? 'phone number' : 'email'} or password. Please check your credentials.`,
+          : 'Invalid email address or password. Please check your credentials.',
       };
     }
 

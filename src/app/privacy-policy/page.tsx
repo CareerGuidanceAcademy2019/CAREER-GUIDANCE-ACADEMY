@@ -201,8 +201,8 @@ export default function PrivacyPolicyPage() {
               If you have inquiries, complaints, or wish to exercise your data privacy rights, you may directly contact our designated Data Protection &amp; Grievance Redressal Officer:
             </p>
             <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-2">
-              <h3 className="font-extrabold text-sm text-[#0a0e2a]">Mr. S. Banik</h3>
-              <p className="text-xs text-slate-500">Designated Grievance Officer &amp; Academic Administrator</p>
+              <h3 className="font-extrabold text-sm text-[#0a0e2a]">Mr. Tridip Sarkar</h3>
+              <p className="text-xs text-slate-500">Designated Data Protection Officer (DPDP) &amp; Grievance Redressal Officer</p>
               <div className="pt-2 space-y-1 text-xs text-slate-700">
                 <p className="flex items-center gap-2">
                   <Mail className="w-4 h-4 text-[#0056b3]" />

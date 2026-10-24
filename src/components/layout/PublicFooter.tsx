@@ -218,7 +218,7 @@ export function PublicFooter({ variant = 'default' }: PublicFooterProps) {
           <div>
             <span className="font-bold text-white uppercase tracking-wider block mb-2">Data Protection Officer</span>
             <p className="text-slate-400 leading-relaxed">
-              Designated Grievance &amp; DPDP Officer: <strong>S. Banik</strong><br />
+              Designated Grievance &amp; DPDP Officer: <strong>Tridip Sarkar</strong><br />
               Email:{' '}
               <a href="mailto:careerguidanceacademy2019@gmail.com" className="hover:text-amber-400 underline">
                 careerguidanceacademy2019@gmail.com
