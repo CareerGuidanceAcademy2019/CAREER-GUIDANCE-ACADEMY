@@ -17,6 +17,7 @@ import {
   Calendar,
   Lock,
   Eye,
+  X,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
 
@@ -439,9 +440,10 @@ export function MockTestStorageMeter() {
               <button
                 type="button"
                 onClick={() => setPurgeTarget(null)}
-                className="text-slate-400 hover:text-slate-600 text-sm font-bold p-1 cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                aria-label="Close modal"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 
@@ -520,9 +522,10 @@ export function MockTestStorageMeter() {
               <button
                 type="button"
                 onClick={() => setExtendTarget(null)}
-                className="text-slate-400 hover:text-slate-600 text-sm font-bold p-1 cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                aria-label="Close modal"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 

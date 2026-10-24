@@ -30,6 +30,7 @@ import {
   AdminRegisterPayload,
   ServiceResult,
 } from '@/services/cgaService';
+import { CgaLoadingScreen } from '@/components/ui/CgaLoadingScreen';
 
 export interface ToastNotice {
   id: string;
@@ -47,6 +48,11 @@ interface CgaContextType {
   showToast: (title: string, message?: string, type?: 'success' | 'error' | 'info') => void;
   dismissToast: (id: string) => void;
   refresh: () => Promise<void>;
+
+  // Site-wide Single-Submission & Loading Gate
+  isGlobalLoading: boolean;
+  setIsGlobalLoading: (loading: boolean) => void;
+  withSingleSubmit: <T>(action: () => Promise<T>, options?: { showGlobalLoader?: boolean }) => Promise<T | undefined>;
 
   // Auth actions
   login: (identifier: string, password: string) => Promise<{ success: boolean; session?: AuthSession; error?: string }>;
@@ -164,7 +170,40 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
   const [toasts, setToasts] = useState<ToastNotice[]>([]);
+  const [isGlobalLoading, setIsGlobalLoading] = useState(false);
   const sessionRef = useRef<AuthSession | null>(null);
+  const isActionLockedRef = useRef(false);
+
+  /**
+   * withSingleSubmit guarantees that an asynchronous user action
+   * (form submit, payment verification, attempt submission, enrollment, etc.)
+   * can only be triggered once at a time.
+   * If a second request arrives while one is in-flight, it is dropped immediately.
+   * While running, it displays the CGA loading screen (CGA logo + circular ring)
+   * with full pointer-event blocking so duplicate clicks are physically impossible.
+   */
+  const withSingleSubmit = useCallback(
+    async <T,>(action: () => Promise<T>, options?: { showGlobalLoader?: boolean }): Promise<T | undefined> => {
+      if (isActionLockedRef.current) {
+        console.warn('[CgaContext] Blocked duplicate submission: another request is in progress.');
+        return undefined;
+      }
+      isActionLockedRef.current = true;
+      const showLoader = options?.showGlobalLoader !== false;
+      if (showLoader) {
+        setIsGlobalLoading(true);
+      }
+      try {
+        return await action();
+      } finally {
+        isActionLockedRef.current = false;
+        if (showLoader) {
+          setIsGlobalLoading(false);
+        }
+      }
+    },
+    []
+  );
 
   const showToast = useCallback(
     (title: string, message?: string, type: 'success' | 'error' | 'info' = 'success') => {
@@ -236,63 +275,75 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
   // ---------------- Auth ----------------
   const login = useCallback(
     async (identifier: string, password: string) => {
-      const res = await cgaService.login(identifier, password);
-      if (res.success && res.session) {
-        await applySession(res.session);
-        const portal =
-          res.session.role === 'ADMIN' ? 'Admin Portal' : res.session.role === 'FACULTY' ? 'Faculty Portal' : 'Student Portal';
-        showToast(`Welcome back, ${res.session.name}!`, `Logged into ${portal}.`, 'success');
-      }
-      return { success: !!res.success, session: res.session, error: res.error };
+      const res = await withSingleSubmit(async () => {
+        const r = await cgaService.login(identifier, password);
+        if (r.success && r.session) {
+          await applySession(r.session);
+          const portal =
+            r.session.role === 'ADMIN' ? 'Admin Portal' : r.session.role === 'FACULTY' ? 'Faculty Portal' : 'Student Portal';
+          showToast(`Welcome back, ${r.session.name}!`, `Logged into ${portal}.`, 'success');
+        }
+        return { success: !!r.success, session: r.session, error: r.error };
+      });
+      return res || { success: false, error: 'A login request is already being processed. Please wait.' };
     },
-    [applySession, showToast]
+    [applySession, showToast, withSingleSubmit]
   );
 
   const registerStudent = useCallback(
     async (payload: RegisterPayload) => {
-      const res = await cgaService.registerStudent(payload);
-      if (res.success && res.session) {
-        await applySession(res.session);
-        showToast('Registration Successful!', `Welcome to Career Guidance Academy, ${payload.name}.`, 'success');
-      }
-      return { success: !!res.success, error: res.error, needsEmailConfirmation: res.needsEmailConfirmation };
+      const res = await withSingleSubmit(async () => {
+        const r = await cgaService.registerStudent(payload);
+        if (r.success && r.session) {
+          await applySession(r.session);
+          showToast('Registration Successful!', `Welcome to Career Guidance Academy, ${payload.name}.`, 'success');
+        }
+        return { success: !!r.success, error: r.error, needsEmailConfirmation: r.needsEmailConfirmation };
+      });
+      return res || { success: false, error: 'Registration request is already being processed. Please wait.' };
     },
-    [applySession, showToast]
+    [applySession, showToast, withSingleSubmit]
   );
 
   const registerFaculty = useCallback(
     async (payload: FacultyRegisterPayload) => {
-      const res = await cgaService.registerFaculty(payload);
-      if (res.success && res.session) {
-        await applySession(res.session);
-        showToast('Faculty Account Ready', `Welcome to the C.G.A faculty team, ${payload.name}.`, 'success');
-      }
-      return {
-        success: !!res.success,
-        error: res.error,
-        needsEmailConfirmation: res.needsEmailConfirmation,
-        session: res.session,
-      };
+      const res = await withSingleSubmit(async () => {
+        const r = await cgaService.registerFaculty(payload);
+        if (r.success && r.session) {
+          await applySession(r.session);
+          showToast('Faculty Account Ready', `Welcome to the C.G.A faculty team, ${payload.name}.`, 'success');
+        }
+        return {
+          success: !!r.success,
+          error: r.error,
+          needsEmailConfirmation: r.needsEmailConfirmation,
+          session: r.session,
+        };
+      });
+      return res || { success: false, error: 'Faculty registration is already being processed.' };
     },
-    [applySession, showToast]
+    [applySession, showToast, withSingleSubmit]
   );
 
   const registerAdmin = useCallback(
     async (payload: AdminRegisterPayload) => {
-      const res = await cgaService.registerAdmin(payload);
-      if (res.success && res.session) {
-        await applySession(res.session);
-        showToast('Admin Access Activated', `Welcome, ${payload.name}.`, 'success');
-      }
-      return {
-        success: !!res.success,
-        error: res.error,
-        needsEmailConfirmation: res.needsEmailConfirmation,
-        session: res.session,
-        pendingApproval: (res as any).pendingApproval,
-      };
+      const res = await withSingleSubmit(async () => {
+        const r = await cgaService.registerAdmin(payload);
+        if (r.success && r.session) {
+          await applySession(r.session);
+          showToast('Admin Access Activated', `Welcome, ${payload.name}.`, 'success');
+        }
+        return {
+          success: !!r.success,
+          error: r.error,
+          needsEmailConfirmation: r.needsEmailConfirmation,
+          session: r.session,
+          pendingApproval: (r as any).pendingApproval,
+        };
+      });
+      return res || { success: false, error: 'Admin registration is already being processed.' };
     },
-    [applySession, showToast]
+    [applySession, showToast, withSingleSubmit]
   );
 
   const logout = useCallback(async () => {
@@ -512,220 +563,232 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
 
   const submitPaymentVerification = useCallback<CgaContextType['submitPaymentVerification']>(
     async (params) => {
-      const crs = db.courses.find((c) => c.id === params.courseId);
-      const srs = db.mockSeries.find((s) => s.id === params.courseId);
-      const studentId = sessionRef.current?.userId || 'std-1';
-      const studentName = sessionRef.current?.name || 'Student';
-      const courseName = params.courseName || crs?.name || srs?.name || 'Tripura TET Mock Test Series';
+      const res = await withSingleSubmit(async () => {
+        const crs = db.courses.find((c) => c.id === params.courseId);
+        const srs = db.mockSeries.find((s) => s.id === params.courseId);
+        const studentId = sessionRef.current?.userId || 'std-1';
+        const studentName = sessionRef.current?.name || 'Student';
+        const courseName = params.courseName || crs?.name || srs?.name || 'Tripura TET Mock Test Series';
 
-      const res = await cgaService.submitPaymentVerification({
-        studentId,
-        studentName,
-        courseId: params.courseId,
-        courseName,
-        amount: params.amount,
-        paymentMode: params.paymentMode,
-        paymentType: params.paymentType,
-        utr: params.utr,
-        screenshotUrl: params.screenshotUrl,
-        remarks: params.remarks,
-        referenceCode: params.referenceCode,
-        itemType: params.itemType,
-        itemId: params.itemId,
+        const r = await cgaService.submitPaymentVerification({
+          studentId,
+          studentName,
+          courseId: params.courseId,
+          courseName,
+          amount: params.amount,
+          paymentMode: params.paymentMode,
+          paymentType: params.paymentType,
+          utr: params.utr,
+          screenshotUrl: params.screenshotUrl,
+          remarks: params.remarks,
+          referenceCode: params.referenceCode,
+          itemType: params.itemType,
+          itemId: params.itemId,
+        });
+
+        if (!r.success || !r.receipt) {
+          showToast('Payment Submission Failed', r.error || 'Could not submit payment.', 'error');
+          return { success: false, error: r.error };
+        }
+
+        const receipt = r.receipt;
+        setDb((prev) => ({
+          ...prev,
+          feePayments: [receipt, ...prev.feePayments.filter((p) => p.id !== receipt.id)],
+        }));
+
+        showToast(
+          'Payment Submitted for Verification!',
+          `Tracking Ref: ${receipt.receiptNo}. Verification takes up to 6 hours.`,
+          'success'
+        );
+        return { success: true, receipt };
       });
-
-      if (!res.success || !res.receipt) {
-        showToast('Payment Submission Failed', res.error || 'Could not submit payment.', 'error');
-        return { success: false, error: res.error };
-      }
-
-      const receipt = res.receipt;
-      setDb((prev) => ({
-        ...prev,
-        feePayments: [receipt, ...prev.feePayments.filter((p) => p.id !== receipt.id)],
-      }));
-
-      showToast(
-        'Payment Submitted for Verification!',
-        `Tracking Ref: ${receipt.receiptNo}. Verification takes up to 6 hours.`,
-        'success'
-      );
-      return { success: true, receipt };
+      return res || { success: false, error: 'A payment verification request is already in progress. Please wait.' };
     },
-    [db.courses, db.mockSeries, showToast]
+    [db.courses, db.mockSeries, showToast, withSingleSubmit]
   );
 
   const approvePayment = useCallback(
     async (paymentId: string) => {
-      let targetPayment = db.feePayments.find((p) => p.id === paymentId || p.receiptNo === paymentId);
-      if (!targetPayment && typeof window !== 'undefined') {
-        try {
-          const customP = JSON.parse(localStorage.getItem('cga_custom_payments') || '[]');
-          targetPayment = customP.find((p: any) => p.id === paymentId || p.receiptNo === paymentId);
-        } catch {}
-      }
-      if (!targetPayment && typeof window !== 'undefined') {
-        try {
-          const reqs = JSON.parse(localStorage.getItem('cga_payment_requests') || '[]');
-          const r = reqs.find((item: any) => item.id === paymentId || item.referenceCode === paymentId);
-          if (r) {
-            targetPayment = {
-              id: r.id,
-              receiptNo: r.referenceCode,
-              studentId: r.studentId,
-              studentName: r.studentName || 'Student',
-              courseId: r.itemId,
-              courseName: r.itemId,
-              amount: r.amountReceived || r.expectedAmount,
-              paymentMode: r.paymentChannel === 'bank_transfer' ? 'Net Banking' : 'UPI',
-              paymentType: 'Full Payment',
-              date: new Date().toISOString().slice(0, 10),
-              status: 'Verified',
-              reviewedBy: sessionRef.current?.name || 'Administrator',
-              reviewedAt: new Date().toISOString(),
-              remarks: `Admin approved. Ref: ${r.referenceCode}`,
-            };
-          }
-        } catch {}
-      }
-
-      if (!targetPayment) return { success: false, error: 'Payment record not found.' };
-
-      await cgaService.approvePayment(paymentId, sessionRef.current?.name || 'CGA Administrator');
-
-      setDb((prev) => {
-        const paymentExists = prev.feePayments.some((p) => p.id === targetPayment!.id || p.receiptNo === targetPayment!.receiptNo);
-        const nextPayments = paymentExists
-          ? prev.feePayments.map((p) =>
-              p.id === targetPayment!.id || p.receiptNo === targetPayment!.receiptNo
-                ? {
-                    ...p,
-                    status: 'Verified' as const,
-                    reviewedBy: sessionRef.current?.name || 'Administrator',
-                    reviewedAt: new Date().toISOString(),
-                  }
-                : p
-            )
-          : [{ ...targetPayment!, status: 'Verified' as const }, ...prev.feePayments];
-
-        // Unlock enrollment / clear due for the student
-        const crs = prev.courses.find((c) => c.id === targetPayment.courseId);
-        const nextStudents = prev.students.map((st) => {
-          if (st.id === targetPayment.studentId) {
-            const existingEnr = st.enrollments.find((e) => e.courseId === targetPayment.courseId);
-            if (existingEnr) {
-              const newPaid = existingEnr.paidAmount + targetPayment.amount;
-              const newDue = Math.max(0, existingEnr.totalFee - newPaid);
-              return {
-                ...st,
-                enrollments: st.enrollments.map((e) =>
-                  e.courseId === targetPayment.courseId
-                    ? { ...e, paidAmount: newPaid, dueAmount: newDue }
-                    : e
-                ),
+      const res = await withSingleSubmit(async () => {
+        let targetPayment = db.feePayments.find((p) => p.id === paymentId || p.receiptNo === paymentId);
+        if (!targetPayment && typeof window !== 'undefined') {
+          try {
+            const customP = JSON.parse(localStorage.getItem('cga_custom_payments') || '[]');
+            targetPayment = customP.find((p: any) => p.id === paymentId || p.receiptNo === paymentId);
+          } catch {}
+        }
+        if (!targetPayment && typeof window !== 'undefined') {
+          try {
+            const reqs = JSON.parse(localStorage.getItem('cga_payment_requests') || '[]');
+            const r = reqs.find((item: any) => item.id === paymentId || item.referenceCode === paymentId);
+            if (r) {
+              targetPayment = {
+                id: r.id,
+                receiptNo: r.referenceCode,
+                studentId: r.studentId,
+                studentName: r.studentName || 'Student',
+                courseId: r.itemId,
+                courseName: r.itemId,
+                amount: r.amountReceived || r.expectedAmount,
+                paymentMode: r.paymentChannel === 'bank_transfer' ? 'Net Banking' : 'UPI',
+                paymentType: 'Full Payment',
+                date: new Date().toISOString().slice(0, 10),
+                status: 'Verified',
+                reviewedBy: sessionRef.current?.name || 'Administrator',
+                reviewedAt: new Date().toISOString(),
+                remarks: `Admin approved. Ref: ${r.referenceCode}`,
               };
-            } else {
-              const totalFee = crs?.price || targetPayment.amount;
-              const paidAmount = targetPayment.amount;
-              const newEnrollment: StudentEnrollment = {
-                courseId: targetPayment.courseId,
-                courseName: targetPayment.courseName,
-                batchName: crs?.batchName || 'Regular Batch',
-                facultyName: crs?.facultyName || 'Faculty',
-                enrolledDate: new Date().toISOString().split('T')[0],
-                progress: 0,
-                totalFee,
-                paidAmount,
-                dueAmount: Math.max(0, totalFee - paidAmount),
-              };
-              return { ...st, enrollments: [...st.enrollments, newEnrollment] };
             }
-          }
-          return st;
+          } catch {}
+        }
+
+        if (!targetPayment) return { success: false, error: 'Payment record not found.' };
+
+        await cgaService.approvePayment(paymentId, sessionRef.current?.name || 'CGA Administrator');
+
+        setDb((prev) => {
+          const paymentExists = prev.feePayments.some((p) => p.id === targetPayment!.id || p.receiptNo === targetPayment!.receiptNo);
+          const nextPayments = paymentExists
+            ? prev.feePayments.map((p) =>
+                p.id === targetPayment!.id || p.receiptNo === targetPayment!.receiptNo
+                  ? {
+                      ...p,
+                      status: 'Verified' as const,
+                      reviewedBy: sessionRef.current?.name || 'Administrator',
+                      reviewedAt: new Date().toISOString(),
+                    }
+                  : p
+              )
+            : [{ ...targetPayment!, status: 'Verified' as const }, ...prev.feePayments];
+
+          // Unlock enrollment / clear due for the student
+          const crs = prev.courses.find((c) => c.id === targetPayment.courseId);
+          const nextStudents = prev.students.map((st) => {
+            if (st.id === targetPayment.studentId) {
+              const existingEnr = st.enrollments.find((e) => e.courseId === targetPayment.courseId);
+              if (existingEnr) {
+                const newPaid = existingEnr.paidAmount + targetPayment.amount;
+                const newDue = Math.max(0, existingEnr.totalFee - newPaid);
+                return {
+                  ...st,
+                  enrollments: st.enrollments.map((e) =>
+                    e.courseId === targetPayment.courseId
+                      ? { ...e, paidAmount: newPaid, dueAmount: newDue }
+                      : e
+                  ),
+                };
+              } else {
+                const totalFee = crs?.price || targetPayment.amount;
+                const paidAmount = targetPayment.amount;
+                const newEnrollment: StudentEnrollment = {
+                  courseId: targetPayment.courseId,
+                  courseName: targetPayment.courseName,
+                  batchName: crs?.batchName || 'Regular Batch',
+                  facultyName: crs?.facultyName || 'Faculty',
+                  enrolledDate: new Date().toISOString().split('T')[0],
+                  progress: 0,
+                  totalFee,
+                  paidAmount,
+                  dueAmount: Math.max(0, totalFee - paidAmount),
+                };
+                return { ...st, enrollments: [...st.enrollments, newEnrollment] };
+              }
+            }
+            return st;
+          });
+
+          const isSeries =
+            targetPayment.courseId.startsWith('series-') ||
+            prev.mockSeries.some((s) => s.id === targetPayment.courseId) ||
+            targetPayment.itemType === 'mock_series' ||
+            targetPayment.remarks?.includes('mock_series');
+
+          const nextSeriesEnrollments = isSeries
+            ? [
+                ...prev.seriesEnrollments.filter(
+                  (se) => !(se.studentId === targetPayment.studentId && se.seriesId === targetPayment.courseId)
+                ),
+                {
+                  id: `ser-enr-${Date.now()}`,
+                  studentId: targetPayment.studentId,
+                  seriesId: targetPayment.courseId,
+                  paymentId: targetPayment.id,
+                  enrolledAt: new Date().toISOString(),
+                  accessValidUntil: new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString(),
+                },
+              ]
+            : prev.seriesEnrollments;
+
+          return {
+            ...prev,
+            feePayments: nextPayments,
+            students: nextStudents,
+            seriesEnrollments: nextSeriesEnrollments,
+          };
         });
 
-        const isSeries =
-          targetPayment.courseId.startsWith('series-') ||
-          prev.mockSeries.some((s) => s.id === targetPayment.courseId) ||
-          targetPayment.itemType === 'mock_series' ||
-          targetPayment.remarks?.includes('mock_series');
-
-        const nextSeriesEnrollments = isSeries
-          ? [
-              ...prev.seriesEnrollments.filter(
-                (se) => !(se.studentId === targetPayment.studentId && se.seriesId === targetPayment.courseId)
-              ),
-              {
-                id: `ser-enr-${Date.now()}`,
-                studentId: targetPayment.studentId,
-                seriesId: targetPayment.courseId,
-                paymentId: targetPayment.id,
-                enrolledAt: new Date().toISOString(),
-                accessValidUntil: new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString(),
-              },
-            ]
-          : prev.seriesEnrollments;
-
-        return {
-          ...prev,
-          feePayments: nextPayments,
-          students: nextStudents,
-          seriesEnrollments: nextSeriesEnrollments,
-        };
+        showToast(
+          'Payment Approved & Verified!',
+          `Official Receipt ${targetPayment.receiptNo} confirmed. Student access unlocked!`,
+          'success'
+        );
+        return { success: true };
       });
-
-      showToast(
-        'Payment Approved & Verified!',
-        `Official Receipt ${targetPayment.receiptNo} confirmed. Student access unlocked!`,
-        'success'
-      );
-      return { success: true };
+      return res || { success: false, error: 'Payment approval is already in progress.' };
     },
-    [db.feePayments, showToast]
+    [db.feePayments, showToast, withSingleSubmit]
   );
 
   const rejectPayment = useCallback(
     async (paymentId: string, reason: string) => {
-      await cgaService.rejectPayment(paymentId, reason);
-      setDb((prev) => ({
-        ...prev,
-        feePayments: prev.feePayments.map((p) =>
-          p.id === paymentId
-            ? {
-                ...p,
-                status: 'Rejected' as const,
-                rejectionReason: reason,
-                reviewedAt: new Date().toISOString(),
-              }
-            : p
-        ),
-      }));
-      showToast('Payment Rejected', `Reason: ${reason}`, 'info');
-      return { success: true };
+      const res = await withSingleSubmit(async () => {
+        await cgaService.rejectPayment(paymentId, reason);
+        setDb((prev) => ({
+          ...prev,
+          feePayments: prev.feePayments.map((p) =>
+            p.id === paymentId
+              ? {
+                  ...p,
+                  status: 'Rejected' as const,
+                  rejectionReason: reason,
+                  reviewedAt: new Date().toISOString(),
+                }
+              : p
+          ),
+        }));
+        showToast('Payment Rejected', `Reason: ${reason}`, 'info');
+        return { success: true };
+      });
+      return res || { success: false, error: 'Payment rejection is already in progress.' };
     },
-    [showToast]
+    [showToast, withSingleSubmit]
   );
 
   const submitMockTestAttempt = useCallback<CgaContextType['submitMockTestAttempt']>(
     async ({ testId, answers, timeTakenMinutes }) => {
-      const res = await cgaService.submitAttempt(testId, answers, timeTakenMinutes);
-      if (!res.success || !res.attempt) {
-        showToast('Could not submit test', res.error, 'error');
-        return null;
-      }
-      const attempt: TestAttempt = {
-        ...res.attempt,
-        studentName: sessionRef.current?.name ?? '',
-      };
-      await refresh();
-      showToast(
-        'Mock Test Submitted!',
-        `You scored ${attempt.score}/${attempt.totalMarks}. Check your Batch Rank & solutions below.`,
-        'success'
-      );
-      return attempt;
+      const res = await withSingleSubmit(async () => {
+        const r = await cgaService.submitAttempt(testId, answers, timeTakenMinutes);
+        if (!r.success || !r.attempt) {
+          showToast('Could not submit test', r.error, 'error');
+          return null;
+        }
+        const attempt: TestAttempt = {
+          ...r.attempt,
+          studentName: sessionRef.current?.name ?? '',
+        };
+        await refresh();
+        showToast(
+          'Mock Test Submitted!',
+          `You scored ${attempt.score}/${attempt.totalMarks}. Check your Batch Rank & solutions below.`,
+          'success'
+        );
+        return attempt;
+      });
+      return res ?? null;
     },
-    [refresh, showToast]
+    [refresh, showToast, withSingleSubmit]
   );
 
   // ---------------- Admin ----------------
@@ -1135,35 +1198,38 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
     async (params) => {
       const studentId = session?.userId;
       if (!studentId) return null;
-      const res = await cgaService.submitMockAttempt(params);
-      if (!res.success) {
-        showToast('Submission Failed', res.error || 'Failed to submit test.', 'error');
-        return null;
-      }
-      const attempt: SeriesAttempt = {
-        id: res.id || `att-${Date.now()}`,
-        testId: params.testId,
-        studentId,
-        studentName: session?.name || 'Student',
-        startedAt: res.startedAt || new Date().toISOString(),
-        submittedAt: res.submittedAt || new Date().toISOString(),
-        answers: params.answers,
-        score: res.score ?? 0,
-        correctCount: res.correctCount ?? 0,
-        wrongCount: res.wrongCount ?? 0,
-        unattemptedCount: res.unattemptedCount ?? 0,
-        accuracy: res.accuracy ?? 0,
-        timeTakenSeconds: res.timeTakenSeconds ?? 0,
-        rank: res.rank ?? null,
-      };
-      setDb((prev) => ({
-        ...prev,
-        seriesAttempts: [attempt, ...prev.seriesAttempts.filter((a) => !(a.testId === params.testId && a.studentId === studentId))],
-      }));
-      showToast('Test Submitted!', `Score: ${attempt.score} / ${res.totalMarks ?? 30} (${attempt.accuracy}% accuracy)`, 'success');
-      return attempt;
+      const res = await withSingleSubmit(async () => {
+        const r = await cgaService.submitMockAttempt(params);
+        if (!r.success) {
+          showToast('Submission Failed', r.error || 'Failed to submit test.', 'error');
+          return null;
+        }
+        const attempt: SeriesAttempt = {
+          id: r.id || `att-${Date.now()}`,
+          testId: params.testId,
+          studentId,
+          studentName: session?.name || 'Student',
+          startedAt: r.startedAt || new Date().toISOString(),
+          submittedAt: r.submittedAt || new Date().toISOString(),
+          answers: params.answers,
+          score: r.score ?? 0,
+          correctCount: r.correctCount ?? 0,
+          wrongCount: r.wrongCount ?? 0,
+          unattemptedCount: r.unattemptedCount ?? 0,
+          accuracy: r.accuracy ?? 0,
+          timeTakenSeconds: r.timeTakenSeconds ?? 0,
+          rank: r.rank ?? null,
+        };
+        setDb((prev) => ({
+          ...prev,
+          seriesAttempts: [attempt, ...prev.seriesAttempts.filter((a) => !(a.testId === params.testId && a.studentId === studentId))],
+        }));
+        showToast('Test Submitted!', `Score: ${attempt.score} / ${r.totalMarks ?? 30} (${attempt.accuracy}% accuracy)`, 'success');
+        return attempt;
+      });
+      return res ?? null;
     },
-    [session, showToast]
+    [session, showToast, withSingleSubmit]
   );
 
   const saveAttemptProgress = useCallback(
@@ -1223,6 +1289,9 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
       value={{
         db,
         isHydrated,
+        isGlobalLoading,
+        setIsGlobalLoading,
+        withSingleSubmit,
         session,
         currentStudent,
         toasts,
@@ -1281,6 +1350,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
       }}
     >
       {children}
+      {isGlobalLoading && <CgaLoadingScreen fullScreen />}
     </CgaContext.Provider>
   );
 }

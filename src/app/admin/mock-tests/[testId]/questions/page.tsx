@@ -1089,7 +1089,8 @@ export default function AdminMockTestQuestionsPage() {
                         <div className="p-3.5 bg-white rounded-xl border border-purple-200 space-y-2">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <span className="text-xs font-extrabold text-purple-900 flex items-center gap-1.5">
-                              <span>📖 Passage #{linkedGroup.position}: {linkedGroup.imageAlt || 'Reading Comprehension'}</span>
+                              <BookOpen className="w-4 h-4 text-purple-700" />
+                              <span>Passage #{linkedGroup.position}: {linkedGroup.imageAlt || 'Reading Comprehension'}</span>
                             </span>
                             <div className="flex items-center gap-2 text-xs">
                               <button
@@ -2003,7 +2004,10 @@ or
                 Are you sure you want to delete all <strong className="text-slate-900">{questions.length} loaded questions</strong> from this test?
               </p>
               <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-800 space-y-1">
-                <p className="font-bold">⚠️ What will happen:</p>
+                <p className="font-bold flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4 text-red-600 inline" />
+                  <span>What will happen:</span>
+                </p>
                 <p>• All {questions.length} questions will be removed from your review screen.</p>
                 <p>• All linked comprehension passages will be unlinked and cleared.</p>
                 <p>• You can start fresh and paste or upload new question sets or comprehensions.</p>

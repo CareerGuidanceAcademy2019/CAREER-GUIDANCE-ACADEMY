@@ -30,6 +30,10 @@ import {
   Search,
   Filter,
   Layers,
+  Target,
+  GraduationCap,
+  Users,
+  ShieldCheck,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCga } from '@/context/CgaContext';
@@ -58,7 +62,7 @@ export interface MockSubjectGroup {
 
 export const ALL_MOCK_SUBJECT_GROUPS: MockSubjectGroup[] = [
   {
-    group: '🎯 Tripura TET: Paper-I 2026 (Classes I to V — ₹399 Dedicated Mock Series)',
+    group: 'Tripura TET: Paper-I 2026 (Classes I to V — ₹399 Dedicated Mock Series)',
     seriesId: 'series-ttet-paper1',
     defaultCourseId: 'crs-tet-1-online',
     items: [
@@ -113,7 +117,7 @@ export const ALL_MOCK_SUBJECT_GROUPS: MockSubjectGroup[] = [
     ],
   },
   {
-    group: '🔬 Tripura TET: Paper-II Science & Math (Classes VI to VIII — ₹499 Dedicated Series)',
+    group: 'Tripura TET: Paper-II Science & Math (Classes VI to VIII — ₹499 Dedicated Series)',
     seriesId: 'series-ttet-paper2-sci',
     defaultCourseId: 'crs-tet-2-sci-online',
     items: [
@@ -168,7 +172,7 @@ export const ALL_MOCK_SUBJECT_GROUPS: MockSubjectGroup[] = [
     ],
   },
   {
-    group: '📚 Tripura TET: Paper-II Social Studies (Classes VI to VIII — ₹499 Dedicated Series)',
+    group: 'Tripura TET: Paper-II Social Studies (Classes VI to VIII — ₹499 Dedicated Series)',
     seriesId: 'series-ttet-paper2-soc',
     defaultCourseId: 'crs-tet-2-sst-online',
     items: [
@@ -231,7 +235,7 @@ export const ALL_MOCK_SUBJECT_GROUPS: MockSubjectGroup[] = [
     ],
   },
   {
-    group: '🎓 TRBT STGT (Graduate Teachers Examination — ₹499 Series)',
+    group: 'TRBT STGT (Graduate Teachers Examination — ₹499 Series)',
     seriesId: 'series-stgt-soc',
     defaultCourseId: 'crs-stgt-sst-online',
     items: [
@@ -262,7 +266,7 @@ export const ALL_MOCK_SUBJECT_GROUPS: MockSubjectGroup[] = [
     ],
   },
   {
-    group: '🏛️ State Civil Services (TCS / TPS & TPSC Combined — ₹499/₹599 Series)',
+    group: 'State Civil Services (TCS / TPS & TPSC Combined — ₹499/₹599 Series)',
     seriesId: 'series-tpsc-combined',
     defaultCourseId: 'crs-tpsc-combined-online',
     items: [
@@ -301,7 +305,7 @@ export const ALL_MOCK_SUBJECT_GROUPS: MockSubjectGroup[] = [
     ],
   },
   {
-    group: '🏦 Central Competitive (Banking IBPS/SBI, SSC & Railway — ₹399 Series)',
+    group: 'Central Competitive (Banking IBPS/SBI, SSC & Railway — ₹399 Series)',
     seriesId: 'series-banking-ssc',
     defaultCourseId: 'crs-banking-online',
     items: [
@@ -340,7 +344,7 @@ export const ALL_MOCK_SUBJECT_GROUPS: MockSubjectGroup[] = [
     ],
   },
   {
-    group: '🏫 School Board Foundation (Classes VII to X — TBSE & CBSE — ₹299 Series)',
+    group: 'School Board Foundation (Classes VII to X — TBSE & CBSE — ₹299 Series)',
     seriesId: 'series-school-foundation',
     defaultCourseId: 'crs-school-10',
     items: [
@@ -1016,9 +1020,9 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
                   >
                     <option value="all">All Access Scopes</option>
-                    <option value="mock_series">🎯 Mock Test Series Only (Standalone)</option>
-                    <option value="course">🎓 Course Batch Only</option>
-                    <option value="combined">🤝 Combined Access (Series + Course)</option>
+                    <option value="mock_series">Mock Test Series Only (Standalone)</option>
+                    <option value="course">Course Batch Only</option>
+                    <option value="combined">Combined Access (Series + Course)</option>
                   </select>
                 </div>
 
@@ -1141,15 +1145,15 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                         <div className="flex flex-wrap items-center gap-1.5 pt-1">
                           {isMockOnly ? (
                             <span className="px-2 py-0.5 rounded-full bg-blue-50 text-[#0056b3] border border-blue-200 text-[10px] font-extrabold flex items-center gap-1">
-                              🎯 Mock Series Only
+                              <Target className="w-3 h-3" /> Mock Series Only
                             </span>
                           ) : isCourseOnly ? (
                             <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-extrabold flex items-center gap-1">
-                              🎓 Course Batch Only
+                              <GraduationCap className="w-3 h-3" /> Course Batch Only
                             </span>
                           ) : (
                             <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-800 border border-purple-200 text-[10px] font-extrabold flex items-center gap-1">
-                              🤝 Combined Access
+                              <Users className="w-3 h-3" /> Combined Access
                             </span>
                           )}
                           <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold flex items-center gap-1">
@@ -1744,7 +1748,8 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                     <div>
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-extrabold text-[#0a0e2a] flex items-center gap-1.5">
-                          🎯 Mock Series Only
+                          <Target className="w-3.5 h-3.5 text-[#0056b3]" />
+                          <span>Mock Series Only</span>
                         </span>
                         {modalTargetScope === 'mock_series_only' && <Check className="w-3.5 h-3.5 text-[#0056b3]" />}
                       </div>
@@ -1778,7 +1783,8 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                     <div>
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-extrabold text-[#0a0e2a] flex items-center gap-1.5">
-                          🎓 Course Batch Only
+                          <GraduationCap className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Course Batch Only</span>
                         </span>
                         {modalTargetScope === 'course_only' && <Check className="w-3.5 h-3.5 text-[#0056b3]" />}
                       </div>
@@ -1816,7 +1822,8 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                     <div>
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-extrabold text-[#0a0e2a] flex items-center gap-1.5">
-                          🤝 Combined Access
+                          <Users className="w-3.5 h-3.5 text-purple-600" />
+                          <span>Combined Access</span>
                         </span>
                         {modalTargetScope === 'combined' && <Check className="w-3.5 h-3.5 text-[#0056b3]" />}
                       </div>
@@ -2020,8 +2027,9 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
               <div className="sm:col-span-2 p-3.5 rounded-2xl bg-gradient-to-r from-blue-900 to-indigo-900 text-white shadow-sm flex items-start gap-3">
                 <Lock className="w-4 h-4 text-amber-300 shrink-0 mt-0.5" />
                 <div className="space-y-1 text-xs">
-                  <span className="font-extrabold text-amber-300 block">
-                    🛡️ Strict Enrolled-Only Access Guarantee Enforced
+                  <span className="font-extrabold text-amber-300 flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-amber-300" />
+                    Strict Enrolled-Only Access Guarantee Enforced
                   </span>
                   <p className="text-slate-200 text-[11px] leading-relaxed">
                     {modalTargetScope === 'mock_series_only' && (
@@ -2712,8 +2720,8 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                   onChange={(e) => setEditingPost({ ...editingPost, isEnrolledOnly: e.target.checked })}
                   className="w-4 h-4 rounded text-[#0056b3] border-slate-300"
                 />
-                <span className="text-xs font-bold text-slate-800">
-                  Restrict to Enrolled Students Only 🔒
+                <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  Restrict to Enrolled Students Only <Lock className="w-3.5 h-3.5 text-slate-600" />
                 </span>
               </label>
 

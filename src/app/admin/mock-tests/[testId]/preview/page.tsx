@@ -22,6 +22,7 @@ import {
   Check,
   HelpCircle,
   FileText,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
 import { MathText } from '@/components/ui/MathText';
@@ -762,13 +763,13 @@ export default function AdminMockTestPreviewPage() {
               <div className="grid grid-cols-2 gap-2 text-[11px] font-semibold text-slate-600">
                 <div className="flex items-center gap-2">
                   <span className="w-4 h-4 rounded-md bg-emerald-600 text-white text-[10px] flex items-center justify-center font-bold">
-                    ✓
+                    <Check className="w-2.5 h-2.5" />
                   </span>
                   <span>Answered</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="w-4 h-4 rounded-md bg-amber-500 text-white text-[10px] flex items-center justify-center font-bold">
-                    ⚑
+                    <Flag className="w-2.5 h-2.5" />
                   </span>
                   <span>Marked Review</span>
                 </div>
@@ -780,7 +781,7 @@ export default function AdminMockTestPreviewPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="w-4 h-4 rounded-md bg-blue-100 text-[#0056b3] text-[10px] flex items-center justify-center font-bold">
-                    🖼
+                    <ImageIcon className="w-2.5 h-2.5" />
                   </span>
                   <span>Has Diagram</span>
                 </div>
