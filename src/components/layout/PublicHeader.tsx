@@ -103,6 +103,7 @@ export function PublicHeader({ variant = 'default' }: PublicHeaderProps) {
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={true}
                 className={`px-3.5 py-2 rounded-xl text-sm font-semibold transition-all ${
                   isActive
                     ? 'bg-blue-50 text-[#0056b3] font-bold shadow-2xs'
@@ -121,6 +122,7 @@ export function PublicHeader({ variant = 'default' }: PublicHeaderProps) {
             <>
               <Link
                 href={PORTAL_HOME[session.role] ?? '/student/dashboard'}
+                prefetch={true}
                 className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold bg-[#0056b3] text-white hover:bg-[#1e3a8a] shadow-sm transition-all"
               >
                 {session.role === 'ADMIN' ? (
@@ -188,6 +190,7 @@ export function PublicHeader({ variant = 'default' }: PublicHeaderProps) {
                 <Link
                   key={item.href}
                   href={item.href}
+                  prefetch={true}
                   onClick={() => setMobileOpen(false)}
                   className={`px-3.5 py-2.5 rounded-xl text-sm font-semibold ${
                     isActive
@@ -205,6 +208,7 @@ export function PublicHeader({ variant = 'default' }: PublicHeaderProps) {
             {session ? (
               <Link
                 href={PORTAL_HOME[session.role] ?? '/student/dashboard'}
+                prefetch={true}
                 onClick={() => setMobileOpen(false)}
                 className="w-full py-3 rounded-xl text-center text-sm font-bold bg-[#0056b3] text-white"
               >
@@ -219,6 +223,7 @@ export function PublicHeader({ variant = 'default' }: PublicHeaderProps) {
               <div className="grid grid-cols-2 gap-2.5">
                 <Link
                   href="/login"
+                  prefetch={true}
                   onClick={() => setMobileOpen(false)}
                   className="py-2.5 rounded-xl text-center text-sm font-bold text-[#0056b3] bg-blue-50 border border-blue-200"
                 >
@@ -226,6 +231,7 @@ export function PublicHeader({ variant = 'default' }: PublicHeaderProps) {
                 </Link>
                 <Link
                   href="/register"
+                  prefetch={true}
                   onClick={() => setMobileOpen(false)}
                   className="py-2.5 rounded-xl text-center text-sm font-bold text-white bg-[#0056b3]"
                 >

@@ -16,11 +16,21 @@ const cspHeader = `
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  compress: true,
   allowedDevOrigins: [
     '*.trycloudflare.com',
   ],
   async headers() {
     return [
+      {
+        source: '/(.*\\.(?:png|jpg|jpeg|svg|webp|ico|woff2|woff))',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
       {
         source: '/(.*)',
         headers: [

@@ -393,12 +393,18 @@ const toSeriesAttempt = (r: Row, studentName: string, studentCode: string, stude
   rank: r.rank ?? null,
 });
 
-// In-memory cache to make page switching instantaneous across the portal
+// High-Speed Multi-Tier Cache (In-Memory + SessionStorage) with 5-minute TTL
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 let dbCache: { data: CgaDatabase; timestamp: number; sessionKey: string } | null = null;
 let pendingLoadPromise: Promise<CgaDatabase> | null = null;
 
 export function invalidateDbCache(): void {
   dbCache = null;
+  if (typeof window !== 'undefined') {
+    try {
+      sessionStorage.removeItem('cga_db_cache');
+    } catch {}
+  }
 }
 
 // ---------------------------------------------------------------- service
@@ -971,12 +977,26 @@ export const cgaService = {
     const sessionKey = `${session?.role || 'anon'}_${session?.userId || 'none'}`;
     const now = Date.now();
 
-    // 1. High-Speed Memory Cache: Return immediately (0ms) if data is recent (< 30s)
-    if (!forceRefresh && dbCache && dbCache.sessionKey === sessionKey && (now - dbCache.timestamp < 30000)) {
+    // 1. High-Speed Memory Cache: Return immediately (0ms) if data is recent (< 5 mins)
+    if (!forceRefresh && dbCache && dbCache.sessionKey === sessionKey && (now - dbCache.timestamp < CACHE_TTL_MS)) {
       return dbCache.data;
     }
 
-    // 2. Deduplicate concurrent in-flight fetches so multiple callers share 1 network request
+    // 2. High-Speed SessionStorage Cache: Instant across page reloads & new tabs (0.1ms)
+    if (!forceRefresh && typeof window !== 'undefined') {
+      try {
+        const stored = sessionStorage.getItem('cga_db_cache');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed && parsed.sessionKey === sessionKey && (now - parsed.timestamp < CACHE_TTL_MS)) {
+            dbCache = parsed;
+            return parsed.data;
+          }
+        }
+      } catch {}
+    }
+
+    // 3. Deduplicate concurrent in-flight fetches so multiple callers share 1 network request
     if (!forceRefresh && pendingLoadPromise) {
       return pendingLoadPromise;
     }
@@ -1340,6 +1360,19 @@ export const cgaService = {
       timestamp: Date.now(),
       sessionKey,
     };
+
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem(
+          'cga_db_cache',
+          JSON.stringify({
+            data: resultDb,
+            timestamp: Date.now(),
+            sessionKey,
+          })
+        );
+      } catch {}
+    }
 
     return resultDb;
       } finally {
