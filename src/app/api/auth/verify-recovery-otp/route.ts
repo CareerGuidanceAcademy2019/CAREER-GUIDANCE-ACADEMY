@@ -56,10 +56,10 @@ export async function POST(request: Request) {
 
     // Verify OTP using Supabase client
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://craicxwqaygdydtdaxtw.supabase.co';
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!supabaseAnonKey) {
-      return NextResponse.json({ error: 'Server authentication configuration missing.' }, { status: 500 });
-    }
+    const supabaseAnonKey =
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+      'sb_publishable_jXl_a3vn0Q7rEa6ADqzuzg_iBxBEX5c';
 
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {

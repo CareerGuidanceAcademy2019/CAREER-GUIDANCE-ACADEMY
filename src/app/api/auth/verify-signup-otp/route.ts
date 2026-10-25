@@ -37,10 +37,10 @@ export async function POST(request: Request) {
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://craicxwqaygdydtdaxtw.supabase.co';
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!supabaseAnonKey) {
-      return NextResponse.json({ error: 'Server authentication configuration missing.' }, { status: 500 });
-    }
+    const supabaseAnonKey =
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+      'sb_publishable_jXl_a3vn0Q7rEa6ADqzuzg_iBxBEX5c';
 
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
@@ -82,11 +82,15 @@ export async function POST(request: Request) {
     }
 
     // Ensure profile status is Active
-    const admin = createAdminSupabase();
-    await admin
-      .from('profiles')
-      .update({ status: 'Active' })
-      .eq('id', verifyData.user.id);
+    try {
+      const admin = createAdminSupabase();
+      await admin
+        .from('profiles')
+        .update({ status: 'Active' })
+        .eq('id', verifyData.user.id);
+    } catch (e) {
+      console.warn('[verify-signup-otp] Profile activation notice:', e);
+    }
 
     return NextResponse.json({
       success: true,
