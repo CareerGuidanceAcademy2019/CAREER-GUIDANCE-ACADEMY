@@ -45,6 +45,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized. Please log in.' }, { status: 401 });
   }
 
+  const { data: isActive } = await supabaseServer.rpc('is_current_session_active');
+  if (isActive === false) {
+    return NextResponse.json({ error: 'Session superseded on another device. Please sign in again.' }, { status: 401 });
+  }
+
   const ip = getClientIp(request);
   const rateRes = await checkRateLimit(
     `student_img_${studentUser.id}_${ip}`,

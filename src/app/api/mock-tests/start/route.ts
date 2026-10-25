@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createServerSupabase, createAdminSupabase } from '@/lib/supabase/server';
+import { createServerSupabase, createAdminSupabase, requireActiveSession } from '@/lib/supabase/server';
 import { checkRateLimit, createRateLimitResponse, getClientIp, RATE_LIMIT_RULES } from '@/lib/rateLimit';
 import { INITIAL_SEED_DATA, MockQuestionOption, getOptionText } from '@/data/initialSeedData';
 
@@ -174,14 +174,11 @@ function getMatchingAllowedKeys(targetKey: string, title?: string): { keys: Set<
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized. Please sign in to appear for tests.' }, { status: 401 });
+    const active = await requireActiveSession();
+    if (!active) {
+      return NextResponse.json({ error: 'Unauthorized or session revoked on another device.' }, { status: 401 });
     }
+    const { user, supabase } = active;
 
     const ip = getClientIp(request);
     const rateRes = await checkRateLimit(

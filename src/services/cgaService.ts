@@ -468,51 +468,15 @@ export const cgaService = {
     };
   },
 
-  /** Sign in with an email OR a phone number plus password. */
+  /** Sign in with registered email address and password strictly. */
   async login(identifier: string, password: string): Promise<ServiceResult<{ session: AuthSession }>> {
     const sb = this.client();
-    const parsed = parseIdentifier(identifier);
-    if (!parsed) return { success: false, error: 'Enter a valid registered email address.' };
-
-    let email = parsed.value;
-    if (parsed.kind === 'phone') {
-      try {
-        const res = await fetch('/api/auth/resolve-phone', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: parsed.value }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (res.ok && data?.email) {
-          email = data.email;
-        } else {
-          const { data: rpcEmail } = await sb.rpc('resolve_login_email', {
-            p_identifier: parsed.value,
-            p_password: password,
-          });
-          if (rpcEmail) {
-            email = rpcEmail as string;
-          } else {
-            return {
-              success: false,
-              error: data?.error || 'No account found with this mobile number. Please check the number or sign in with your email.',
-            };
-          }
-        }
-      } catch {
-        const { data: rpcEmail } = await sb.rpc('resolve_login_email', {
-          p_identifier: parsed.value,
-          p_password: password,
-        });
-        if (rpcEmail) {
-          email = rpcEmail as string;
-        } else {
-          return { success: false, error: 'Invalid phone number or password.' };
-        }
-      }
+    const cleanEmail = identifier.trim().toLowerCase();
+    if (!isEmail(cleanEmail) || !password) {
+      return { success: false, error: 'Invalid email address or password. Please check your credentials.' };
     }
 
-    const { error } = await sb.auth.signInWithPassword({ email, password });
+    const { error } = await sb.auth.signInWithPassword({ email: cleanEmail, password });
     if (error) {
       const isUnconfirmed =
         error.message === 'Email not confirmed' ||
@@ -522,7 +486,7 @@ export const cgaService = {
       return {
         success: false,
         error: isUnconfirmed
-          ? 'Email Verification Required: Please confirm your email address using the link or OTP code sent to your email, then sign in.'
+          ? 'Email Verification Required: Please confirm your email address using the confirmation code sent to your email, then sign in.'
           : 'Invalid email address or password. Please check your credentials.',
       };
     }
@@ -558,6 +522,14 @@ export const cgaService = {
           error: pendingMsg,
         };
       }
+    } catch {}
+
+    // Enforce single active session: invalidate older sessions on other devices
+    try {
+      await sb.auth.signOut({ scope: 'others' });
+    } catch {}
+    try {
+      await sb.rpc('enforce_single_session');
     } catch {}
 
     const session = await this.getSession();
@@ -639,6 +611,12 @@ export const cgaService = {
       return { success: false, error: 'An account with this email address already exists. Please sign in.' };
     }
     if (!data.session) return { success: true, needsEmailConfirmation: true };
+    try {
+      await sb.auth.signOut({ scope: 'others' });
+    } catch {}
+    try {
+      await sb.rpc('enforce_single_session');
+    } catch {}
     const session = await this.getSession();
     return { success: true, session: session ?? undefined, needsEmailConfirmation: false };
   },
@@ -963,8 +941,17 @@ export const cgaService = {
   },
 
   async updatePassword(newPassword: string): Promise<ServiceResult> {
-    const { error } = await this.client().auth.updateUser({ password: newPassword });
-    return error ? { success: false, error: error.message } : { success: true };
+    const sb = this.client();
+    const { error } = await sb.auth.updateUser({ password: newPassword });
+    if (error) return { success: false, error: error.message };
+    // Password reset/updated: invalidate older sessions on other devices
+    try {
+      await sb.auth.signOut({ scope: 'others' });
+    } catch {}
+    try {
+      await sb.rpc('enforce_single_session');
+    } catch {}
+    return { success: true };
   },
 
   async logout(): Promise<void> {
@@ -975,6 +962,43 @@ export const cgaService = {
       } catch {}
     }
     await this.client().auth.signOut();
+  },
+
+  /** Check if current session ID is still valid in auth.sessions */
+  async isSessionActive(): Promise<boolean> {
+    try {
+      const { data, error } = await this.client().rpc('is_current_session_active');
+      if (error) return true; // Fail-open on transient network/RPC error
+      return data !== false;
+    } catch {
+      return true;
+    }
+  },
+
+  /** Log out all active sessions across all devices for current student */
+  async signoutAllDevices(): Promise<void> {
+    try {
+      await this.client().rpc('signout_all_devices');
+    } catch {}
+    await this.logout();
+  },
+
+  /** Administrator force sign out of a target student */
+  async adminForceSignoutStudent(studentId: string): Promise<ServiceResult> {
+    try {
+      const res = await fetch('/api/admin/students/force-signout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return { success: false, error: data?.error || 'Failed to force sign out student.' };
+      }
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Network error executing force sign out.' };
+    }
   },
 
   // ============ LOAD EVERYTHING THE CURRENT USER MAY SEE (RLS-filtered) ============
@@ -1189,6 +1213,7 @@ export const cgaService = {
         qualification: p.qualification ?? '',
         targetExam: p.target_exam ?? '',
         joinedDate: p.joined_date,
+        lastLoginAt: p.last_login_at ?? undefined,
         status: p.status,
         enrollments: enr,
       };

@@ -11,8 +11,10 @@ import {
   Trash2,
   X,
   Clock,
+  LogOut,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
+import { cgaService } from '@/services/cgaService';
 import { StudentProfile } from '@/data/initialSeedData';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { MaskedData } from '@/components/ui/MaskedData';
@@ -36,6 +38,25 @@ export default function AdminStudentsPage() {
   const [updatingEnrollmentId, setUpdatingEnrollmentId] = useState<string | null>(null);
   const [customValidityDates, setCustomValidityDates] = useState<Record<string, string>>({});
   const [currentTime] = useState(() => Date.now());
+  const [forceSignoutBusy, setForceSignoutBusy] = useState(false);
+
+  const handleForceSignout = async (studentId: string, studentName: string) => {
+    if (
+      !confirm(
+        `Are you sure you want to forcibly sign out ${studentName}? All their active sessions on other phones and computers will be revoked immediately.`
+      )
+    ) {
+      return;
+    }
+    setForceSignoutBusy(true);
+    const res = await cgaService.adminForceSignoutStudent(studentId);
+    setForceSignoutBusy(false);
+    if (res.success) {
+      showToast('Student Signed Out', `${studentName} was signed out from all devices.`, 'success');
+    } else {
+      showToast('Sign Out Failed', res.error || 'Failed to force sign out student.', 'error');
+    }
+  };
 
   const filteredStudents = db.students.filter((s) => {
     const matchStatus = statusFilter === 'All' || s.status === statusFilter;
@@ -673,11 +694,19 @@ export default function AdminStudentsPage() {
               )}
             </div>
 
-            {/* Permanent Candidate Purge Action */}
-            <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-              <span className="text-[11px] text-slate-400 font-semibold">
-                Permanent database removal
-              </span>
+            {/* Student Session & Database Removal Actions */}
+            <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+              <button
+                type="button"
+                id={`admin-force-signout-${inspectingStudent.id}`}
+                disabled={forceSignoutBusy}
+                onClick={() => handleForceSignout(inspectingStudent.id, inspectingStudent.name)}
+                className="px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer transition-colors disabled:opacity-60"
+              >
+                <LogOut className="w-3.5 h-3.5 text-amber-600" />
+                <span>{forceSignoutBusy ? 'Terminating…' : 'Force Sign Out Device'}</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => {

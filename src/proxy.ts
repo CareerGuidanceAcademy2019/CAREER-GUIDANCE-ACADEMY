@@ -105,6 +105,43 @@ export async function proxy(request: NextRequest) {
     return '/';
   };
 
+  // 3. Single-Session Enforcement: Reject invalidated sessions on protected pages and APIs
+  if (user && supabase) {
+    if (isProtected) {
+      try {
+        const { data: isActive } = await supabase.rpc('is_current_session_active');
+        if (isActive === false) {
+          const url = request.nextUrl.clone();
+          url.pathname = '/login';
+          url.search = '';
+          url.searchParams.set('reason', 'other_device');
+          const redirectRes = NextResponse.redirect(url);
+          request.cookies.getAll().forEach((c) => {
+            if (c.name.includes('-auth-token')) {
+              redirectRes.cookies.delete(c.name);
+            }
+          });
+          return redirectRes;
+        }
+      } catch {
+        // Fail-open for transient network drops on middleware
+      }
+    } else if (path.startsWith('/api/') && !path.startsWith('/api/auth/')) {
+      try {
+        const { data: isActive } = await supabase.rpc('is_current_session_active');
+        if (isActive === false) {
+          return NextResponse.json(
+            {
+              error: 'SESSION_REVOKED',
+              message: 'You were signed out because your account was used on another device.',
+            },
+            { status: 401 }
+          );
+        }
+      } catch {}
+    }
+  }
+
   if (isProtected && !user) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';

@@ -5,6 +5,7 @@ import { CgaProvider } from '@/context/CgaContext';
 import { ToastContainer } from '@/components/ui/ToastContainer';
 import { CookieConsentBanner } from '@/components/layout/CookieConsentBanner';
 import { GlobalNavigationLoader } from '@/components/layout/GlobalNavigationLoader';
+import { SessionHeartbeat } from '@/components/auth/SessionHeartbeat';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -54,6 +55,7 @@ export default function RootLayout({
       <body className="min-h-screen flex flex-col bg-white text-slate-900 antialiased">
         <CgaProvider>
           {children}
+          <SessionHeartbeat />
           <GlobalNavigationLoader />
           <ToastContainer />
           <CookieConsentBanner />

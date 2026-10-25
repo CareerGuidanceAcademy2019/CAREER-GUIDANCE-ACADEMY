@@ -19,8 +19,10 @@ import {
   Users,
   Sparkles,
   LayoutDashboard,
+  LogOut,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
+import { cgaService } from '@/services/cgaService';
 import { PasswordStrengthMeter } from '@/components/ui/PasswordStrengthMeter';
 import { evaluatePasswordStrength } from '@/lib/passwordPolicy';
 
@@ -54,6 +56,7 @@ export default function AdminProfilePage() {
   const [showNewPw, setShowNewPw] = useState(false);
   const [passwordError, setPasswordError] = useState('');
   const [passwordBusy, setPasswordBusy] = useState(false);
+  const [logoutAllBusy, setLogoutAllBusy] = useState(false);
 
   if (!session) return null;
 
@@ -322,6 +325,30 @@ export default function AdminProfilePage() {
               Change Password
             </button>
           </div>
+        </div>
+
+        {/* Active Sessions Sentinel */}
+        <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 text-slate-500">
+            <span className="font-semibold">Session Policy:</span>
+            <span className="font-bold text-slate-700">Single active administrator session enforced</span>
+          </div>
+          <button
+            type="button"
+            id="admin-logout-all-devices-btn"
+            disabled={logoutAllBusy}
+            onClick={async () => {
+              if (confirm('Are you sure you want to log out from all devices? All other active administrator sessions will be revoked immediately.')) {
+                setLogoutAllBusy(true);
+                await cgaService.signoutAllDevices();
+                window.location.href = '/login?as=admin';
+              }
+            }}
+            className="px-3.5 py-2 rounded-xl bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 font-bold text-xs cursor-pointer inline-flex items-center justify-center gap-1.5 transition-all disabled:opacity-60"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>{logoutAllBusy ? 'Signing out…' : 'Log out from all devices'}</span>
+          </button>
         </div>
       </div>
 

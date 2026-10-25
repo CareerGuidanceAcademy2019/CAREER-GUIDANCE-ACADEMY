@@ -257,6 +257,7 @@ export interface StudentProfile {
   qualification: string;
   targetExam: string;
   joinedDate: string;
+  lastLoginAt?: string;
   status: 'Active' | 'Inactive';
   enrollments: StudentEnrollment[];
 }

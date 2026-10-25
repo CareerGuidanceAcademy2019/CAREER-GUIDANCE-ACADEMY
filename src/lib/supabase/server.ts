@@ -41,15 +41,37 @@ export function createAdminSupabase() {
   });
 }
 
-/** Returns the caller's user id if they are an active admin, otherwise null. */
-export async function requireAdmin(): Promise<string | null> {
+/** Verifies that caller has an active single session and returns user id, role, user, and supabase client */
+export async function requireActiveSession(): Promise<{
+  userId: string;
+  role: string;
+  user: any;
+  supabase: any;
+} | null> {
   const supabase = await createServerSupabase();
   const { data } = await supabase.auth.getUser();
   if (!data.user) return null;
+
+  // Single-session check: verify caller session ID is still active in auth.sessions
+  const { data: isActive, error: rpcErr } = await supabase.rpc('is_current_session_active');
+  if (!rpcErr && isActive === false) {
+    return null;
+  }
+
   const { data: profile } = await supabase
     .from('profiles')
     .select('role,status')
     .eq('id', data.user.id)
     .single();
-  return profile?.role === 'admin' && profile.status === 'Active' ? data.user.id : null;
+
+  if (!profile || profile.status !== 'Active') return null;
+  return { userId: data.user.id, role: profile.role, user: data.user, supabase };
 }
+
+/** Returns the caller's user id if they are an active admin with an active session, otherwise null. */
+export async function requireAdmin(): Promise<string | null> {
+  const session = await requireActiveSession();
+  if (!session || session.role !== 'admin') return null;
+  return session.userId;
+}
+
