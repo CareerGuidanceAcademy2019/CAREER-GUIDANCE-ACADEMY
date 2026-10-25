@@ -175,3 +175,18 @@ This document logs sensible architectural choices made during the autonomous imp
      - Restore engine verifies all SHA-256 checksums from `manifest.json`, re-uploads diagrams to storage, and restores question rows with status set to Draft for administrative review.
 
 
+
+
+---
+
+### Decision 27: Strict Email & Password Authentication for Launch
+- **Context:** The login route previously supported mobile phone number resolution and inline OTP code entry, creating ambiguity and surface area for phone enumeration.
+- **Decision:** Removed all mobile phone resolution branches and inline OTP entry forms from `/login`. Authentication is now strictly `signInWithPassword({ email, password })`. Registration verification and password recovery continue to use 6-digit email OTPs on their respective pages (`/register` and `/forgot-password`). Login errors provide a generic, constant-time message (*"Invalid email address or password. Please check your credentials."*) to prevent user enumeration. Autocomplete attributes follow standard password manager conventions (`username` and `current-password`).
+
+### Decision 28: Database-Enforced Single Active Session Architecture
+- **Context:** Students could theoretically share account credentials or access an active session concurrently across multiple browser devices.
+- **Decision:** Implemented Option B (Native Session Revocation + Database Session Validator):
+  1. On login, `auth.sessions` is purged of any other active sessions for that user via an atomic `SECURITY DEFINER` function `enforce_single_session(current_session_id)` and `signOut({ scope: 'others' })`.
+  2. Database RPCs and sensitive operations (`submit_mock_attempt`, `cga_create_payment_request`, `cga_approve_payment`, question paper watermarking) call `public.is_current_session_active()` inside PostgreSQL to reject invalidated sessions immediately.
+  3. A lightweight client hook (`useSessionHeartbeat`) runs only on authenticated portal pages (active tab focus + 45s interval with backoff when hidden). If the session is invalidated by a newer login, it prompts the student (*"You were signed out because your account was used on another device."*) and clears cookies.
+  4. In-progress mock test attempts and answers remain safe in PostgreSQL; when logging in on the new device, the student can resume the test seamlessly using the server-calculated remaining time.
