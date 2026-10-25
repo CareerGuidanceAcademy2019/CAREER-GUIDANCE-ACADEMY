@@ -15,8 +15,6 @@ import {
   Eye,
   EyeOff,
   UserPlus,
-  CheckCircle2,
-  Sparkles,
 } from 'lucide-react';
 import { PublicHeader } from '@/components/layout/PublicHeader';
 import { PublicFooter } from '@/components/layout/PublicFooter';
@@ -91,10 +89,9 @@ function LoginInner() {
   const [busy, setBusy] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('STUDENT');
 
-  const [showInlineOtp, setShowInlineOtp] = useState(false);
-  const [inlineOtp, setInlineOtp] = useState('');
-  const [inlineOtpBusy, setInlineOtpBusy] = useState(false);
-  const [inlineOtpSuccess, setInlineOtpSuccess] = useState('');
+  const otherDeviceNotice = params.get('reason') === 'other_device'
+    ? 'You were signed out because your account was used on another device.'
+    : null;
 
   useEffect(() => {
     const t = params.get('as')?.toUpperCase();
@@ -102,28 +99,6 @@ function LoginInner() {
   }, [params]);
 
   const tab = TABS.find((t) => t.id === activeTab)!;
-
-  const handleVerifyInlineOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanOtp = inlineOtp.replace(/\D/g, '').trim();
-    if (cleanOtp.length < 6) {
-      setError('Please enter the 6-digit confirmation code sent to your email.');
-      return;
-    }
-
-    setInlineOtpBusy(true);
-    const targetEmail = identifier.trim().toLowerCase();
-    const res = await cgaService.verifySignupOtp(targetEmail, cleanOtp);
-    setInlineOtpBusy(false);
-    if (!res.success) {
-      setError(res.error || 'Invalid or expired confirmation code.');
-      return;
-    }
-
-    setInlineOtpSuccess('Email verified successfully! You can now sign in with your password.');
-    setError('');
-    setShowInlineOtp(false);
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -248,68 +223,17 @@ function LoginInner() {
                 />
               </div>
 
-              {inlineOtpSuccess && (
-                <div role="status" className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-start gap-2.5 text-xs font-semibold text-emerald-800">
-                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 mt-px" />
-                  <span>{inlineOtpSuccess}</span>
+              {otherDeviceNotice && (
+                <div role="status" className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-2.5 text-xs font-semibold text-amber-900">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 mt-px" />
+                  <span>{otherDeviceNotice}</span>
                 </div>
               )}
 
               {error && (
-                <div role="alert" className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs font-semibold text-[#dc2626] space-y-2">
-                  <div className="flex items-start gap-2.5">
-                    <AlertCircle className="w-4 h-4 shrink-0 mt-px" />
-                    <span>{error}</span>
-                  </div>
-                  {error.includes('Email Verification Required') && !showInlineOtp && (
-                    <div className="pt-2 border-t border-red-200/60 flex items-center justify-between gap-2">
-                      <span className="text-[11px] text-red-700">Received your 6-digit confirmation code?</span>
-                      <button
-                        type="button"
-                        onClick={() => setShowInlineOtp(true)}
-                        className="px-2.5 py-1 rounded-lg bg-[#0056b3] text-white text-[11px] font-bold hover:bg-[#1e3a8a] transition-all cursor-pointer"
-                      >
-                        Enter OTP Code
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {showInlineOtp && (
-                <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-extrabold text-[#0056b3] flex items-center gap-1.5">
-                      <KeyRound className="w-3.5 h-3.5" /> Enter 6-Digit Email Confirmation Code
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setShowInlineOtp(false)}
-                      className="text-[11px] text-slate-500 hover:text-slate-700"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={8}
-                      value={inlineOtp}
-                      onChange={(e) => setInlineOtp(e.target.value.replace(/\D/g, ''))}
-                      placeholder="6-digit code"
-                      className="flex-1 px-3 py-2 rounded-xl border border-blue-300 text-sm font-mono tracking-widest font-bold bg-white focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleVerifyInlineOtp}
-                      disabled={inlineOtpBusy}
-                      className="px-4 py-2 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] disabled:opacity-60 text-white font-bold text-xs shadow-xs transition-all cursor-pointer inline-flex items-center gap-1.5"
-                    >
-                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                      <span>{inlineOtpBusy ? 'Verifying…' : 'Verify Email'}</span>
-                    </button>
-                  </div>
+                <div role="alert" className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs font-semibold text-[#dc2626] flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-px" />
+                  <span>{error}</span>
                 </div>
               )}
 
@@ -323,7 +247,7 @@ function LoginInner() {
                     id="login-identifier"
                     type="email"
                     inputMode="email"
-                    autoComplete="email"
+                    autoComplete="username"
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
                     placeholder="student@example.com"
