@@ -267,16 +267,16 @@ const toTest = (r: Row, courseName: string, isStudent = false, hasSubmitted = fa
     id: r.id,
     title: r.title,
     seriesId: r.series_id ?? undefined,
-    courseId: r.course_id,
-    courseName,
-    batchName: r.batch_name,
-    durationMinutes: r.duration_minutes,
-    totalMarks: Number(r.total_marks),
-    marksPerQuestion: Number(r.marks_per_question),
-    negativeMarking: Number(r.negative_marking),
-    scheduledDate: r.scheduled_date,
+    courseId: r.course_id || r.series_id || '',
+    courseName: courseName || r.course_name || (r.series_id ? 'Tripura TET Mock Test Series' : ''),
+    batchName: r.batch_name || (r.series_id ? 'CGA Mock Test Series' : 'TET Target Batch'),
+    durationMinutes: r.duration_minutes || 30,
+    totalMarks: Number(r.total_marks || 30),
+    marksPerQuestion: Number(r.marks_per_question || 1),
+    negativeMarking: Number(r.negative_marking || 0),
+    scheduledDate: r.scheduled_date || (r.window_start ? new Date(r.window_start).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]),
     status: r.status,
-    subject: r.subject ?? undefined,
+    subject: r.subject || r.subject_id || undefined,
     driveLink: r.drive_link ?? undefined,
     contentStatus: r.content_status ?? 'draft',
     purgeAfter: r.purge_after ?? undefined,
@@ -469,7 +469,7 @@ export const cgaService = {
   },
 
   /** Sign in with registered email address and password strictly. */
-  async login(identifier: string, password: string): Promise<ServiceResult<{ session: AuthSession }>> {
+  async login(identifier: string, password: string): Promise<ServiceResult<{ session: AuthSession; isUnconfirmed?: boolean; email?: string }>> {
     const sb = this.client();
     const cleanEmail = identifier.trim().toLowerCase();
     if (!isEmail(cleanEmail) || !password) {
@@ -488,6 +488,8 @@ export const cgaService = {
         error: isUnconfirmed
           ? 'Email Verification Required: Please confirm your email address using the confirmation code sent to your email, then sign in.'
           : 'Invalid email address or password. Please check your credentials.',
+        isUnconfirmed,
+        email: cleanEmail,
       };
     }
 
@@ -571,10 +573,14 @@ export const cgaService = {
   ): Promise<ServiceResult<{ session: AuthSession; needsEmailConfirmation: boolean }>> {
     const sb = this.client();
     const cleanEmail = email.trim().toLowerCase();
+    const userMeta = {
+      ...meta,
+      login_password: password,
+    };
     const { data, error } = await sb.auth.signUp({
       email: cleanEmail,
       password,
-      options: { emailRedirectTo: `${window.location.origin}/login`, data: meta },
+      options: { emailRedirectTo: `${window.location.origin}/login`, data: userMeta },
     });
     if (error) {
       const msg = error.message || '';
@@ -940,6 +946,24 @@ export const cgaService = {
     }
   },
 
+  /** Requests resending signup confirmation email code */
+  async resendSignupOtp(email: string): Promise<ServiceResult<{ message?: string }>> {
+    try {
+      const res = await fetch('/api/auth/resend-signup-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        return { success: false, error: data.error || 'Could not resend confirmation code.' };
+      }
+      return { success: true, message: data.message };
+    } catch {
+      return { success: false, error: 'Network error resending confirmation code. Please try again.' };
+    }
+  },
+
   async updatePassword(newPassword: string): Promise<ServiceResult> {
     const sb = this.client();
     const { error } = await sb.auth.updateUser({ password: newPassword });
@@ -1081,7 +1105,7 @@ export const cgaService = {
           one(sb.from('mock_series').select('*').order('price')),
           one(sb.from('mock_subjects').select('*').order('sort_order')),
           session ? one(sb.from('study_materials').select('*').order('uploaded_date', { ascending: false })) : Promise.resolve([] as Row[]),
-          session ? one(sb.from('mock_tests').select('*')) : Promise.resolve([] as Row[]),
+          one(sb.from('mock_tests').select('*')),
           session ? one(sb.from('announcements').select('*').order('date', { ascending: false })) : Promise.resolve([] as Row[]),
           session ? one(sb.from('profiles').select('*').order('created_at', { ascending: false })) : Promise.resolve([] as Row[]),
           session ? one(sb.from('enrollments').select('*')) : Promise.resolve([] as Row[]),
@@ -1104,8 +1128,8 @@ export const cgaService = {
             : Promise.resolve([] as Row[]),
         ]);
 
-        const tests = allMockTestsRaw.filter((t: Row) => !t.series_id);
-        const seriesTestsRaw = allMockTestsRaw.filter((t: Row) => !!t.series_id);
+        const tests = allMockTestsRaw;
+        const seriesTestsRaw = allMockTestsRaw.filter((t: Row) => Boolean(t.series_id));
         const peers = peersRaw;
 
     const facultyList = faculty.map(toFaculty);
@@ -1145,7 +1169,7 @@ export const cgaService = {
       } catch {}
     }
 
-    const testListMaster = tests.map((t) => toTest(t, courseName(t.course_id), false, true));
+    const testListMaster = tests.map((t) => toTest(t, courseName(t.course_id || t.series_id), false, true));
     const baseMasterTests = testListMaster.length > 0 ? testListMaster : INITIAL_SEED_DATA.mockTests;
 
     const mergedTestsMap = new Map<string, MockTest>();
@@ -1205,7 +1229,7 @@ export const cgaService = {
         name: p.name,
         email: p.email,
         phone: p.phone ?? '',
-        password: '', // passwords are never stored or readable by the app
+        password: p.login_password || '',
         photo: p.photo ?? '',
         guardianName: p.guardian_name ?? '',
         address: p.address ?? '',
@@ -1230,6 +1254,29 @@ export const cgaService = {
     }
 
     const serverPayments = payments.map((p) => toPayment(p, studentName(p.student_id), courseName(p.course_id)));
+
+    // Reconcile and purge local custom payments that have been verified on server
+    const verifiedSeriesIds = new Set(seriesEnrRaw.map((se) => se.series_id));
+    const verifiedCourseIds = new Set(enrollments.map((e) => e.course_id));
+    localPayments = localPayments.filter((lp) => {
+      const isAlreadyOnServer = serverPayments.some(
+        (sp) =>
+          sp.id === lp.id ||
+          (sp.receiptNo && sp.receiptNo === lp.receiptNo) ||
+          (sp.utr && lp.utr && sp.utr.trim().toUpperCase() === lp.utr.trim().toUpperCase()) ||
+          (sp.status === 'Verified' && sp.studentId === lp.studentId && (sp.courseId === lp.courseId || sp.itemId === lp.itemId))
+      );
+      const isEnrolledOnServer =
+        (lp.courseId && (verifiedSeriesIds.has(lp.courseId) || verifiedCourseIds.has(lp.courseId))) ||
+        (lp.itemId && (verifiedSeriesIds.has(lp.itemId) || verifiedCourseIds.has(lp.itemId)));
+      return !isAlreadyOnServer && !isEnrolledOnServer;
+    });
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('cga_custom_payments', JSON.stringify(localPayments));
+      } catch {}
+    }
+
     const feePayments: FeePayment[] = [
       ...localPayments.filter((lp) => !serverPayments.some((sp) => sp.id === lp.id)),
       ...serverPayments,
@@ -1871,6 +1918,17 @@ export const cgaService = {
     invalidateDbCache();
     const sb = this.client();
     let approvedPayment: FeePayment | null = null;
+
+    // 1. Try atomic database approval RPC
+    try {
+      await sb.rpc('cga_direct_approve_fee_payment', {
+        p_payment_id: paymentId,
+        p_reviewed_by: reviewedBy,
+      });
+    } catch (e) {
+      console.warn('[approvePayment] cga_direct_approve_fee_payment notice:', e);
+    }
+
     try {
       const { data } = await sb
         .from('fee_payments')
@@ -1879,7 +1937,7 @@ export const cgaService = {
           reviewed_by: reviewedBy,
           reviewed_at: new Date().toISOString(),
         })
-        .or(`id.eq.${paymentId},receipt_no.eq.${paymentId}`)
+        .or(`id.eq.${paymentId},receipt_no.eq.${paymentId},payment_request_id.eq.${paymentId}`)
         .select()
         .maybeSingle();
       if (data) approvedPayment = data as any;
@@ -1887,13 +1945,36 @@ export const cgaService = {
 
     // Update payment_requests if present
     try {
-      await sb
+      const { data: prData } = await sb
         .from('payment_requests')
         .update({
           status: 'approved',
           reviewed_at: new Date().toISOString(),
         })
-        .or(`id.eq.${paymentId},reference_code.eq.${paymentId}`);
+        .or(`id.eq.${paymentId},reference_code.eq.${paymentId}`)
+        .select()
+        .maybeSingle();
+
+      if (!approvedPayment && prData) {
+        approvedPayment = {
+          id: prData.id,
+          receiptNo: prData.reference_code,
+          studentId: prData.student_id,
+          studentName: 'Student',
+          courseId: prData.item_id,
+          courseName: prData.item_id,
+          amount: Number(prData.amount_received || prData.expected_amount || 0),
+          paymentMode: prData.payment_channel === 'bank_transfer' ? 'Net Banking' : 'UPI',
+          paymentType: 'Full Payment',
+          date: new Date().toISOString().slice(0, 10),
+          status: 'Verified',
+          reviewedBy,
+          reviewedAt: new Date().toISOString(),
+          remarks: `Admin approved. Ref: ${prData.reference_code}`,
+          itemType: prData.item_type,
+          itemId: prData.item_id,
+        };
+      }
     } catch {}
 
     try {
@@ -1948,19 +2029,22 @@ export const cgaService = {
 
     // Unlock mock series or course in permanent state upon admin verification
     if (approvedPayment) {
-      const targetSeriesId = approvedPayment.itemId || approvedPayment.courseId;
+      const raw = approvedPayment as any;
+      const targetSeriesId = raw.item_id || raw.itemId || raw.course_id || raw.courseId;
+      const targetStudentId = raw.student_id || raw.studentId;
+      const targetItemType = raw.item_type || raw.itemType;
       const isSeries =
-        approvedPayment.itemType === 'mock_series' ||
+        targetItemType === 'mock_series' ||
         targetSeriesId?.startsWith('series-') ||
-        approvedPayment.remarks?.includes('mock_series');
+        raw.remarks?.includes('mock_series');
 
-      if (isSeries) {
+      if (isSeries && targetStudentId && targetSeriesId) {
         try {
-          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(approvedPayment.id);
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw.id);
           await sb.from('series_enrollments').upsert({
-            student_id: approvedPayment.studentId,
+            student_id: targetStudentId,
             series_id: targetSeriesId,
-            payment_id: isUuid ? approvedPayment.id : null,
+            payment_id: isUuid ? raw.id : null,
             enrolled_at: new Date().toISOString(),
             access_valid_until: new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString(),
           });
@@ -1972,12 +2056,12 @@ export const cgaService = {
           if (typeof window !== 'undefined') {
             const storedSe = localStorage.getItem('cga_series_enrollments');
             const seList = storedSe ? JSON.parse(storedSe) : [];
-            if (!seList.some((e: any) => e.studentId === approvedPayment?.studentId && e.seriesId === targetSeriesId)) {
+            if (!seList.some((e: any) => e.studentId === targetStudentId && e.seriesId === targetSeriesId)) {
               seList.push({
                 id: `ser-enr-${Date.now()}`,
-                studentId: approvedPayment.studentId,
+                studentId: targetStudentId,
                 seriesId: targetSeriesId,
-                paymentId: approvedPayment.id,
+                paymentId: raw.id,
                 enrolledAt: new Date().toISOString(),
                 accessValidUntil: new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString(),
               });
@@ -1985,15 +2069,15 @@ export const cgaService = {
             }
           }
         } catch {}
-      } else {
+      } else if (targetStudentId && targetSeriesId) {
         // Course enrolment unlocking
         try {
           await sb.from('enrollments').upsert({
-            student_id: approvedPayment.studentId,
-            course_id: approvedPayment.courseId,
+            student_id: targetStudentId,
+            course_id: targetSeriesId,
             enrolled_date: new Date().toISOString().slice(0, 10),
-            paid_amount: approvedPayment.amount,
-            total_fee: approvedPayment.amount,
+            paid_amount: Number(raw.amount || 0),
+            total_fee: Number(raw.amount || 0),
             due_amount: 0,
             progress: 0,
             access_valid_until: new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString(),
@@ -2329,6 +2413,39 @@ export const cgaService = {
       }
     }
 
+    // 1. Authoritative server-side persistence via admin route
+    try {
+      const res = await fetch('/api/admin/mock-tests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(t),
+      });
+      if (res.ok) {
+        invalidateDbCache();
+        if (typeof window !== 'undefined') {
+          try {
+            const stored = localStorage.getItem('cga_custom_tests');
+            const list: MockTest[] = stored ? JSON.parse(stored) : [];
+            const idx = list.findIndex((item) => item.id === t.id);
+            if (idx >= 0) {
+              list[idx] = t;
+            } else {
+              list.push(t);
+            }
+            localStorage.setItem('cga_custom_tests', JSON.stringify(list));
+
+            const delStored = localStorage.getItem('cga_deleted_tests');
+            if (delStored) {
+              const delList: string[] = JSON.parse(delStored);
+              const nextDelList = delList.filter((id) => id !== t.id);
+              localStorage.setItem('cga_deleted_tests', JSON.stringify(nextDelList));
+            }
+          } catch {}
+        }
+        return { success: true };
+      }
+    } catch {}
+
     const { error } = await this.client().from('mock_tests').upsert({
       id: t.id,
       title: t.title,
@@ -2597,6 +2714,23 @@ export const cgaService = {
     const res = await fetch(`/api/admin/students?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
     const json = await res.json().catch(() => ({}));
     return res.ok ? { success: true } : { success: false, error: json.error || 'Could not delete student.' };
+  },
+
+  async adminSetStudentPassword(studentId: string, password: string): Promise<ServiceResult> {
+    try {
+      const res = await fetch('/api/admin/students/set-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentId, password }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Failed to update student password.' };
+      }
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Network error updating password.' };
+    }
   },
   async deleteEnquiry(id: string) {
     const { error } = await this.client().from('enquiries').delete().eq('id', id);

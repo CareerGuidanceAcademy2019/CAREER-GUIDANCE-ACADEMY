@@ -38,7 +38,7 @@ export default function StudentMyLearningPage() {
   // Student's enrolled courses
   const enrollments: StudentEnrollment[] = currentStudent.enrollments || [];
 
-  // Student's enrolled mock test series IDs (checking db + localStorage)
+  // Student's enrolled mock test series IDs (checking db + localStorage + course derived)
   const enrolledSeriesIds: string[] = React.useMemo(() => {
     const fromDb = (db.seriesEnrollments || [])
       .filter((e) => e.studentId === currentStudent.id || e.studentId === 'me')
@@ -55,22 +55,52 @@ export default function StudentMyLearningPage() {
         }
       } catch {}
     }
-    return Array.from(new Set([...fromDb, ...fromLocal]));
-  }, [db.seriesEnrollments, currentStudent.id]);
+    const courseDerivedSeries: string[] = [];
+    enrollments.forEach((e) => {
+      if (e.courseId.includes('tet-1') || e.courseId.includes('paper1')) {
+        courseDerivedSeries.push('series-ttet-paper1');
+      }
+      if (e.courseId.includes('tet-2-sci') || e.courseId.includes('paper2-sci')) {
+        courseDerivedSeries.push('series-ttet-paper2-sci');
+      }
+      if (e.courseId.includes('tet-2-soc') || e.courseId.includes('tet-2-sst') || e.courseId.includes('tet-2-arts') || e.courseId.includes('paper2-soc')) {
+        courseDerivedSeries.push('series-ttet-paper2-soc');
+      }
+    });
+    return Array.from(new Set([...fromDb, ...fromLocal, ...courseDerivedSeries]));
+  }, [db.seriesEnrollments, currentStudent.id, enrollments]);
 
-  // Pending payments awaiting Admin verification
+  // Pending payments awaiting Admin verification (excluding courses/series student is already enrolled in)
   const pendingPayments: FeePayment[] = React.useMemo(() => {
+    const isEnrolledInItem = (itemId?: string) => {
+      if (!itemId) return false;
+      return (
+        enrolledSeriesIds.includes(itemId) ||
+        enrollments.some((e) => e.courseId === itemId)
+      );
+    };
+
     const listFromDb = (db.feePayments || []).filter(
-      (p) => (p.studentId === currentStudent.id || p.studentId === 'me') && p.status === 'Pending'
+      (p) =>
+        (p.studentId === currentStudent.id || p.studentId === 'me') &&
+        p.status === 'Pending' &&
+        !isEnrolledInItem(p.courseId || (p as any).itemId)
     );
     let localCustom: FeePayment[] = [];
     if (typeof window !== 'undefined') {
       try {
         const stored = localStorage.getItem('cga_custom_payments');
         if (stored) {
-          localCustom = (JSON.parse(stored) as FeePayment[]).filter(
-            (p) => (p.studentId === currentStudent.id || p.studentId === 'me') && p.status === 'Pending'
+          const parsed = JSON.parse(stored) as FeePayment[];
+          localCustom = parsed.filter(
+            (p) =>
+              (p.studentId === currentStudent.id || p.studentId === 'me') &&
+              p.status === 'Pending' &&
+              !isEnrolledInItem(p.courseId || (p as any).itemId)
           );
+          if (localCustom.length !== parsed.length) {
+            localStorage.setItem('cga_custom_payments', JSON.stringify(localCustom));
+          }
         }
       } catch {}
     }
@@ -78,7 +108,7 @@ export default function StudentMyLearningPage() {
     listFromDb.forEach((p) => map.set(p.id, p));
     localCustom.forEach((p) => map.set(p.id, p));
     return Array.from(map.values());
-  }, [db.feePayments, currentStudent.id]);
+  }, [db.feePayments, currentStudent.id, enrolledSeriesIds, enrollments]);
 
   // Check if student has special access or specific series enrollment
   const isSpecialAccess =
@@ -86,32 +116,33 @@ export default function StudentMyLearningPage() {
     (currentStudent as { seriesEnrolled?: boolean }).seriesEnrolled === true;
 
   // Determine which tests are enrolled for this student
-  // A test belongs to the student if:
-  // 1. Student is enrolled in the matching courseId
-  // 2. Student is enrolled in the series containing this test
-  // 3. Special admin test account
+  // A test belongs to the student if enrolled in matching course or series.
+  // Draft and unpublished tests are visible to enrolled students, but cannot be launched.
   const enrolledMockTests: MockTest[] = db.mockTests.filter((t) => {
     if (isSpecialAccess) return true;
-    const enrolledInCourse = enrollments.some((e) => e.courseId === t.courseId);
-    if (enrolledInCourse) return true;
+    if (t.courseId && enrollments.some((e) => e.courseId === t.courseId)) return true;
+    if (t.seriesId && enrolledSeriesIds.includes(t.seriesId)) return true;
+    if (t.courseId && enrolledSeriesIds.includes(t.courseId)) return true;
     const enrolledInSeries = enrolledSeriesIds.some((sId) => {
       const s = db.mockSeries.find((ms) => ms.id === sId);
       return (
-        t.courseId === sId ||
         (s && t.title.toLowerCase().includes(s.name.toLowerCase())) ||
         (sId === 'series-ttet-paper1' &&
-          (t.courseId === 'crs-tet-1-online' ||
-            t.title.toLowerCase().includes('paper-i') ||
+          (t.title.toLowerCase().includes('paper-i') ||
             t.title.toLowerCase().includes('paper 1') ||
-            t.courseId.includes('paper1'))) ||
+            t.courseId?.includes('paper1') ||
+            t.seriesId === 'series-ttet-paper1')) ||
         (sId === 'series-ttet-paper2-sci' &&
-          (t.courseId === 'crs-tet-2-sci-online' ||
-            t.title.toLowerCase().includes('science') ||
-            t.courseId.includes('paper2-sci'))) ||
+          (t.title.toLowerCase().includes('science') ||
+            t.title.toLowerCase().includes('math') ||
+            t.courseId?.includes('paper2-sci') ||
+            t.seriesId === 'series-ttet-paper2-sci')) ||
         (sId === 'series-ttet-paper2-soc' &&
-          (t.courseId === 'crs-tet-2-soc-online' ||
-            t.title.toLowerCase().includes('social') ||
-            t.courseId.includes('paper2-soc')))
+          (t.title.toLowerCase().includes('social') ||
+            t.title.toLowerCase().includes('arts') ||
+            t.title.toLowerCase().includes('sst') ||
+            t.courseId?.includes('paper2-soc') ||
+            t.seriesId === 'series-ttet-paper2-soc'))
       );
     });
     return enrolledInSeries;
@@ -593,7 +624,7 @@ export default function StudentMyLearningPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {filteredTests.map((test) => {
                 const pastAttempt = studentAttempts.find((a) => a.testId === test.id);
-                const isPublished = test.status === 'Published';
+                const isPublished = ['published', 'launched'].includes(String(test.status || '').toLowerCase());
                 const hasDriveLink = !!test.driveLink && test.driveLink.trim().length > 0;
 
                 return (
@@ -614,7 +645,7 @@ export default function StudentMyLearningPage() {
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold">
-                              <Lock className="w-3.5 h-3.5" /> Scheduled / Draft
+                              <Lock className="w-3.5 h-3.5" /> Unpublished / Draft
                             </span>
                           )}
                         </div>
@@ -699,8 +730,7 @@ export default function StudentMyLearningPage() {
                         ) : (
                           <div className="space-y-2">
                             <p className="text-xs text-slate-500">
-                              The administrator has not launched this test yet. The attempt test link
-                              will be activated as soon as the test is officially published.
+                              The administrator has not launched this test yet. You can see this scheduled mock test, but the attempt test link will be activated as soon as it is officially published by the admin.
                             </p>
                             <button
                               type="button"
@@ -708,7 +738,7 @@ export default function StudentMyLearningPage() {
                               className="w-full py-2.5 rounded-xl bg-slate-200 text-slate-400 text-xs font-bold cursor-not-allowed flex items-center justify-center gap-1.5"
                             >
                               <Lock className="w-3.5 h-3.5" />
-                              <span>Attempt Test (Locked until Published)</span>
+                              <span>Attempt Test (Unpublished - Launch Disabled)</span>
                             </button>
                           </div>
                         )}

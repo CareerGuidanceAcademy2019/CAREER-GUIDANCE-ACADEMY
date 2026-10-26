@@ -326,6 +326,17 @@ export default function StudentMockTestsPage() {
       return;
     }
 
+    const isPublished = ['published', 'launched'].includes((test.status || '').toLowerCase());
+    if (!isPublished) {
+      setIsStartingTest(false);
+      showToast(
+        'Test Not Launched Yet',
+        'This test has been prepared and scheduled by the administrator, but is currently unpublished. It will be enabled for attempting as soon as the admin publishes it.',
+        'info'
+      );
+      return;
+    }
+
     const matchingEnrollment = currentStudent.enrollments.find((e) => e.courseId === test.courseId);
     if (
       matchingEnrollment?.accessValidUntil &&
@@ -448,10 +459,18 @@ export default function StudentMockTestsPage() {
       }
 
       const match = db.mockTests.find((t) => t.id === testId);
-      if (match && match.status === 'Published') {
+      const isMatchPublished = ['published', 'launched'].includes((match?.status || '').toLowerCase());
+      if (match && isMatchPublished) {
         startTest(match);
       } else {
         setIsStartingTest(false);
+        if (match && !isMatchPublished) {
+          showToast(
+            'Test Not Launched Yet',
+            'This mock test is scheduled by the academy but not yet published. The attempt link will become active once published.',
+            'info'
+          );
+        }
       }
     }
   }, [searchParams, db.mockTests, activeTest, completedAttempt, myPastAttempts]);
@@ -1150,17 +1169,17 @@ export default function StudentMockTestsPage() {
   const paper2SocSeries = activeSeriesList.find((s) => s.id === 'series-ttet-paper2-soc') || MOCK_SERIES_INITIAL[2];
 
   const isP1Enrolled = isStudentEnrolledInSeries('series-ttet-paper1');
-  const isP1Pending = db.feePayments?.some(
+  const isP1Pending = !isP1Enrolled && db.feePayments?.some(
     (p) => p.studentId === currentStudent.id && p.courseId === 'series-ttet-paper1' && p.status === 'Pending'
   );
 
   const isP2SciEnrolled = isStudentEnrolledInSeries('series-ttet-paper2-sci');
-  const isP2SciPending = db.feePayments?.some(
+  const isP2SciPending = !isP2SciEnrolled && db.feePayments?.some(
     (p) => p.studentId === currentStudent.id && p.courseId === 'series-ttet-paper2-sci' && p.status === 'Pending'
   );
 
   const isP2SocEnrolled = isStudentEnrolledInSeries('series-ttet-paper2-soc');
-  const isP2SocPending = db.feePayments?.some(
+  const isP2SocPending = !isP2SocEnrolled && db.feePayments?.some(
     (p) => p.studentId === currentStudent.id && p.courseId === 'series-ttet-paper2-soc' && p.status === 'Pending'
   );
 

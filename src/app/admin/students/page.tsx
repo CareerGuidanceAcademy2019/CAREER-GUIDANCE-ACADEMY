@@ -6,6 +6,9 @@ import {
   Plus,
   Download,
   Eye,
+  EyeOff,
+  Copy,
+  KeyRound,
   Edit3,
   Power,
   Trash2,
@@ -23,6 +26,7 @@ export default function AdminStudentsPage() {
   const {
     db,
     saveStudent,
+    adminSetStudentPassword,
     toggleStudentStatus,
     deleteStudent,
     updateStudentEnrollmentDuration,
@@ -39,6 +43,44 @@ export default function AdminStudentsPage() {
   const [customValidityDates, setCustomValidityDates] = useState<Record<string, string>>({});
   const [currentTime] = useState(() => Date.now());
   const [forceSignoutBusy, setForceSignoutBusy] = useState(false);
+
+  // Student password visibility and reset state
+  const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
+  const [editShowPw, setEditShowPw] = useState(false);
+  const [resetPwTarget, setResetPwTarget] = useState<StudentProfile | null>(null);
+  const [newPwInput, setNewPwInput] = useState('');
+  const [resetPwBusy, setResetPwBusy] = useState(false);
+
+  const toggleRevealPassword = (studentId: string) => {
+    setRevealedPasswords((prev) => ({ ...prev, [studentId]: !prev[studentId] }));
+  };
+
+  const handleCopyPassword = (pw: string) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(pw);
+      showToast('Password Copied', 'Student login password copied to clipboard.', 'success');
+    }
+  };
+
+  const handleSetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetPwTarget || !newPwInput.trim()) return;
+    if (newPwInput.trim().length < 6) {
+      showToast('Validation Error', 'Password must be at least 6 characters.', 'error');
+      return;
+    }
+    setResetPwBusy(true);
+    const res = await adminSetStudentPassword(resetPwTarget.id, newPwInput.trim());
+    setResetPwBusy(false);
+    if (res.success) {
+      if (inspectingStudent && inspectingStudent.id === resetPwTarget.id) {
+        setInspectingStudent({ ...inspectingStudent, password: newPwInput.trim() });
+      }
+      setRevealedPasswords((prev) => ({ ...prev, [resetPwTarget.id]: true }));
+      setResetPwTarget(null);
+      setNewPwInput('');
+    }
+  };
 
   const handleForceSignout = async (studentId: string, studentName: string) => {
     if (
@@ -76,6 +118,7 @@ export default function AdminStudentsPage() {
       'Student Code',
       'Full Name',
       'Email',
+      'Login Password',
       'Phone',
       'Qualification',
       'Target Exam',
@@ -94,6 +137,7 @@ export default function AdminStudentsPage() {
         s.studentCode,
         `"${s.name}"`,
         s.email,
+        `"${s.password || ''}"`,
         `"${s.phone}"`,
         `"${s.qualification}"`,
         `"${s.targetExam}"`,
@@ -216,6 +260,7 @@ export default function AdminStudentsPage() {
 
     const payload: StudentProfile = {
       ...editingStudent,
+      password: editingStudent.password?.trim() || editingStudent.password || '',
       name: editingStudent.name.trim(),
       email: editingStudent.email.trim().toLowerCase(),
       phone: editingStudent.phone.trim(),
@@ -306,6 +351,7 @@ export default function AdminStudentsPage() {
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
                 <th className="py-3.5 px-4">Student</th>
                 <th className="py-3.5 px-4">Code & Contact</th>
+                <th className="py-3.5 px-4">Login Password</th>
                 <th className="py-3.5 px-4">Target Wing</th>
                 <th className="py-3.5 px-4">Batches</th>
                 <th className="py-3.5 px-4">Fee Status</th>
@@ -337,6 +383,58 @@ export default function AdminStudentsPage() {
                         {stu.studentCode}
                       </span>
                       <MaskedData value={stu.phone} type="phone" subjectId={stu.studentCode} className="text-slate-500 text-xs" />
+                    </td>
+                    <td className="py-3.5 px-4 whitespace-nowrap">
+                      {stu.password ? (
+                        <div className="inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2 py-1 rounded-lg">
+                          <span className="font-mono text-xs font-semibold text-slate-800 tracking-wider">
+                            {revealedPasswords[stu.id] ? stu.password : '••••••••'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => toggleRevealPassword(stu.id)}
+                            className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+                            title={revealedPasswords[stu.id] ? 'Hide Password' : 'Show Password'}
+                          >
+                            {revealedPasswords[stu.id] ? (
+                              <EyeOff className="w-3.5 h-3.5" />
+                            ) : (
+                              <Eye className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyPassword(stu.password || '')}
+                            className="p-1 text-slate-400 hover:text-[#0056b3] cursor-pointer"
+                            title="Copy Password"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setResetPwTarget(stu);
+                              setNewPwInput(stu.password || '');
+                            }}
+                            className="p-1 text-slate-400 hover:text-amber-600 cursor-pointer"
+                            title="Set / Change Password"
+                          >
+                            <KeyRound className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setResetPwTarget(stu);
+                            setNewPwInput('');
+                          }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 cursor-pointer"
+                          title="Set Login Password"
+                        >
+                          <KeyRound className="w-3 h-3 text-amber-600" /> Set Password
+                        </button>
+                      )}
                     </td>
                     <td className="py-3.5 px-4 font-semibold text-slate-700">{stu.targetExam}</td>
                     <td className="py-3.5 px-4 whitespace-nowrap">
@@ -500,6 +598,59 @@ export default function AdminStudentsPage() {
                   <span className="font-semibold text-slate-800">
                     {inspectingStudent.joinedDate}
                   </span>
+                </div>
+                <div className="bg-white p-3 rounded-xl border border-blue-100 sm:col-span-2 md:col-span-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 block uppercase">
+                        Candidate Login Password
+                      </span>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="font-mono font-bold text-sm text-slate-900 tracking-wider">
+                          {inspectingStudent.password
+                            ? revealedPasswords[inspectingStudent.id]
+                              ? inspectingStudent.password
+                              : '••••••••••••'
+                            : 'Not set yet'}
+                        </span>
+                        {inspectingStudent.password && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => toggleRevealPassword(inspectingStudent.id)}
+                              className="p-1 rounded-md text-slate-500 hover:text-slate-800 hover:bg-slate-100 cursor-pointer"
+                              title={revealedPasswords[inspectingStudent.id] ? 'Hide Password' : 'Show Password'}
+                            >
+                              {revealedPasswords[inspectingStudent.id] ? (
+                                <EyeOff className="w-4 h-4" />
+                              ) : (
+                                <Eye className="w-4 h-4" />
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyPassword(inspectingStudent.password || '')}
+                              className="p-1 rounded-md text-slate-500 hover:text-[#0056b3] hover:bg-slate-100 cursor-pointer"
+                              title="Copy Password"
+                            >
+                              <Copy className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setResetPwTarget(inspectingStudent);
+                        setNewPwInput(inspectingStudent.password || '');
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 text-xs font-bold cursor-pointer"
+                    >
+                      <KeyRound className="w-3.5 h-3.5 text-amber-600" />
+                      <span>{inspectingStudent.password ? 'Change / Reset Password' : 'Set Login Password'}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -839,6 +990,33 @@ export default function AdminStudentsPage() {
                   className="w-full px-3 py-2 rounded-xl border border-slate-200"
                 />
               </div>
+
+              <div className="sm:col-span-2 bg-blue-50/50 p-3 rounded-2xl border border-blue-100">
+                <label className="font-bold text-slate-800 block mb-1">
+                  Candidate Login Password {isNewStudent ? '(Optional - auto-generated if left blank)' : '(Change Password)'}
+                </label>
+                <div className="relative">
+                  <input
+                    type={editShowPw ? 'text' : 'password'}
+                    value={editingStudent.password || ''}
+                    onChange={(e) =>
+                      setEditingStudent({ ...editingStudent, password: e.target.value })
+                    }
+                    placeholder={isNewStudent ? 'Enter custom initial password or leave blank' : 'Enter new password'}
+                    className="w-full px-3 py-2 pr-10 rounded-xl border border-slate-200 font-mono text-xs bg-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setEditShowPw(!editShowPw)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
+                  >
+                    {editShowPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Admins can view and manage this login password anytime directly from the student table.
+                </p>
+              </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
@@ -854,6 +1032,77 @@ export default function AdminStudentsPage() {
                 className="px-5 py-2 rounded-xl bg-[#0056b3] text-white text-xs font-bold cursor-pointer"
               >
                 Save Student
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ==================== SET / RESET PASSWORD MODAL ==================== */}
+      {resetPwTarget && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/65 p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <form
+            onSubmit={handleSetPassword}
+            className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-200"
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-blue-50 text-[#0056b3]">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-[#0a0e2a]">Set Candidate Login Password</h3>
+                  <p className="text-xs text-slate-500">
+                    {resetPwTarget.name} ({resetPwTarget.studentCode})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResetPwTarget(null)}
+                className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <label className="font-bold text-slate-700 block">
+                New Login Password (Minimum 6 characters) *
+              </label>
+              <input
+                type="text"
+                required
+                minLength={6}
+                value={newPwInput}
+                onChange={(e) => setNewPwInput(e.target.value)}
+                placeholder="Enter password..."
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+              />
+              <p className="text-[11px] text-slate-500">
+                This password will be updated directly in Supabase Authentication and stored in the student profile so admins can view it anytime.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={resetPwBusy}
+                onClick={() => setResetPwTarget(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={resetPwBusy}
+                className="px-5 py-2 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-bold cursor-pointer disabled:opacity-60"
+              >
+                {resetPwBusy ? 'Updating…' : 'Save Password'}
               </button>
             </div>
           </form>

@@ -501,9 +501,21 @@ export default function AdminPaymentsPage() {
       const sb = createClient();
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(approvingRequest.id);
       if (isUuid) {
-        await sb.rpc('approve_payment', {
+        const { error: rpcErr } = await sb.rpc('approve_payment', {
           p_request_id: approvingRequest.id,
           p_amount_received: amountNum,
+        });
+        if (rpcErr) {
+          // Fallback to direct fee payment approval if request_id was a fee_payments id
+          await sb.rpc('cga_direct_approve_fee_payment', {
+            p_payment_id: approvingRequest.id,
+            p_reviewed_by: session?.name || 'Administrator',
+          });
+        }
+      } else {
+        await sb.rpc('cga_direct_approve_fee_payment', {
+          p_payment_id: approvingRequest.referenceCode || approvingRequest.id,
+          p_reviewed_by: session?.name || 'Administrator',
         });
       }
     } catch (e) {

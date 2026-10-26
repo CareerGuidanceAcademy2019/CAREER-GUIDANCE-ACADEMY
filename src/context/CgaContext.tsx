@@ -53,8 +53,7 @@ interface CgaContextType {
   setIsGlobalLoading: (loading: boolean) => void;
   withSingleSubmit: <T>(action: () => Promise<T>, options?: { showGlobalLoader?: boolean }) => Promise<T | undefined>;
 
-  // Auth actions
-  login: (identifier: string, password: string) => Promise<{ success: boolean; session?: AuthSession; error?: string }>;
+  login: (identifier: string, password: string) => Promise<{ success: boolean; session?: AuthSession; error?: string; isUnconfirmed?: boolean; email?: string }>;
   registerStudent: (
     payload: RegisterPayload
   ) => Promise<{ success: boolean; error?: string; needsEmailConfirmation?: boolean }>;
@@ -126,6 +125,7 @@ interface CgaContextType {
   extendBatchDuration: (courseId: string, months: number) => Promise<boolean>;
   updateStudentEnrollmentDuration: (enrollmentId: string, newValidUntil: string) => Promise<boolean>;
   saveStudent: (student: StudentProfile, isNew: boolean) => Promise<{ tempPassword?: string }>;
+  adminSetStudentPassword: (studentId: string, password: string) => Promise<{ success: boolean; error?: string }>;
   toggleStudentStatus: (studentId: string) => Promise<void>;
   deleteStudent: (studentId: string) => Promise<void>;
   saveFaculty: (faculty: FacultyMember, isNew: boolean) => Promise<void>;
@@ -319,7 +319,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
             r.session.role === 'ADMIN' ? 'Admin Portal' : r.session.role === 'FACULTY' ? 'Faculty Portal' : 'Student Portal';
           showToast(`Welcome back, ${r.session.name}!`, `Logged into ${portal}.`, 'success');
         }
-        return { success: !!r.success, session: r.session, error: r.error };
+        return { success: !!r.success, session: r.session, error: r.error, isUnconfirmed: r.isUnconfirmed, email: r.email };
       });
       return res || { success: false, error: 'A login request is already being processed. Please wait.' };
     },
@@ -919,6 +919,9 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         showToast('Student Added', `${student.name} can now sign in.`, 'success');
         return { tempPassword: res.tempPassword };
       }
+      if (student.password) {
+        await cgaService.adminSetStudentPassword(student.id, student.password);
+      }
       await run(cgaService.updateStudentAsAdmin(student), {
         title: 'Student Record Updated',
         message: `${student.name} saved.`,
@@ -926,6 +929,23 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
       return {};
     },
     [refresh, run, showToast]
+  );
+
+  const adminSetStudentPassword = useCallback(
+    async (studentId: string, password: string) => {
+      const res = await cgaService.adminSetStudentPassword(studentId, password);
+      if (!res.success) {
+        showToast('Password Update Failed', res.error || 'Failed to update student password.', 'error');
+        return { success: false, error: res.error };
+      }
+      setDb((prev) => ({
+        ...prev,
+        students: prev.students.map((s) => (s.id === studentId ? { ...s, password } : s)),
+      }));
+      showToast('Password Updated', 'Student login password updated successfully.', 'success');
+      return { success: true };
+    },
+    [showToast]
   );
 
   const toggleStudentStatus = useCallback(
@@ -1359,6 +1379,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         extendBatchDuration,
         updateStudentEnrollmentDuration,
         saveStudent,
+        adminSetStudentPassword,
         toggleStudentStatus,
         deleteStudent,
         saveFaculty,

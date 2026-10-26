@@ -105,13 +105,15 @@ export function AppearTestButton({
     );
   }
 
-  // 3. STATE: UPCOMING
-  const isLaunchedStatus = test.status === 'launched' || test.status === 'Published';
+  // 3. STATE: UPCOMING / UNPUBLISHED
+  const isLaunchedStatus = ['published', 'launched'].includes((test.status || '').toLowerCase());
   const isBeforeStart = winStart ? now < winStart : !isLaunchedStatus;
 
   if (isBeforeStart) {
     let countdownLabel = 'Upcoming';
-    if (winStart) {
+    if (!isLaunchedStatus) {
+      countdownLabel = 'Unpublished / Draft';
+    } else if (winStart) {
       const diffMs = winStart - now;
       const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
       const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
@@ -137,7 +139,7 @@ export function AppearTestButton({
           className="w-full py-2.5 px-4 rounded-xl bg-slate-100 text-slate-400 border border-slate-200 text-xs font-bold inline-flex items-center justify-center gap-2 cursor-not-allowed"
         >
           <Clock className="w-3.5 h-3.5 text-slate-400" />
-          <span>Upcoming - {countdownLabel}</span>
+          <span>{!isLaunchedStatus ? 'Unpublished (Launch Disabled)' : `Upcoming - ${countdownLabel}`}</span>
         </button>
       </div>
     );

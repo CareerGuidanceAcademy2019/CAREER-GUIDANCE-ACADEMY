@@ -14,9 +14,10 @@ const createStudentSchema = z.object({
   permanentAddress: z.string().trim().max(300).optional(),
   qualification: z.string().trim().max(120).optional().default(''),
   targetExam: z.string().trim().max(120).optional().default(''),
+  password: z.string().trim().min(6).max(100).optional(),
 }).strict();
 
-/** Admin creates a student account. Returns a one-time temporary password. */
+/** Admin creates a student account. Returns the login password. */
 export async function POST(request: Request) {
   const adminId = await requireAdmin();
   if (!adminId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -41,9 +42,9 @@ export async function POST(request: Request) {
   }
 
   const data = parseResult.data;
-  const tempPassword = randomBytes(9).toString('base64url');
+  const tempPassword = data.password?.trim() || randomBytes(9).toString('base64url');
   const admin = createAdminSupabase();
-  const { error } = await admin.auth.admin.createUser({
+  const { data: newUser, error } = await admin.auth.admin.createUser({
     email: data.email,
     password: tempPassword,
     email_confirm: true,
@@ -55,10 +56,16 @@ export async function POST(request: Request) {
       permanent_address: data.permanentAddress || data.address,
       qualification: data.qualification,
       target_exam: data.targetExam,
+      login_password: tempPassword,
     },
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-  return NextResponse.json({ tempPassword });
+
+  if (newUser?.user?.id) {
+    await admin.from('profiles').update({ login_password: tempPassword }).eq('id', newUser.user.id);
+  }
+
+  return NextResponse.json({ tempPassword, password: tempPassword });
 }
 
 /** Admin permanently removes any candidate with all associated information from the database. */

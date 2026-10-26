@@ -69,6 +69,26 @@ export async function POST(request: Request) {
     }
 
     if (verifyError || !verifyData?.user) {
+      // Check if user already confirmed via email link
+      try {
+        const admin = createAdminSupabase();
+        const { data: userData } = await admin.auth.admin.listUsers();
+        const foundUser = userData?.users?.find(
+          (u) => u.email?.toLowerCase() === cleanEmail
+        );
+        if (foundUser && foundUser.email_confirmed_at) {
+          await admin
+            .from('profiles')
+            .update({ status: 'Active' })
+            .eq('id', foundUser.id);
+          return NextResponse.json({
+            success: true,
+            message: 'Email is already confirmed! You can now log in.',
+            userId: foundUser.id,
+          });
+        }
+      } catch {}
+
       const msg = verifyError?.message || '';
       return NextResponse.json(
         {
@@ -81,13 +101,16 @@ export async function POST(request: Request) {
       );
     }
 
-    // Ensure profile status is Active
+    // Ensure profile status is Active and user is confirmed
     try {
       const admin = createAdminSupabase();
       await admin
         .from('profiles')
         .update({ status: 'Active' })
         .eq('id', verifyData.user.id);
+      await admin.auth.admin.updateUserById(verifyData.user.id, {
+        email_confirm: true,
+      });
     } catch (e) {
       console.warn('[verify-signup-otp] Profile activation notice:', e);
     }

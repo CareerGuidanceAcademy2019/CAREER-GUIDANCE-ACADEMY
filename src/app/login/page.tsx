@@ -15,6 +15,10 @@ import {
   Eye,
   EyeOff,
   UserPlus,
+  CheckCircle2,
+  RefreshCw,
+  Sparkles,
+  ArrowLeft,
 } from 'lucide-react';
 import { PublicHeader } from '@/components/layout/PublicHeader';
 import { PublicFooter } from '@/components/layout/PublicFooter';
@@ -89,6 +93,23 @@ function LoginInner() {
   const [busy, setBusy] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('STUDENT');
 
+  // Email OTP confirmation state for unconfirmed students
+  const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpBusy, setOtpBusy] = useState(false);
+  const [otpError, setOtpError] = useState('');
+  const [otpSuccess, setOtpSuccess] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resendNotice, setResendNotice] = useState('');
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
+
   const otherDeviceNotice = params.get('reason') === 'other_device'
     ? 'You were signed out because your account was used on another device.'
     : null;
@@ -127,6 +148,12 @@ function LoginInner() {
     const res = await login(cleanEmail, password);
     if (!res.success || !res.session) {
       setBusy(false);
+      if (res.isUnconfirmed) {
+        setUnconfirmedEmail(res.email || cleanEmail);
+        setOtpError('');
+        setOtpSuccess(false);
+        setResendNotice('');
+      }
       setError(res.error || 'Authentication failed.');
       return;
     }
@@ -145,6 +172,60 @@ function LoginInner() {
     // If multi-role user signs in on a specific portal tab, direct them to that portal
     const targetRole = isMultiRoleUser ? activeTab : res.session.role;
     router.push(next && next.startsWith(PORTAL_PREFIX[targetRole]) ? next : PORTAL_HOME[targetRole]);
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!unconfirmedEmail) return;
+    setOtpError('');
+
+    const cleanOtp = otpCode.replace(/\D/g, '').trim();
+    if (cleanOtp.length < 6) {
+      setOtpError('Please enter the full 6-digit confirmation code.');
+      return;
+    }
+
+    setOtpBusy(true);
+    try {
+      const res = await cgaService.verifySignupOtp(unconfirmedEmail, cleanOtp);
+      if (!res.success) {
+        setOtpError(res.error || 'Invalid or expired confirmation code.');
+        setOtpBusy(false);
+        return;
+      }
+
+      setOtpSuccess(true);
+      setOtpBusy(false);
+
+      // If user had typed their password, automatically sign them in
+      if (password) {
+        const loginRes = await login(unconfirmedEmail, password);
+        if (loginRes.success && loginRes.session) {
+          router.push(PORTAL_HOME[loginRes.session.role]);
+          return;
+        }
+      }
+    } catch {
+      setOtpError('Network error during confirmation. Please try again.');
+      setOtpBusy(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0 || !unconfirmedEmail) return;
+    setOtpError('');
+    setResendNotice('');
+    try {
+      const res = await cgaService.resendSignupOtp(unconfirmedEmail);
+      if (res.success) {
+        setResendCooldown(60);
+        setResendNotice('A new verification code has been dispatched to your email.');
+      } else {
+        setOtpError(res.error || 'Could not resend verification code.');
+      }
+    } catch {
+      setOtpError('Error requesting new code. Please try again.');
+    }
   };
 
 
@@ -209,98 +290,208 @@ function LoginInner() {
             <h2 className="text-2xl font-extrabold text-[#0a0e2a]">{tab.title}</h2>
             <p className="text-xs sm:text-sm text-slate-500 mt-1 mb-6">{tab.subtitle}</p>
 
-            <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-              {/* Anti-bot honeypot field */}
-              <div className="hidden" aria-hidden="true">
-                <label htmlFor="login-hp">Security Verification Field</label>
-                <input
-                  id="login-hp"
-                  type="text"
-                  value={honeypot}
-                  onChange={(e) => setHoneypot(e.target.value)}
-                  tabIndex={-1}
-                  autoComplete="off"
-                />
+            {unconfirmedEmail ? (
+              <div className="space-y-5">
+                <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 space-y-2">
+                  <div className="flex items-center gap-2 text-amber-900 font-extrabold text-sm">
+                    <Mail className="w-5 h-5 text-amber-600" />
+                    <span>Email Verification Required</span>
+                  </div>
+                  <p className="text-xs text-amber-800 leading-relaxed">
+                    Your account registration is almost complete. Please enter the 6-digit confirmation code sent to <strong className="text-amber-950">{unconfirmedEmail}</strong> to activate your account.
+                  </p>
+                </div>
+
+                {otpSuccess ? (
+                  <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-center space-y-3">
+                    <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
+                      <CheckCircle2 className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-extrabold text-emerald-900">Email Verified Successfully!</h3>
+                      <p className="text-xs text-emerald-700 mt-1">
+                        Your account is now activated. You can proceed directly to sign in.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setUnconfirmedEmail(null)}
+                      className="w-full py-3 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white font-bold text-xs shadow-md transition-all cursor-pointer"
+                    >
+                      Sign In Now →
+                    </button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleVerifyOtp} className="space-y-4" noValidate>
+                    {otpError && (
+                      <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 flex items-center gap-2 text-xs font-semibold text-[#dc2626]">
+                        <AlertCircle className="w-4 h-4 shrink-0" />
+                        <span>{otpError}</span>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        6-Digit Email OTP Code
+                      </label>
+                      <div className="relative">
+                        <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={8}
+                          value={otpCode}
+                          onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                          placeholder="e.g. 123456"
+                          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm font-mono tracking-widest font-bold focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                          autoComplete="one-time-code"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={otpBusy}
+                      className="w-full py-3 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] disabled:opacity-60 text-white font-bold text-sm shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      {otpBusy ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>Verifying &amp; Signing In…</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4 text-amber-300" />
+                          <span>Verify Email &amp; Complete Sign In</span>
+                        </>
+                      )}
+                    </button>
+
+                    {resendNotice && (
+                      <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800 text-center">
+                        {resendNotice}
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between pt-1 text-xs">
+                      <span className="text-slate-500">Didn&apos;t receive code?</span>
+                      <button
+                        type="button"
+                        disabled={resendCooldown > 0}
+                        onClick={handleResendOtp}
+                        className="font-bold text-[#0056b3] hover:underline disabled:text-slate-400 disabled:no-underline cursor-pointer disabled:cursor-not-allowed"
+                      >
+                        {resendCooldown > 0 ? `Resend Code in ${resendCooldown}s` : 'Resend Code'}
+                      </button>
+                    </div>
+
+                    <div className="pt-2 text-center border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => setUnconfirmedEmail(null)}
+                        className="inline-flex items-center gap-1 text-xs font-bold text-slate-600 hover:text-slate-900 cursor-pointer"
+                      >
+                        <ArrowLeft className="w-3.5 h-3.5" /> Back to Password Sign In
+                      </button>
+                    </div>
+                  </form>
+                )}
               </div>
-
-              {otherDeviceNotice && (
-                <div role="status" className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-2.5 text-xs font-semibold text-amber-900">
-                  <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 mt-px" />
-                  <span>{otherDeviceNotice}</span>
-                </div>
-              )}
-
-              {error && (
-                <div role="alert" className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs font-semibold text-[#dc2626] flex items-start gap-2.5">
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-px" />
-                  <span>{error}</span>
-                </div>
-              )}
-
-              <div>
-                <label htmlFor="login-identifier" className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Email Address
-                </label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            ) : (
+              <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+                {/* Anti-bot honeypot field */}
+                <div className="hidden" aria-hidden="true">
+                  <label htmlFor="login-hp">Security Verification Field</label>
                   <input
-                    id="login-identifier"
-                    type="email"
-                    inputMode="email"
-                    autoComplete="username"
-                    value={identifier}
-                    onChange={(e) => setIdentifier(e.target.value)}
-                    placeholder="student@example.com"
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                    id="login-hp"
+                    type="text"
+                    value={honeypot}
+                    onChange={(e) => setHoneypot(e.target.value)}
+                    tabIndex={-1}
+                    autoComplete="off"
                   />
                 </div>
-              </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label htmlFor="login-password" className="block text-xs font-bold text-slate-700">
-                    Password
+                {otherDeviceNotice && (
+                  <div role="status" className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-2.5 text-xs font-semibold text-amber-900">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 mt-px" />
+                    <span>{otherDeviceNotice}</span>
+                  </div>
+                )}
+
+                {error && (
+                  <div role="alert" className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs font-semibold text-[#dc2626] flex items-start gap-2.5">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-px" />
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                <div>
+                  <label htmlFor="login-identifier" className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Email Address
                   </label>
-                  <Link
-                    href="/forgot-password"
-                    className="text-xs font-bold text-[#0056b3] hover:underline inline-flex items-center gap-1"
-                  >
-                    <KeyRound className="w-3 h-3" /> Forgot Password?
-                  </Link>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      id="login-identifier"
+                      type="email"
+                      inputMode="email"
+                      autoComplete="username"
+                      value={identifier}
+                      onChange={(e) => setIdentifier(e.target.value)}
+                      placeholder="student@example.com"
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                    />
+                  </div>
                 </div>
-                <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    id="login-password"
-                    type={showPw ? 'text' : 'password'}
-                    autoComplete="current-password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter your password"
-                    className="w-full pl-10 pr-11 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
-                  />
-                  <button
-                    type="button"
-                    id="login-toggle-password"
-                    onClick={() => setShowPw((v) => !v)}
-                    aria-label={showPw ? 'Hide password' : 'Show password'}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
-                  >
-                    {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
 
-              <button
-                id="login-submit-btn"
-                type="submit"
-                disabled={busy}
-                className="w-full py-3.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] disabled:opacity-60 text-white font-bold text-sm shadow-md inline-flex items-center justify-center gap-2 transition-all cursor-pointer mt-2"
-              >
-                <LogIn className="w-4 h-4" />
-                {busy ? 'Signing in…' : `Sign In as ${tab.label}`}
-              </button>
-            </form>
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label htmlFor="login-password" className="block text-xs font-bold text-slate-700">
+                      Password
+                    </label>
+                    <Link
+                      href="/forgot-password"
+                      className="text-xs font-bold text-[#0056b3] hover:underline inline-flex items-center gap-1"
+                    >
+                      <KeyRound className="w-3 h-3" /> Forgot Password?
+                    </Link>
+                  </div>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      id="login-password"
+                      type={showPw ? 'text' : 'password'}
+                      autoComplete="current-password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Enter your password"
+                      className="w-full pl-10 pr-11 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                    />
+                    <button
+                      type="button"
+                      id="login-toggle-password"
+                      onClick={() => setShowPw((v) => !v)}
+                      aria-label={showPw ? 'Hide password' : 'Show password'}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
+                    >
+                      {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  id="login-submit-btn"
+                  type="submit"
+                  disabled={busy}
+                  className="w-full py-3.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] disabled:opacity-60 text-white font-bold text-sm shadow-md inline-flex items-center justify-center gap-2 transition-all cursor-pointer mt-2"
+                >
+                  <LogIn className="w-4 h-4" />
+                  {busy ? 'Signing in…' : `Sign In as ${tab.label}`}
+                </button>
+              </form>
+            )}
 
             <div className="mt-6 pt-5 border-t border-slate-100 text-center text-xs text-slate-600">
               {tab.createPrompt}{' '}

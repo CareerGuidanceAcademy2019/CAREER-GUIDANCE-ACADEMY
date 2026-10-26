@@ -36,6 +36,33 @@ export default function RegisterPage() {
   const [confirmOtpBusy, setConfirmOtpBusy] = useState(false);
   const [confirmOtpError, setConfirmOtpError] = useState('');
   const [confirmOtpSuccess, setConfirmOtpSuccess] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resendNotice, setResendNotice] = useState('');
+
+  React.useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
+
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0 || !email) return;
+    setConfirmOtpError('');
+    setResendNotice('');
+    try {
+      const res = await cgaService.resendSignupOtp(email.trim().toLowerCase());
+      if (res.success) {
+        setResendCooldown(60);
+        setResendNotice('A new verification code has been dispatched to your email.');
+      } else {
+        setConfirmOtpError(res.error || 'Could not resend verification code.');
+      }
+    } catch {
+      setConfirmOtpError('Error requesting new code. Please try again.');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -228,6 +255,24 @@ export default function RegisterPage() {
                     </>
                   )}
                 </button>
+
+                {resendNotice && (
+                  <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800 text-center">
+                    {resendNotice}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between pt-1 text-xs">
+                  <span className="text-slate-500">Didn&apos;t receive code?</span>
+                  <button
+                    type="button"
+                    disabled={resendCooldown > 0}
+                    onClick={handleResendOtp}
+                    className="font-bold text-[#0056b3] hover:underline disabled:text-slate-400 disabled:no-underline cursor-pointer disabled:cursor-not-allowed"
+                  >
+                    {resendCooldown > 0 ? `Resend Code in ${resendCooldown}s` : 'Resend Code'}
+                  </button>
+                </div>
 
                 <div className="pt-2 text-center space-y-2 border-t border-slate-100">
                   <p className="text-[11px] text-slate-500">
