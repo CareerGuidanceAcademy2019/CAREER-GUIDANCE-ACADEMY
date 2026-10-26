@@ -101,6 +101,17 @@ export default function StudentMockTestsPage() {
     );
     if (inSeries) return true;
 
+    const inVerifiedPayments = db.feePayments?.some(
+      (fp) =>
+        fp.studentId === currentStudent.id &&
+        fp.status === 'Verified' &&
+        (fp.itemType === 'mock_series' ||
+          (fp.itemId && fp.itemId.startsWith('series-')) ||
+          (fp.courseId && fp.courseId.startsWith('series-'))) &&
+        (fp.itemId === seriesId || fp.courseId === seriesId)
+    );
+    if (inVerifiedPayments) return true;
+
     // Check course enrollment matching this series
     const matchingCourses = SERIES_TO_COURSES[seriesId] || [seriesId];
     const match = currentStudent.enrollments.find((e) => matchingCourses.includes(e.courseId));

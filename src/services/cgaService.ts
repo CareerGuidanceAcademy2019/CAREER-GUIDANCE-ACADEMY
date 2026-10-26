@@ -1218,6 +1218,29 @@ export const cgaService = {
           };
         });
 
+      // Also synthesize from verified course payments in fee_payments
+      payments.forEach((pay: Row) => {
+        if (pay.student_id === p.id && pay.status === 'Verified') {
+          const cId = pay.course_id || pay.item_id;
+          if (cId && !String(cId).startsWith('series-') && !enr.some((x) => x.courseId === cId)) {
+            const c = courseList.find((x) => x.id === cId);
+            enr.push({
+              id: `enr-pay-${pay.id}`,
+              courseId: cId,
+              courseName: c?.name ?? cId,
+              batchName: c?.batchName ?? 'Regular Batch',
+              facultyName: c?.facultyName ?? 'Faculty',
+              enrolledDate: pay.date || new Date().toISOString().slice(0, 10),
+              progress: 0,
+              totalFee: Number(pay.amount || c?.price || 0),
+              paidAmount: Number(pay.amount || 0),
+              dueAmount: 0,
+              accessValidUntil: new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString(),
+            });
+          }
+        }
+      });
+
       if (p.email === 'angatsaha825@gmail.com' && enr.length === 0) {
         enr = courseList.map((c) => ({
           id: `enr-angat-${c.id}`,
@@ -1412,14 +1435,42 @@ export const cgaService = {
           enrolledAt: e.enrolled_at,
           accessValidUntil: e.access_valid_until ?? undefined,
         }));
+        const existingKeys = new Set(fromSb.map((x) => `${x.studentId}::${x.seriesId}`));
+
+        // Synthesize any series enrollment from verified payments
+        payments.forEach((p: Row) => {
+          if (p.status === 'Verified') {
+            const targetSeriesId = p.item_id || p.course_id;
+            const isSeries =
+              p.item_type === 'mock_series' ||
+              (targetSeriesId && String(targetSeriesId).startsWith('series-')) ||
+              (p.remarks && String(p.remarks).includes('mock_series'));
+            if (isSeries && p.student_id && targetSeriesId) {
+              const key = `${p.student_id}::${targetSeriesId}`;
+              if (!existingKeys.has(key)) {
+                existingKeys.add(key);
+                fromSb.push({
+                  id: `pay-enr-${p.id}`,
+                  studentId: p.student_id,
+                  seriesId: targetSeriesId,
+                  paymentId: p.id,
+                  enrolledAt: p.reviewed_at || p.date || new Date().toISOString(),
+                  accessValidUntil: new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString(),
+                });
+              }
+            }
+          }
+        });
+
         if (typeof window !== 'undefined') {
           try {
             const storedSe = localStorage.getItem('cga_series_enrollments');
             if (storedSe) {
               const localList = JSON.parse(storedSe);
-              const existingKeys = new Set(fromSb.map((x) => `${x.studentId}::${x.seriesId}`));
               localList.forEach((item: any) => {
-                if (!existingKeys.has(`${item.studentId}::${item.seriesId}`)) {
+                const key = `${item.studentId}::${item.seriesId}`;
+                if (!existingKeys.has(key)) {
+                  existingKeys.add(key);
                   fromSb.push(item);
                 }
               });
@@ -2051,13 +2102,16 @@ export const cgaService = {
       if (isSeries && targetStudentId && targetSeriesId) {
         try {
           const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw.id);
-          await sb.from('series_enrollments').upsert({
-            student_id: targetStudentId,
-            series_id: targetSeriesId,
-            payment_id: isUuid ? raw.id : null,
-            enrolled_at: new Date().toISOString(),
-            access_valid_until: new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString(),
-          });
+          await sb.from('series_enrollments').upsert(
+            {
+              student_id: targetStudentId,
+              series_id: targetSeriesId,
+              payment_id: isUuid ? raw.id : null,
+              enrolled_at: new Date().toISOString(),
+              access_valid_until: new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString(),
+            },
+            { onConflict: 'student_id, series_id' }
+          );
         } catch (e) {
           console.error('[approvePayment] series_enrollments upsert error:', e);
         }
@@ -2082,16 +2136,19 @@ export const cgaService = {
       } else if (targetStudentId && targetSeriesId) {
         // Course enrolment unlocking
         try {
-          await sb.from('enrollments').upsert({
-            student_id: targetStudentId,
-            course_id: targetSeriesId,
-            enrolled_date: new Date().toISOString().slice(0, 10),
-            paid_amount: Number(raw.amount || 0),
-            total_fee: Number(raw.amount || 0),
-            due_amount: 0,
-            progress: 0,
-            access_valid_until: new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString(),
-          });
+          await sb.from('enrollments').upsert(
+            {
+              student_id: targetStudentId,
+              course_id: targetSeriesId,
+              enrolled_date: new Date().toISOString().slice(0, 10),
+              paid_amount: Number(raw.amount || 0),
+              total_fee: Number(raw.amount || 0),
+              due_amount: 0,
+              progress: 0,
+              access_valid_until: new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString(),
+            },
+            { onConflict: 'student_id, course_id' }
+          );
         } catch (e) {
           console.error('[approvePayment] enrollments upsert error:', e);
         }

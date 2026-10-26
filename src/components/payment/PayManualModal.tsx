@@ -77,7 +77,7 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
       db.feePayments?.some(
         (p) =>
           p.studentId === currentStudent.id &&
-          p.courseId === target.itemId &&
+          (p.courseId === target.itemId || (p as any).itemId === target.itemId) &&
           p.status === 'Pending'
       )
   );

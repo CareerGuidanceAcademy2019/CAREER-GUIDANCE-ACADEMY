@@ -315,6 +315,25 @@ export async function POST(request: Request) {
         }
       }
 
+      // Verify fee_payments (direct verified payments fallback)
+      if (!hasValidEnrollment) {
+        const { data: verifiedPayments } = await admin
+          .from('fee_payments')
+          .select('item_id, course_id, status')
+          .eq('student_id', user.id)
+          .eq('status', 'Verified');
+
+        if (verifiedPayments && verifiedPayments.length > 0) {
+          for (const vp of verifiedPayments) {
+            const key = (vp.item_id || vp.course_id || '').toLowerCase();
+            if (key && allowedKeys.has(key)) {
+              hasValidEnrollment = true;
+              break;
+            }
+          }
+        }
+      }
+
       if (!hasValidEnrollment) {
         return NextResponse.json(
           {

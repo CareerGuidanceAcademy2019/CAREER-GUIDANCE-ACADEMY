@@ -55,6 +55,18 @@ export default function StudentMyLearningPage() {
         }
       } catch {}
     }
+    const fromVerifiedPayments = (db.feePayments || [])
+      .filter(
+        (p) =>
+          (p.studentId === currentStudent.id || p.studentId === 'me') &&
+          p.status === 'Verified' &&
+          (p.itemType === 'mock_series' ||
+            (p.itemId && p.itemId.startsWith('series-')) ||
+            (p.courseId && p.courseId.startsWith('series-')))
+      )
+      .map((p) => p.itemId || p.courseId)
+      .filter(Boolean) as string[];
+
     const courseDerivedSeries: string[] = [];
     enrollments.forEach((e) => {
       if (e.courseId.includes('tet-1') || e.courseId.includes('paper1')) {
@@ -67,8 +79,8 @@ export default function StudentMyLearningPage() {
         courseDerivedSeries.push('series-ttet-paper2-soc');
       }
     });
-    return Array.from(new Set([...fromDb, ...fromLocal, ...courseDerivedSeries]));
-  }, [db.seriesEnrollments, currentStudent.id, enrollments]);
+    return Array.from(new Set([...fromDb, ...fromLocal, ...fromVerifiedPayments, ...courseDerivedSeries]));
+  }, [db.seriesEnrollments, db.feePayments, currentStudent.id, enrollments]);
 
   // Pending payments awaiting Admin verification (excluding courses/series student is already enrolled in)
   const pendingPayments: FeePayment[] = React.useMemo(() => {

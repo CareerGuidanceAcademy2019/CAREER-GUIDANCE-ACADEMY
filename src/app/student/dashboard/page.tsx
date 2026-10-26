@@ -27,9 +27,28 @@ export default function StudentDashboardPage() {
   const totalPaid = currentStudent.enrollments.reduce((acc, e) => acc + e.paidAmount, 0);
   const totalDue = currentStudent.enrollments.reduce((acc, e) => acc + e.dueAmount, 0);
 
-  const upcomingTests = db.mockTests.filter(
-    (t) => t.status === 'Published' && enrolledCourseIds.includes(t.courseId)
-  );
+  const enrolledSeriesIds = [
+    ...(db.seriesEnrollments || [])
+      .filter((se) => se.studentId === currentStudent.id || se.studentId === 'me')
+      .map((se) => se.seriesId),
+    ...(db.feePayments || [])
+      .filter(
+        (p) =>
+          (p.studentId === currentStudent.id || p.studentId === 'me') &&
+          p.status === 'Verified' &&
+          (p.itemType === 'mock_series' || (p.itemId && p.itemId.startsWith('series-')) || (p.courseId && p.courseId.startsWith('series-')))
+      )
+      .map((p) => p.itemId || p.courseId)
+      .filter(Boolean) as string[],
+  ];
+
+  const upcomingTests = db.mockTests.filter((t) => {
+    const isPub = t.status === 'Published' || (t.status as any) === 'ready';
+    if (!isPub) return false;
+    if (t.courseId && enrolledCourseIds.includes(t.courseId)) return true;
+    if (t.seriesId && enrolledSeriesIds.includes(t.seriesId)) return true;
+    return false;
+  });
 
   const relevantAnnouncements = db.announcements.filter(
     (a) => a.targetBatch === 'All Batches' || enrolledCourseIds.includes(a.targetBatch)

@@ -700,17 +700,24 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
             : [{ ...targetPayment!, status: 'Verified' as const }, ...prev.feePayments];
 
           // Unlock enrollment / clear due for the student
-          const crs = prev.courses.find((c) => c.id === targetPayment.courseId);
+          const targetItemId = targetPayment.itemId || targetPayment.courseId || '';
+          const isSeries =
+            targetPayment.itemType === 'mock_series' ||
+            targetItemId.startsWith('series-') ||
+            prev.mockSeries.some((s) => s.id === targetItemId) ||
+            targetPayment.remarks?.includes('mock_series');
+
+          const crs = prev.courses.find((c) => c.id === targetItemId);
           const nextStudents = prev.students.map((st) => {
-            if (st.id === targetPayment.studentId) {
-              const existingEnr = st.enrollments.find((e) => e.courseId === targetPayment.courseId);
+            if (st.id === targetPayment.studentId && !isSeries && targetItemId) {
+              const existingEnr = st.enrollments.find((e) => e.courseId === targetItemId);
               if (existingEnr) {
                 const newPaid = existingEnr.paidAmount + targetPayment.amount;
                 const newDue = Math.max(0, existingEnr.totalFee - newPaid);
                 return {
                   ...st,
                   enrollments: st.enrollments.map((e) =>
-                    e.courseId === targetPayment.courseId
+                    e.courseId === targetItemId
                       ? { ...e, paidAmount: newPaid, dueAmount: newDue }
                       : e
                   ),
@@ -719,8 +726,8 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
                 const totalFee = crs?.price || targetPayment.amount;
                 const paidAmount = targetPayment.amount;
                 const newEnrollment: StudentEnrollment = {
-                  courseId: targetPayment.courseId,
-                  courseName: targetPayment.courseName,
+                  courseId: targetItemId,
+                  courseName: crs?.name || targetPayment.courseName || 'Course Batch',
                   batchName: crs?.batchName || 'Regular Batch',
                   facultyName: crs?.facultyName || 'Faculty',
                   enrolledDate: new Date().toISOString().split('T')[0],
@@ -735,21 +742,15 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
             return st;
           });
 
-          const isSeries =
-            targetPayment.courseId.startsWith('series-') ||
-            prev.mockSeries.some((s) => s.id === targetPayment.courseId) ||
-            targetPayment.itemType === 'mock_series' ||
-            targetPayment.remarks?.includes('mock_series');
-
-          const nextSeriesEnrollments = isSeries
+          const nextSeriesEnrollments = isSeries && targetItemId
             ? [
                 ...prev.seriesEnrollments.filter(
-                  (se) => !(se.studentId === targetPayment.studentId && se.seriesId === targetPayment.courseId)
+                  (se) => !(se.studentId === targetPayment.studentId && se.seriesId === targetItemId)
                 ),
                 {
                   id: `ser-enr-${Date.now()}`,
                   studentId: targetPayment.studentId,
-                  seriesId: targetPayment.courseId,
+                  seriesId: targetItemId,
                   paymentId: targetPayment.id,
                   enrolledAt: new Date().toISOString(),
                   accessValidUntil: new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString(),
