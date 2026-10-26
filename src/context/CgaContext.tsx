@@ -237,7 +237,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         } catch {}
       }
       setIsHydrated(true);
-      await refresh(false);
+      await refresh(Boolean(next && next.role === 'ADMIN'));
     },
     [refresh]
   );

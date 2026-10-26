@@ -263,19 +263,29 @@ const toTest = (r: Row, courseName: string, isStudent = false, hasSubmitted = fa
         }))
       : allQs;
 
+  const rawStatus = (r.status || '').toString().toLowerCase();
+  const normalizedStatus: 'Draft' | 'Published' =
+    rawStatus === 'published' || rawStatus === 'ready' || rawStatus === 'launched' || rawStatus === 'live'
+      ? 'Published'
+      : 'Draft';
+
   return {
     id: r.id,
     title: r.title,
     seriesId: r.series_id ?? undefined,
-    courseId: r.course_id || r.series_id || '',
+    subjectId: r.subject_id ?? undefined,
+    languageMode: r.language_mode ?? undefined,
+    windowStart: r.window_start ?? undefined,
+    windowEnd: r.window_end ?? undefined,
+    courseId: r.course_id || '',
     courseName: courseName || r.course_name || (r.series_id ? 'Tripura TET Mock Test Series' : ''),
     batchName: r.batch_name || (r.series_id ? 'CGA Mock Test Series' : 'TET Target Batch'),
     durationMinutes: r.duration_minutes || 30,
-    totalMarks: Number(r.total_marks || 30),
+    totalMarks: Number(r.total_marks || (questions.length ? questions.length * Number(r.marks_per_question || 1) : 30)),
     marksPerQuestion: Number(r.marks_per_question || 1),
     negativeMarking: Number(r.negative_marking || 0),
     scheduledDate: r.scheduled_date || (r.window_start ? new Date(r.window_start).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]),
-    status: r.status,
+    status: normalizedStatus,
     subject: r.subject || r.subject_id || undefined,
     driveLink: r.drive_link ?? undefined,
     contentStatus: r.content_status ?? 'draft',
@@ -2415,9 +2425,20 @@ export const cgaService = {
 
     // 1. Authoritative server-side persistence via admin route
     try {
+      let token: string | undefined;
+      try {
+        const s = (await this.client().auth.getSession()).data?.session;
+        token = s?.access_token;
+      } catch {}
+
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const res = await fetch('/api/admin/mock-tests', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(t),
       });
       if (res.ok) {
@@ -2446,6 +2467,12 @@ export const cgaService = {
       }
     } catch {}
 
+    // Verify valid subject_id to avoid Postgres FK violation on direct fallback
+    let validSubjId: string | null = (t as any).subjectId ?? null;
+    if (validSubjId && !validSubjId.startsWith('subj-')) {
+      validSubjId = null;
+    }
+
     const { error } = await this.client().from('mock_tests').upsert({
       id: t.id,
       title: t.title,
@@ -2453,10 +2480,10 @@ export const cgaService = {
       drive_link: t.driveLink ?? null,
       course_id: validCourseId,
       series_id: finalSeriesId,
-      subject_id: (t as any).subjectId ?? null,
+      subject_id: validSubjId,
       test_type: (t as any).testType ?? 'sectional',
       test_no: (t as any).testNo ?? 1,
-      question_count: t.questions?.length || 30,
+      question_count: t.questions?.length || 0,
       batch_name: t.batchName || '',
       duration_minutes: t.durationMinutes || 60,
       total_marks: t.totalMarks || (t.questions?.length ? t.questions.length * (t.marksPerQuestion || 1) : 30),

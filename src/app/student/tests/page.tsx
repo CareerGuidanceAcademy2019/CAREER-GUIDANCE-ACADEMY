@@ -1691,7 +1691,7 @@ export default function StudentMockTestsPage() {
                     return {
                       ...mt,
                       seriesId: mappedSeries,
-                      subjectId: mt.subject || null,
+                      subjectId: mt.subjectId || mt.subject || null,
                       testType: mt.title.toLowerCase().includes('full') ? 'full' : 'sectional',
                     };
                   }),
@@ -1703,7 +1703,16 @@ export default function StudentMockTestsPage() {
                     return t.testType === 'full' || !t.subjectId || String(t.title).toLowerCase().includes('full');
                   }
                   if (selectedSubjectId !== 'all') {
-                    return t.subjectId === selectedSubjectId || (t.subject && t.subject.toLowerCase().includes(selectedSubjectId.toLowerCase()));
+                    const matchedSubj = MOCK_SUBJECTS_INITIAL.find((s) => s.id === selectedSubjectId);
+                    const subjName = (matchedSubj?.name || '').toLowerCase();
+                    const tSubj = (t.subject || '').toLowerCase();
+                    const tTitle = (t.title || '').toLowerCase();
+                    return (
+                      t.subjectId === selectedSubjectId ||
+                      (subjName && tSubj.includes(subjName)) ||
+                      (subjName && tTitle.includes(subjName)) ||
+                      (t.subject && t.subject.toLowerCase().includes(selectedSubjectId.toLowerCase()))
+                    );
                   }
                   return true;
                 });

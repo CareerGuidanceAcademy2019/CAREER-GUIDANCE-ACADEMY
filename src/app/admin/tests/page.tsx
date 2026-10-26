@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Plus,
   ClipboardCheck,
@@ -393,8 +393,13 @@ export default function AdminMockTestsPage() {
     saveMockSubjectPost,
     deleteMockSubjectPost,
     showToast,
+    refresh,
   } = useCga();
   const router = useRouter();
+
+  useEffect(() => {
+    void refresh(true);
+  }, [refresh]);
 
   const [activeAdminTab, setActiveAdminTab] = useState<'tests' | 'series' | 'subject_posts' | 'storage_meter'>('tests');
   const [editingTest, setEditingTest] = useState<MockTest | null>(null);
@@ -471,7 +476,7 @@ export default function AdminMockTestsPage() {
       marksPerQuestion: 1,
       negativeMarking: 0,
       scheduledDate: new Date().toISOString().split('T')[0],
-      status: 'Published',
+      status: 'Draft',
       questions: [],
     });
   };
@@ -735,8 +740,8 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
       showToast('Validation Error', 'Please specify a mock test title.', 'error');
       return;
     }
-    if (editingTest.questions.length === 0) {
-      showToast('No Questions Added', 'Please upload a PDF/text or paste questions before saving.', 'error');
+    if (editingTest.status === 'Published' && editingTest.questions.length === 0) {
+      showToast('No Questions Added', 'Please upload questions before publishing live, or set status to Draft.', 'error');
       return;
     }
 
@@ -978,7 +983,15 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
           if (testScopeFilter === 'combined' && !isCombined) return false;
 
           if (testSeriesFilter !== 'all' && test.seriesId !== testSeriesFilter) return false;
-          if (testStatusFilter !== 'all' && test.status !== testStatusFilter) return false;
+          if (testStatusFilter !== 'all') {
+            const filterLower = testStatusFilter.toLowerCase();
+            const statusLower = (test.status || '').toLowerCase();
+            if (filterLower === 'draft') {
+              if (statusLower !== 'draft') return false;
+            } else if (filterLower === 'published') {
+              if (statusLower !== 'published' && statusLower !== 'ready' && statusLower !== 'launched') return false;
+            }
+          }
 
           return true;
         });
@@ -2521,7 +2534,7 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white font-extrabold cursor-pointer shadow-sm"
                 >
-                  Save & Launch Mock Test
+                  {editingTest.status === 'Draft' ? 'Save Draft Mock Test' : 'Save & Launch Mock Test'}
                 </button>
               </div>
             </div>

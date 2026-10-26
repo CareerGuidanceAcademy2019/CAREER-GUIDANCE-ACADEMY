@@ -3,7 +3,7 @@ import { createAdminSupabase, requireAdmin } from '@/lib/supabase/server';
 import { checkRateLimit, createRateLimitResponse, getClientIp, RATE_LIMIT_RULES } from '@/lib/rateLimit';
 
 export async function POST(request: Request) {
-  const adminId = await requireAdmin();
+  const adminId = await requireAdmin(request);
   if (!adminId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const ip = getClientIp(request);
@@ -52,11 +52,12 @@ export async function POST(request: Request) {
       const { data: matchedSubject } = await admin
         .from('mock_subjects')
         .select('id')
-        .eq('id', validSubjectId)
+        .or(`id.eq.${validSubjectId},name.eq.${validSubjectId}`)
         .maybeSingle();
-      if (!matchedSubject) validSubjectId = null;
+      validSubjectId = matchedSubject ? matchedSubject.id : null;
     }
 
+    const qList = Array.isArray(t.questions) ? t.questions : [];
     const payload = {
       id: t.id,
       title: t.title,
@@ -67,15 +68,15 @@ export async function POST(request: Request) {
       subject_id: validSubjectId,
       test_type: t.testType || t.test_type || 'sectional',
       test_no: Number(t.testNo || t.test_no || 1),
-      question_count: t.questions?.length || t.questionCount || 30,
+      question_count: qList.length,
       batch_name: t.batchName || t.batch_name || '',
       duration_minutes: Number(t.durationMinutes || t.duration_minutes || 60),
-      total_marks: Number(t.totalMarks || (t.questions?.length ? t.questions.length * (t.marksPerQuestion || 1) : 30)),
+      total_marks: Number(t.totalMarks || (qList.length ? qList.length * (t.marksPerQuestion || 1) : 30)),
       marks_per_question: Number(t.marksPerQuestion || t.marks_per_question || 1),
       negative_marking: Number(t.negativeMarking || t.negative_marking || 0),
       scheduled_date: t.scheduledDate || t.scheduled_date || '',
       status: t.status || 'Draft',
-      questions: t.questions || [],
+      questions: qList,
       window_start: t.windowStart || t.window_start || null,
       window_end: t.windowEnd || t.window_end || null,
     };
@@ -97,7 +98,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const adminId = await requireAdmin();
+  const adminId = await requireAdmin(request);
   if (!adminId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const ip = getClientIp(request);

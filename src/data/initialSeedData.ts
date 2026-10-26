@@ -168,6 +168,9 @@ export interface MockTest {
   title: string;
   seriesId?: string;
   subject?: string;
+  subjectId?: string | null;
+  windowStart?: string | null;
+  windowEnd?: string | null;
   driveLink?: string;
   languageMode?: 'english_only' | 'bengali_only' | 'bilingual';
   courseId: string;

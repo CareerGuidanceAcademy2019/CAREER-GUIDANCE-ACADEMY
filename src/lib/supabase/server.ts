@@ -69,9 +69,42 @@ export async function requireActiveSession(): Promise<{
 }
 
 /** Returns the caller's user id if they are an active admin with an active session, otherwise null. */
-export async function requireAdmin(): Promise<string | null> {
-  const session = await requireActiveSession();
-  if (!session || session.role !== 'admin') return null;
-  return session.userId;
+export async function requireAdmin(req?: Request): Promise<string | null> {
+  // 1. If Request is provided, check Authorization: Bearer <token> header
+  if (req) {
+    const authHeader = req.headers.get('authorization') || req.headers.get('Authorization');
+    if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
+      const token = authHeader.slice(7).trim();
+      if (token) {
+        try {
+          const adminSupabase = createAdminSupabase();
+          const { data: userData, error: userErr } = await adminSupabase.auth.getUser(token);
+          if (!userErr && userData?.user) {
+            const { data: profile } = await adminSupabase
+              .from('profiles')
+              .select('role,status')
+              .eq('id', userData.user.id)
+              .maybeSingle();
+            if (
+              profile &&
+              (profile.role === 'admin' || profile.role === 'ADMIN') &&
+              profile.status === 'Active'
+            ) {
+              return userData.user.id;
+            }
+          }
+        } catch {}
+      }
+    }
+  }
+
+  // 2. Fallback to cookie-bound session check
+  try {
+    const session = await requireActiveSession();
+    if (session && (session.role === 'admin' || session.role === 'ADMIN')) return session.userId;
+  } catch {}
+
+  return null;
 }
+
 

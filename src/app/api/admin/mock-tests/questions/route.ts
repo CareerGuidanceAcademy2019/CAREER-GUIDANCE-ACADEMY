@@ -3,7 +3,7 @@ import { requireAdmin, createAdminSupabase } from '@/lib/supabase/server';
 import { checkRateLimit, createRateLimitResponse, getClientIp, RATE_LIMIT_RULES } from '@/lib/rateLimit';
 
 export async function GET(request: Request) {
-  const adminId = await requireAdmin();
+  const adminId = await requireAdmin(request);
   if (!adminId) {
     return NextResponse.json({ error: 'Unauthorized. Administrator access required.' }, { status: 403 });
   }
@@ -72,7 +72,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const adminId = await requireAdmin();
+  const adminId = await requireAdmin(request);
   if (!adminId) {
     return NextResponse.json({ error: 'Unauthorized. Administrator access required.' }, { status: 403 });
   }
@@ -262,7 +262,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const adminId = await requireAdmin();
+  const adminId = await requireAdmin(request);
   if (!adminId) {
     return NextResponse.json({ error: 'Unauthorized. Administrator access required.' }, { status: 403 });
   }
