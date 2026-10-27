@@ -249,13 +249,23 @@ export async function POST(request: Request) {
 
     // 2.5 Strict Single Attempt Enforcement: Each candidate can appear only once
     if (!isAdmin) {
-      const { data: pastAttempts } = await admin
-        .from('test_attempts')
-        .select('id, submitted_at')
-        .eq('test_id', testId)
-        .eq('student_id', user.id);
+      const [{ data: pastTestAttempts }, { data: pastMockAttempts }] = await Promise.all([
+        admin
+          .from('test_attempts')
+          .select('id, submitted_at')
+          .eq('test_id', testId)
+          .eq('student_id', user.id),
+        admin
+          .from('mock_attempts')
+          .select('id, submitted_at')
+          .eq('test_id', testId)
+          .eq('student_id', user.id),
+      ]);
 
-      const hasSubmitted = (pastAttempts || []).some((a: any) => a.submitted_at != null);
+      const hasSubmitted =
+        (pastTestAttempts || []).some((a: any) => a.submitted_at != null) ||
+        (pastMockAttempts || []).some((a: any) => a.submitted_at != null);
+
       if (hasSubmitted) {
         return NextResponse.json(
           {
@@ -395,6 +405,37 @@ export async function POST(request: Request) {
       };
     });
 
+    // 6. Ensure in-progress attempt is initiated in mock_attempts
+    let startedAt = new Date().toISOString();
+    let savedAnswers: Record<string, number> = {};
+    if (!isAdmin) {
+      const { data: existingMockAtt } = await admin
+        .from('mock_attempts')
+        .select('id, started_at, submitted_at, answers')
+        .eq('test_id', testId)
+        .eq('student_id', user.id)
+        .maybeSingle();
+
+      if (existingMockAtt) {
+        startedAt = existingMockAtt.started_at || startedAt;
+        savedAnswers = (existingMockAtt.answers as Record<string, number>) || {};
+      } else {
+        const { data: newAtt } = await admin
+          .from('mock_attempts')
+          .insert({
+            test_id: testId,
+            student_id: user.id,
+            started_at: startedAt,
+            answers: {},
+          })
+          .select('id, started_at')
+          .maybeSingle();
+        if (newAtt?.started_at) {
+          startedAt = newAtt.started_at;
+        }
+      }
+    }
+
     return NextResponse.json({
       success: true,
       testId: testRecord.id,
@@ -403,6 +444,8 @@ export async function POST(request: Request) {
       totalMarks: Number(testRecord.total_marks || testRecord.totalMarks || 30),
       negativeMarking: Number(testRecord.negative_marking ?? testRecord.negativeMarking ?? 0),
       serverNow: new Date().toISOString(),
+      startedAt,
+      savedAnswers,
       questionGroups: [],
       questions: sanitizedQuestions,
     });

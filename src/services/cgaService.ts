@@ -1275,7 +1275,11 @@ export const cgaService = {
         enrollments: enr,
       };
     });
-    const studentName = (id: string) => students.find((s) => s.id === id)?.name ?? session?.name ?? '';
+    const studentName = (id: string) =>
+      profiles.find((p: Row) => p.id === id)?.name ??
+      students.find((s) => s.id === id)?.name ??
+      (session?.userId === id ? session.name : '') ??
+      'Student';
     const studentCode = (id: string) => students.find((s) => s.id === id)?.studentCode ?? '';
     const studentPhone = (id: string) => students.find((s) => s.id === id)?.phone ?? '';
     let localPayments: FeePayment[] = [];
@@ -1318,9 +1322,46 @@ export const cgaService = {
     const testTitle = (id: string) => allMasterTests.find((t) => t.id === id)?.title ?? '';
     const testCourse = (id: string) => allMasterTests.find((t) => t.id === id)?.courseId ?? '';
 
-    const serverAttempts = attempts.map((a) =>
-      toAttempt(a, testTitle(a.test_id), testCourse(a.test_id), studentName(a.student_id))
-    );
+    // Authoritative attempt aggregation across mock_attempts (primary) and test_attempts (legacy)
+    const seenAttemptIds = new Set<string>();
+    const serverAttempts: TestAttempt[] = [];
+
+    // 1. Ingest submitted mock_attempts (used by submit_mock_attempt RPC)
+    for (const m of seriesAttemptsRaw) {
+      if (!m.submitted_at) continue;
+      const strId = String(m.id);
+      seenAttemptIds.add(strId);
+      const targetTest = allMasterTests.find((t) => t.id === m.test_id);
+      const secs = Number(m.time_taken_seconds ?? 0);
+      serverAttempts.push({
+        id: strId,
+        testId: m.test_id,
+        testTitle: targetTest?.title || testTitle(m.test_id) || 'Mock Test',
+        courseId: targetTest?.courseId || testCourse(m.test_id) || '',
+        studentId: m.student_id,
+        studentName: studentName(m.student_id),
+        score: Number(m.score ?? 0),
+        totalMarks: Number(m.total_marks ?? targetTest?.totalMarks ?? 30),
+        correctCount: Number(m.correct_count ?? 0),
+        wrongCount: Number(m.wrong_count ?? 0),
+        unattemptedCount: Number(m.unattempted_count ?? 0),
+        accuracy: Number(m.accuracy ?? 0),
+        timeTakenMinutes: m.time_taken_minutes ?? Math.max(1, Math.round(secs / 60)),
+        submittedAt: formatStamp(m.submitted_at),
+        answers: (m.answers as Record<string, number>) ?? {},
+      });
+    }
+
+    // 2. Ingest legacy test_attempts without duplication
+    for (const a of attempts) {
+      const strId = String(a.id);
+      if (seenAttemptIds.has(strId)) continue;
+      seenAttemptIds.add(strId);
+      const targetTest = allMasterTests.find((t) => t.id === a.test_id);
+      serverAttempts.push(
+        toAttempt(a, targetTest?.title || testTitle(a.test_id), targetTest?.courseId || testCourse(a.test_id), studentName(a.student_id))
+      );
+    }
 
     const testAttempts: TestAttempt[] = [
       ...serverAttempts,
@@ -2243,100 +2284,86 @@ export const cgaService = {
       } catch {}
     }
 
-    let sbAttempt: TestAttempt | null = null;
+    // Authoritative server-side scoring via the deployed `submit_mock_attempt` RPC.
+    let rpcData: Record<string, unknown> | null = null;
     try {
-      const { data, error } = await this.client().rpc('submit_test_attempt', {
+      const sb = this.client();
+      const { data, error } = await sb.rpc('submit_mock_attempt', {
         p_test_id: testId,
         p_answers: answers,
-        p_time_taken_minutes: timeTakenMinutes,
+        p_time_taken_seconds: Math.max(1, Math.round(timeTakenMinutes * 60)),
       });
-      if (!error && data) {
-        const a = data as TestAttempt;
-        sbAttempt = { ...a, submittedAt: formatStamp(a.submittedAt) };
-      }
-    } catch {
-      // Fallback to local authoritative evaluation
-    }
-
-    if (sbAttempt) {
-      try {
-        if (typeof window !== 'undefined') {
-          const existing = localStorage.getItem('cga_test_attempts');
-          const arr: TestAttempt[] = existing ? JSON.parse(existing) : [];
-          if (!arr.some((item) => item.id === sbAttempt?.id)) {
-            arr.unshift(sbAttempt);
-            localStorage.setItem('cga_test_attempts', JSON.stringify(arr));
-          }
+      if (error) {
+        const raw = error.message || '';
+        if (/already been submitted/i.test(raw)) {
+          return {
+            success: false,
+            error: 'Single Attempt Policy: You have already completed this mock test. Each candidate is permitted only one attempt.',
+          };
         }
-      } catch {}
-      return { success: true, attempt: sbAttempt };
-    }
-
-    // Authoritative fallback evaluation against master questions
-    let allMasterTests: MockTest[] = [...INITIAL_SEED_DATA.mockTests];
-    if (typeof window !== 'undefined') {
-      try {
-        const ct = localStorage.getItem('cga_custom_tests');
-        if (ct) {
-          const list: MockTest[] = JSON.parse(ct);
-          allMasterTests = [...list, ...allMasterTests];
+        if (/SESSION_REVOKED/i.test(raw)) {
+          return { success: false, error: 'Your account has been signed in on another device. Please log in again.' };
         }
-      } catch {}
-    }
-
-    const targetTest = allMasterTests.find((t) => t.id === testId);
-    if (!targetTest) {
-      return { success: false, error: 'Test not found or no longer available.' };
-    }
-
-    let correctCount = 0;
-    let wrongCount = 0;
-    let unattemptedCount = 0;
-
-    for (const q of targetTest.questions) {
-      const chosen = answers[q.id];
-      if (chosen === undefined || chosen === null) {
-        unattemptedCount++;
-      } else if (chosen === q.correctOptionIndex) {
-        correctCount++;
-      } else {
-        wrongCount++;
+        if (/Attempt not initiated/i.test(raw)) {
+          return { success: false, error: 'This attempt was not started properly. Please re-open the test and start it again.' };
+        }
+        return { success: false, error: msg(error, 'Test submission failed. Please try again.') };
       }
+      rpcData = (data ?? null) as Record<string, unknown> | null;
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : 'Test submission failed. Please try again.' };
+    }
+    if (!rpcData) {
+      return { success: false, error: 'Test submission failed. Please try again.' };
     }
 
-    const rawScore = correctCount * targetTest.marksPerQuestion - wrongCount * targetTest.negativeMarking;
-    const score = Math.max(0, Math.round(rawScore * 100) / 100);
-    const accuracy =
-      correctCount + wrongCount > 0 ? Math.round((correctCount / (correctCount + wrongCount)) * 100) : 0;
+    let courseId = '';
+    let testTitle = String(rpcData.testTitle ?? '');
+    let totalMarks = Number(rpcData.totalMarks ?? 0);
+    try {
+      const { data: t } = await this.client()
+        .from('mock_tests')
+        .select('course_id, series_id, title, total_marks')
+        .eq('id', testId)
+        .maybeSingle();
+      courseId = (t?.course_id as string) || (t?.series_id as string) || '';
+      if (!testTitle && t?.title) testTitle = t.title;
+      if (!totalMarks && t?.total_marks) totalMarks = Number(t.total_marks);
+    } catch {}
 
-    const newAttempt: TestAttempt = {
-      id: `att-${Date.now()}`,
-      testId: targetTest.id,
-      testTitle: targetTest.title,
-      courseId: targetTest.courseId,
-      studentId: session?.userId || 'me',
+    const secs = Number(rpcData.timeTakenSeconds ?? timeTakenMinutes * 60);
+    const attempt: TestAttempt = {
+      id: String(rpcData.attemptId ?? `att-${Date.now()}`),
+      testId,
+      testTitle: testTitle || 'Mock Test',
+      courseId,
+      studentId: stuId,
       studentName: session?.name || 'Student',
-      score,
-      totalMarks: targetTest.totalMarks,
-      correctCount,
-      wrongCount,
-      unattemptedCount,
-      accuracy,
-      timeTakenMinutes: Math.max(1, Math.min(timeTakenMinutes, targetTest.durationMinutes)),
-      submittedAt: formatStamp(new Date().toISOString()),
+      score: Number(rpcData.score ?? 0),
+      totalMarks: totalMarks || Number(rpcData.totalMarks ?? 30),
+      correctCount: Number(rpcData.correctCount ?? 0),
+      wrongCount: Number(rpcData.wrongCount ?? 0),
+      unattemptedCount: Number(rpcData.unattemptedCount ?? 0),
+      accuracy: Number(rpcData.accuracy ?? 0),
+      timeTakenMinutes: Math.max(1, Math.round(secs / 60)),
+      submittedAt: formatStamp(String(rpcData.submittedAt ?? new Date().toISOString())),
       answers,
     };
+
+    invalidateDbCache();
 
     try {
       if (typeof window !== 'undefined') {
         const existing = localStorage.getItem('cga_test_attempts');
         const arr: TestAttempt[] = existing ? JSON.parse(existing) : [];
-        arr.unshift(newAttempt);
-        localStorage.setItem('cga_test_attempts', JSON.stringify(arr));
+        if (!arr.some((item) => item.id === attempt.id)) {
+          arr.unshift(attempt);
+          localStorage.setItem('cga_test_attempts', JSON.stringify(arr));
+        }
       }
     } catch {}
 
-    return { success: true, attempt: newAttempt };
+    return { success: true, attempt };
   },
 
   // ============ ADMIN CRUD (RLS enforces admin-only) ============
