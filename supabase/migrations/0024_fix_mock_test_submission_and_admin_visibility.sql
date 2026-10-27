@@ -2,6 +2,36 @@
 -- 1. Resilient submit_mock_attempt evaluating questions from either mock_questions OR mock_tests.questions
 -- 2. Dual-writes to mock_attempts and test_attempts so admin merit ranks & student scores are immediately visible
 -- 3. Resilient get_test_questions and get_test_solutions supporting mock_tests.questions JSONB
+-- 4. Allows trusted RPC submission through guard_mock_attempt_update trigger
+
+CREATE OR REPLACE FUNCTION public.guard_mock_attempt_update()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+BEGIN
+  -- Allow trusted server RPC execution or admin
+  IF current_setting('cga.trusted_submit', true) = 'true' OR public.is_admin() THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.score IS DISTINCT FROM OLD.score THEN
+    RAISE EXCEPTION 'Unauthorized: Exam scores can only be evaluated by the server.';
+  END IF;
+  IF NEW.correct_count IS DISTINCT FROM OLD.correct_count OR NEW.wrong_count IS DISTINCT FROM OLD.wrong_count THEN
+    RAISE EXCEPTION 'Unauthorized: Question metrics cannot be modified directly.';
+  END IF;
+  IF NEW.submitted_at IS DISTINCT FROM OLD.submitted_at THEN
+    RAISE EXCEPTION 'Unauthorized: Exam submission must be processed through official submit API.';
+  END IF;
+  IF NEW.student_id IS DISTINCT FROM OLD.student_id OR NEW.test_id IS DISTINCT FROM OLD.test_id THEN
+    RAISE EXCEPTION 'Unauthorized: Test and student identity cannot be modified.';
+  END IF;
+
+  RETURN NEW;
+END;
+$function$;
 
 CREATE OR REPLACE FUNCTION public.submit_mock_attempt(p_test_id text, p_answers jsonb, p_time_taken_seconds integer DEFAULT 0)
  RETURNS jsonb
@@ -30,6 +60,9 @@ begin
   if not public.is_current_session_active() then
     raise exception 'SESSION_REVOKED: Your account has been signed in on another device.';
   end if;
+
+  -- Set trusted submission flag to satisfy guard trigger
+  PERFORM set_config('cga.trusted_submit', 'true', true);
 
   select * into v_test from public.mock_tests where id = p_test_id;
   if not found then raise exception 'Test not found'; end if;
