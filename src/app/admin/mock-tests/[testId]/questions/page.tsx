@@ -44,7 +44,61 @@ export default function AdminMockTestQuestionsPage() {
   const params = useParams();
   const router = useRouter();
   const testId = params?.testId as string;
-  const { showToast } = useCga();
+  const { showToast, refresh } = useCga();
+
+  // Client-side lossless/high-DPI diagram pre-compression before upload
+  const compressDiagramFileBeforeUpload = async (file: File): Promise<File> => {
+    if (typeof window === 'undefined' || !file.type.startsWith('image/')) return file;
+    return new Promise((resolve) => {
+      const img = new window.Image();
+      const objUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(objUrl);
+        const maxDim = 1280;
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width >= height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(file);
+          return;
+        }
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => {
+            if (blob && blob.size < file.size) {
+              const compressedFile = new File([blob], file.name.replace(/\.[^.]+$/, '.webp'), {
+                type: 'image/webp',
+                lastModified: Date.now(),
+              });
+              resolve(compressedFile);
+            } else {
+              resolve(file);
+            }
+          },
+          'image/webp',
+          0.86
+        );
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(objUrl);
+        resolve(file);
+      };
+      img.src = objUrl;
+    });
+  };
 
   const [activeTab, setActiveTab] = useState<'review' | 'paste' | 'csv' | 'passages'>('review');
   const [loading, setLoading] = useState(true);
@@ -226,6 +280,49 @@ export default function AdminMockTestQuestionsPage() {
     }
   };
 
+  const handleCleanTestImages = async () => {
+    setCleaningOrphans(true);
+    try {
+      const form = new FormData();
+      form.append('action', 'clean-test-images');
+      form.append('testId', testId);
+      const res = await fetch('/api/mock-tests/upload-image', {
+        method: 'POST',
+        body: form,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const cleanedQuestions = questions.map((q) => ({
+          ...q,
+          imagePath: null,
+          imageAlt: null,
+          explanationImagePath: null,
+          explanationImageAlt: null,
+          options: q.options.map((opt) =>
+            typeof opt === 'object' && opt !== null ? { ...opt, imagePath: null, imageAlt: null } : opt
+          ),
+        }));
+        const cleanedGroups = questionGroups.map((g) => ({
+          ...g,
+          imagePath: null,
+        }));
+        setQuestions(cleanedQuestions);
+        setQuestionGroups(cleanedGroups);
+        void persistQuestionsToServer(cleanedQuestions, cleanedGroups);
+        showToast(
+          'Test Images Cleaned Up',
+          `Removed ${data.deletedCount || 0} diagram image(s) for this test (${data.formattedFreed || '0 KB'} freed). All questions and passages remain intact.`,
+          'success'
+        );
+        fetchStorageUsage();
+      }
+    } catch {
+      showToast('Cleanup Error', 'Failed to clean test images.', 'error');
+    } finally {
+      setCleaningOrphans(false);
+    }
+  };
+
   useEffect(() => {
     fetchQuestions();
     fetchStorageUsage();
@@ -286,8 +383,9 @@ export default function AdminMockTestQuestionsPage() {
     setUploadingImage(true);
 
     try {
+      const preCompressedFile = await compressDiagramFileBeforeUpload(pendingImageFile);
       const form = new FormData();
-      form.append('file', pendingImageFile);
+      form.append('file', preCompressedFile);
       form.append('testId', testId);
       form.append('maxDimension', imageTarget.targetType);
       form.append('altText', pendingAltText || `Diagram for question ${questions[imageTarget.qIndex]?.position || ''}`);
@@ -379,8 +477,9 @@ export default function AdminMockTestQuestionsPage() {
     }
 
     try {
+      const preCompressedFile = await compressDiagramFileBeforeUpload(file);
       const form = new FormData();
-      form.append('file', file);
+      form.append('file', preCompressedFile);
       form.append('testId', testId);
       form.append('maxDimension', 'question');
       form.append('altText', `Diagram for question ${questions[qIndex]?.position || qIndex + 1}`);
@@ -396,20 +495,19 @@ export default function AdminMockTestQuestionsPage() {
       }
 
       const data = await res.json();
-      setQuestions((prev) => {
-        const next = [...prev];
-        next[qIndex] = {
-          ...next[qIndex],
-          imagePath: data.storagePath,
-          imageAlt: `Diagram for question ${next[qIndex]?.position || qIndex + 1}`,
-          needsDiagram: false,
-        };
-        return next;
-      });
+      const next = [...questions];
+      next[qIndex] = {
+        ...next[qIndex],
+        imagePath: data.storagePath,
+        imageAlt: `Diagram for question ${next[qIndex]?.position || qIndex + 1}`,
+        needsDiagram: false,
+      };
+      setQuestions(next);
+      void persistQuestionsToServer(next, questionGroups);
 
       showToast(
         'Diagram Attached',
-        `Diagram attached to Question ${questions[qIndex]?.position || qIndex + 1}.`,
+        `Compressed WebP diagram (${((data.processedSize || preCompressedFile.size) / 1024).toFixed(1)} KB) attached to Question ${questions[qIndex]?.position || qIndex + 1}.`,
         'success'
       );
       fetchStorageUsage();
@@ -419,19 +517,30 @@ export default function AdminMockTestQuestionsPage() {
     }
   };
 
-  const handleRemoveQuestionDiagram = (qIndex: number) => {
-    setQuestions((prev) => {
-      const next = [...prev];
-      next[qIndex] = {
-        ...next[qIndex],
-        imagePath: null,
-        imageAlt: null,
-      };
-      return next;
-    });
+  const handleRemoveQuestionDiagram = async (qIndex: number) => {
+    const oldPath = questions[qIndex]?.imagePath;
+    const next = [...questions];
+    next[qIndex] = {
+      ...next[qIndex],
+      imagePath: null,
+      imageAlt: null,
+    };
+    setQuestions(next);
+    void persistQuestionsToServer(next, questionGroups);
+
+    if (oldPath && !oldPath.startsWith('http') && !oldPath.startsWith('data:')) {
+      try {
+        const form = new FormData();
+        form.append('action', 'delete-image');
+        form.append('storagePath', oldPath);
+        await fetch('/api/mock-tests/upload-image', { method: 'POST', body: form });
+        fetchStorageUsage();
+      } catch {}
+    }
+
     showToast(
-      'Diagram Removed',
-      `Diagram removed from Question ${questions[qIndex]?.position || qIndex + 1}.`,
+      'Diagram Removed & Space Freed',
+      `Diagram removed from Question ${questions[qIndex]?.position || qIndex + 1} and storage space cleaned.`,
       'error'
     );
   };
@@ -684,25 +793,32 @@ export default function AdminMockTestQuestionsPage() {
   // Auto-persist questions and groups to the server database
   const persistQuestionsToServer = async (qs: ParsedMCQ[], grps: MockQuestionGroup[]) => {
     try {
+      const grpMap = new Map(grps.map((g) => [g.id, g]));
       await fetch('/api/admin/mock-tests/questions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           testId,
           questionGroups: grps,
-          questions: qs.map((q, idx) => ({
-            id: q.id,
-            position: idx + 1,
-            questionText: q.question,
-            options: q.options,
-            correctOption: typeof q.correctOptionIndex === 'number' ? q.correctOptionIndex : 0,
-            explanation: q.explanation || '',
-            explanationImagePath: q.explanationImagePath || null,
-            explanationImageAlt: q.explanationImageAlt || null,
-            groupId: q.groupId || null,
-            imagePath: q.imagePath || null,
-            imageAlt: q.imageAlt || null,
-          })),
+          questions: qs.map((q, idx) => {
+            const matchedGrp = q.groupId ? grpMap.get(q.groupId) : null;
+            return {
+              id: q.id,
+              position: idx + 1,
+              questionText: q.question,
+              options: q.options,
+              correctOption: typeof q.correctOptionIndex === 'number' ? q.correctOptionIndex : 0,
+              explanation: q.explanation || '',
+              explanationImagePath: q.explanationImagePath || null,
+              explanationImageAlt: q.explanationImageAlt || null,
+              groupId: q.groupId || null,
+              passageText: matchedGrp?.passageText || null,
+              passageTitle: matchedGrp?.imageAlt || null,
+              passageImagePath: matchedGrp?.imagePath || null,
+              imagePath: q.imagePath || null,
+              imageAlt: q.imageAlt || null,
+            };
+          }),
         }),
       });
 
@@ -713,19 +829,25 @@ export default function AdminMockTestQuestionsPage() {
             const list = JSON.parse(stored);
             const idx = list.findIndex((t: any) => t.id === testId);
             if (idx >= 0) {
-              list[idx].questions = qs.map((q, i) => ({
-                id: q.id,
-                position: i + 1,
-                question: q.question,
-                options: q.options,
-                correctOptionIndex: typeof q.correctOptionIndex === 'number' ? q.correctOptionIndex : 0,
-                explanation: q.explanation || '',
-                explanationImagePath: q.explanationImagePath || null,
-                explanationImageAlt: q.explanationImageAlt || null,
-                groupId: q.groupId || null,
-                imagePath: q.imagePath || null,
-                imageAlt: q.imageAlt || null,
-              }));
+              list[idx].questions = qs.map((q, i) => {
+                const matchedGrp = q.groupId ? grpMap.get(q.groupId) : null;
+                return {
+                  id: q.id,
+                  position: i + 1,
+                  question: q.question,
+                  options: q.options,
+                  correctOptionIndex: typeof q.correctOptionIndex === 'number' ? q.correctOptionIndex : 0,
+                  explanation: q.explanation || '',
+                  explanationImagePath: q.explanationImagePath || null,
+                  explanationImageAlt: q.explanationImageAlt || null,
+                  groupId: q.groupId || null,
+                  passageText: matchedGrp?.passageText || null,
+                  passageTitle: matchedGrp?.imageAlt || null,
+                  passageImagePath: matchedGrp?.imagePath || null,
+                  imagePath: q.imagePath || null,
+                  imageAlt: q.imageAlt || null,
+                };
+              });
               list[idx].questionGroups = grps;
               list[idx].questionCount = qs.length;
               localStorage.setItem('cga_custom_tests', JSON.stringify(list));
@@ -733,6 +855,8 @@ export default function AdminMockTestQuestionsPage() {
           }
         } catch {}
       }
+
+      void refresh(true);
     } catch {}
   };
 
@@ -765,13 +889,14 @@ export default function AdminMockTestQuestionsPage() {
         return;
       }
 
-      // 2. Upload attached diagram if present
+      // 2. Upload attached diagram if present (compressed before upload)
       let uploadedImagePath: string | null = null;
       let uploadedImageAlt: string | null = null;
 
       if (currentDiagramFile) {
+        const preCompressedFile = await compressDiagramFileBeforeUpload(currentDiagramFile);
         const form = new FormData();
-        form.append('file', currentDiagramFile);
+        form.append('file', preCompressedFile);
         form.append('testId', testId);
         form.append('maxDimension', 'question');
         form.append('altText', currentDiagramAlt.trim() || `Diagram for question ${questions.length + 1}`);
@@ -946,11 +1071,12 @@ export default function AdminMockTestQuestionsPage() {
         return;
       }
 
-      // 2. Upload passage diagram if selected
+      // 2. Upload passage diagram if selected (compressed before upload)
       let uploadedPassageImgPath: string | null = null;
       if (passageDiagramFile) {
+        const preCompressedFile = await compressDiagramFileBeforeUpload(passageDiagramFile);
         const form = new FormData();
-        form.append('file', passageDiagramFile);
+        form.append('file', preCompressedFile);
         form.append('testId', testId);
         form.append('maxDimension', 'passage');
         form.append('altText', passageDiagramAlt.trim() || 'Passage diagram');
@@ -1060,24 +1186,32 @@ export default function AdminMockTestQuestionsPage() {
 
     setSaving(true);
     try {
+      const grpMap = new Map(questionGroups.map((g) => [g.id, g]));
       const res = await fetch('/api/admin/mock-tests/questions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           testId,
           questionGroups,
-          questions: questions.map((q, idx) => ({
-            position: idx + 1,
-            questionText: q.question,
-            options: q.options,
-            correctOption: q.correctOptionIndex,
-            explanation: q.explanation,
-            explanationImagePath: q.explanationImagePath || null,
-            explanationImageAlt: q.explanationImageAlt || null,
-            groupId: q.groupId || null,
-            imagePath: q.imagePath || null,
-            imageAlt: q.imageAlt || null,
-          })),
+          questions: questions.map((q, idx) => {
+            const matchedGrp = q.groupId ? grpMap.get(q.groupId) : null;
+            return {
+              id: q.id,
+              position: idx + 1,
+              questionText: q.question,
+              options: q.options,
+              correctOption: q.correctOptionIndex,
+              explanation: q.explanation,
+              explanationImagePath: q.explanationImagePath || null,
+              explanationImageAlt: q.explanationImageAlt || null,
+              groupId: q.groupId || null,
+              passageText: matchedGrp?.passageText || null,
+              passageTitle: matchedGrp?.imageAlt || null,
+              passageImagePath: matchedGrp?.imagePath || null,
+              imagePath: q.imagePath || null,
+              imageAlt: q.imageAlt || null,
+            };
+          }),
         }),
       });
 
@@ -1086,7 +1220,42 @@ export default function AdminMockTestQuestionsPage() {
         throw new Error(err.error || 'Save failed.');
       }
 
-      showToast('Approved & Saved', `Saved ${questions.length} questions and diagrams to database.`, 'success');
+      if (typeof window !== 'undefined') {
+        try {
+          const stored = localStorage.getItem('cga_custom_tests');
+          if (stored) {
+            const list = JSON.parse(stored);
+            const idx = list.findIndex((t: any) => t.id === testId);
+            if (idx >= 0) {
+              list[idx].questions = questions.map((q, i) => {
+                const matchedGrp = q.groupId ? grpMap.get(q.groupId) : null;
+                return {
+                  id: q.id,
+                  position: i + 1,
+                  question: q.question,
+                  options: q.options,
+                  correctOptionIndex: typeof q.correctOptionIndex === 'number' ? q.correctOptionIndex : 0,
+                  explanation: q.explanation || '',
+                  explanationImagePath: q.explanationImagePath || null,
+                  explanationImageAlt: q.explanationImageAlt || null,
+                  groupId: q.groupId || null,
+                  passageText: matchedGrp?.passageText || null,
+                  passageTitle: matchedGrp?.imageAlt || null,
+                  passageImagePath: matchedGrp?.imagePath || null,
+                  imagePath: q.imagePath || null,
+                  imageAlt: q.imageAlt || null,
+                };
+              });
+              list[idx].questionGroups = questionGroups;
+              list[idx].questionCount = questions.length;
+              localStorage.setItem('cga_custom_tests', JSON.stringify(list));
+            }
+          }
+        } catch {}
+      }
+
+      await refresh(true);
+      showToast('Approved & Saved', `Saved ${questions.length} questions, passages, and diagrams to database.`, 'success');
       router.push(`/admin/tests`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Save error';
@@ -1169,7 +1338,7 @@ export default function AdminMockTestQuestionsPage() {
         </div>
       </div>
 
-      {/* Storage usage warning bar if >= 80% */}
+      {/* Storage usage & post-test cleanup bar */}
       {storageUsage && (
         <div className="bg-white p-4 rounded-2xl border border-slate-200 flex flex-wrap items-center justify-between gap-4 text-xs">
           <div className="flex items-center gap-3">
@@ -1187,15 +1356,31 @@ export default function AdminMockTestQuestionsPage() {
             </div>
           </div>
 
-          <button
-            type="button"
-            disabled={cleaningOrphans}
-            onClick={handleCleanOrphans}
-            className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-          >
-            {cleaningOrphans ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-            Clean Unused Files
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {(questions.some((q) => Boolean(q.imagePath || q.explanationImagePath)) ||
+              questionGroups.some((g) => Boolean(g.imagePath))) && (
+              <button
+                type="button"
+                disabled={cleaningOrphans}
+                onClick={handleCleanTestImages}
+                className="px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                title="Remove all uploaded diagrams for this test to free storage space while keeping all questions and passages"
+              >
+                {cleaningOrphans ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5 text-amber-700" />}
+                Remove Test Diagrams &amp; Free Space
+              </button>
+            )}
+
+            <button
+              type="button"
+              disabled={cleaningOrphans}
+              onClick={handleCleanOrphans}
+              className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              {cleaningOrphans ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+              Clean Unused Files
+            </button>
+          </div>
         </div>
       )}
 
@@ -2151,115 +2336,172 @@ Explanation: The two 20 Ω parallel resistors yield 10 Ω equivalent resistance.
               <div className="space-y-3">
                 {questions.map((q, qIdx) => {
                   const hasImage = Boolean(q.imagePath);
+                  const prevQ = qIdx > 0 ? questions[qIdx - 1] : null;
+                  const linkedGroup = q.groupId ? questionGroups.find((g) => g.id === q.groupId) : null;
+                  const isFirstInGroup = Boolean(linkedGroup && (!prevQ || prevQ.groupId !== q.groupId));
 
                   return (
-                    <div
-                      key={q.id || qIdx}
-                      className={`p-4 rounded-2xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${
-                        hasImage
-                          ? 'border-2 border-emerald-500 bg-emerald-50/30'
-                          : 'border-slate-200 bg-white hover:border-slate-300'
-                      }`}
-                    >
-                      {/* Left: Question statement & normal options */}
-                      <div className="flex-1 space-y-1.5 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-black ${
-                            hasImage ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700'
-                          }`}>
-                            Q{q.position || qIdx + 1}
-                          </span>
-                          {hasImage && (
-                            <span className="text-[11px] font-bold text-emerald-700 inline-flex items-center gap-1">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Diagram Attached
+                    <React.Fragment key={q.id || qIdx}>
+                      {isFirstInGroup && linkedGroup && (
+                        <div className="p-4 rounded-2xl bg-purple-50/70 border-2 border-purple-200 space-y-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-xs font-black text-purple-950 flex items-center gap-1.5">
+                              <BookOpen className="w-4 h-4 text-purple-700" />
+                              <span>{linkedGroup.imageAlt || 'Reading Comprehension Passage'}</span>
                             </span>
-                          )}
-                          <span className="text-[11px] font-bold text-slate-400">
-                            Ans: Option {String.fromCharCode(65 + (q.correctOptionIndex ?? 0))}
-                          </span>
-                        </div>
-
-                        <p className="text-xs font-semibold text-slate-800 line-clamp-2">
-                          {q.question || 'No question statement'}
-                        </p>
-
-                        <div className="flex flex-wrap gap-2 text-[11px] text-slate-500">
-                          {q.options.map((opt, oIdx) => (
-                            <span
-                              key={oIdx}
-                              className={`px-2 py-0.5 rounded-lg border ${
-                                q.correctOptionIndex === oIdx
-                                  ? 'bg-emerald-100 border-emerald-300 text-emerald-900 font-bold'
-                                  : 'bg-slate-50 border-slate-200 text-slate-600'
-                              }`}
-                            >
-                              ({String.fromCharCode(65 + oIdx)}) {getOptionText(opt)}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Right: Attached Diagram or Direct Upload Button */}
-                      <div className="flex items-center gap-3 shrink-0">
-                        {hasImage ? (
-                          <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-emerald-200 shadow-2xs">
-                            <MockQuestionImage
-                              path={q.imagePath!}
-                              alt={q.imageAlt || `Diagram for Q${qIdx + 1}`}
-                              testId={testId}
-                              type="question"
-                              className="w-24 h-16 rounded-lg"
-                            />
-                            <div className="space-y-1">
-                              <label className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-[#0056b3] text-[11px] font-bold cursor-pointer block text-center">
-                                Change
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  onChange={(e) => {
-                                    const f = e.target.files?.[0];
-                                    if (f) handleDirectQuestionImageUpload(qIdx, f);
-                                  }}
-                                  className="hidden"
-                                />
-                              </label>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveQuestionDiagram(qIdx)}
-                                className="px-2.5 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-[#dc2626] text-[11px] font-bold cursor-pointer block w-full text-center"
-                              >
-                                Remove
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <label className="px-4 py-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[#0056b3] text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-2xs transition-all">
-                            <ImageIcon className="w-4 h-4 text-[#0056b3]" /> Attach Diagram to Q{q.position || qIdx + 1}
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={(e) => {
-                                const f = e.target.files?.[0];
-                                if (f) handleDirectQuestionImageUpload(qIdx, f);
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextGroups = questionGroups.filter((g) => g.id !== linkedGroup.id);
+                                const nextQs = questions
+                                  .filter((item) => item.groupId !== linkedGroup.id)
+                                  .map((item, i) => ({ ...item, position: i + 1 }));
+                                setQuestionGroups(nextGroups);
+                                setQuestions(nextQs);
+                                void persistQuestionsToServer(nextQs, nextGroups);
+                                showToast('Passage & Linked Qs Deleted', 'Removed passage and its linked questions from test.', 'error');
                               }}
-                              className="hidden"
-                            />
-                          </label>
-                        )}
+                              className="px-2.5 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-[#dc2626] border border-red-200 text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer"
+                            >
+                              <Trash2 className="w-3 h-3" /> Delete Passage &amp; Linked Qs
+                            </button>
+                          </div>
+                          <p className="text-xs text-slate-700 bg-white p-3 rounded-xl border border-purple-100 whitespace-pre-line max-h-28 overflow-y-auto">
+                            {linkedGroup.passageText}
+                          </p>
+                        </div>
+                      )}
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setActiveQIndex(qIdx);
-                            setActiveTab('review');
-                          }}
-                          className="p-2 rounded-xl text-slate-400 hover:text-[#0056b3] hover:bg-blue-50 cursor-pointer"
-                          title="Edit this question in Review Screen"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
+                      <div
+                        className={`p-4 rounded-2xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                          hasImage
+                            ? 'border-2 border-emerald-500 bg-emerald-50/30'
+                            : linkedGroup
+                            ? 'border-purple-200 bg-white hover:border-purple-300'
+                            : 'border-slate-200 bg-white hover:border-slate-300'
+                        }`}
+                      >
+                        {/* Left: Question statement & normal options */}
+                        <div className="flex-1 space-y-1.5 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-black ${
+                              hasImage ? 'bg-emerald-600 text-white' : linkedGroup ? 'bg-purple-100 text-purple-900' : 'bg-slate-100 text-slate-700'
+                            }`}>
+                              Q{q.position || qIdx + 1}
+                            </span>
+                            {linkedGroup && (
+                              <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-800 border border-purple-200 text-[10px] font-bold inline-flex items-center gap-1">
+                                <BookOpen className="w-3 h-3 text-purple-600" /> Passage Question
+                              </span>
+                            )}
+                            {hasImage && (
+                              <span className="text-[11px] font-bold text-emerald-700 inline-flex items-center gap-1">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Compressed Diagram Attached
+                              </span>
+                            )}
+                            <span className="text-[11px] font-bold text-slate-400">
+                              Ans: Option {String.fromCharCode(65 + (q.correctOptionIndex ?? 0))}
+                            </span>
+                          </div>
+
+                          <p className="text-xs font-semibold text-slate-800 line-clamp-2">
+                            {q.question || 'No question statement'}
+                          </p>
+
+                          <div className="flex flex-wrap gap-2 text-[11px] text-slate-500">
+                            {q.options.map((opt, oIdx) => (
+                              <span
+                                key={oIdx}
+                                className={`px-2 py-0.5 rounded-lg border ${
+                                  q.correctOptionIndex === oIdx
+                                    ? 'bg-emerald-100 border-emerald-300 text-emerald-900 font-bold'
+                                    : 'bg-slate-50 border-slate-200 text-slate-600'
+                                }`}
+                              >
+                                ({String.fromCharCode(65 + oIdx)}) {getOptionText(opt)}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Right: Attached Diagram or Direct Upload Button */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          {hasImage ? (
+                            <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-emerald-200 shadow-2xs">
+                              <MockQuestionImage
+                                path={q.imagePath!}
+                                alt={q.imageAlt || `Diagram for Q${qIdx + 1}`}
+                                testId={testId}
+                                type="question"
+                                className="w-24 h-16 rounded-lg"
+                              />
+                              <div className="space-y-1">
+                                <label className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-[#0056b3] text-[11px] font-bold cursor-pointer block text-center">
+                                  Change
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) => {
+                                      const f = e.target.files?.[0];
+                                      if (f) void handleDirectQuestionImageUpload(qIdx, f);
+                                    }}
+                                    className="hidden"
+                                  />
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleRemoveQuestionDiagram(qIdx)}
+                                  className="px-2.5 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-[#dc2626] text-[11px] font-bold cursor-pointer block w-full text-center"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <label className="px-4 py-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[#0056b3] text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-2xs transition-all">
+                              <ImageIcon className="w-4 h-4 text-[#0056b3]" /> Attach Diagram to Q{q.position || qIdx + 1}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0];
+                                  if (f) void handleDirectQuestionImageUpload(qIdx, f);
+                                }}
+                                className="hidden"
+                              />
+                            </label>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveQIndex(qIdx);
+                              setActiveTab('review');
+                            }}
+                            className="p-2 rounded-xl text-slate-400 hover:text-[#0056b3] hover:bg-blue-50 cursor-pointer"
+                            title="Edit this question in Review Screen"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nextQs = questions
+                                .filter((_, i) => i !== qIdx)
+                                .map((item, i) => ({ ...item, position: i + 1 }));
+                              setQuestions(nextQs);
+                              void persistQuestionsToServer(nextQs, questionGroups);
+                              showToast('Question Deleted', `Question ${qIdx + 1} removed from Test Question Bank.`, 'error');
+                            }}
+                            className="p-2 rounded-xl text-slate-400 hover:text-[#dc2626] hover:bg-red-50 cursor-pointer"
+                            title="Delete this question from Test Question Bank"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    </React.Fragment>
                   );
                 })}
               </div>
@@ -2654,15 +2896,18 @@ Ans: A`}
                           <button
                             type="button"
                             onClick={() => {
-                              setQuestionGroups((prev) => prev.filter((g) => g.id !== group.id));
-                              setQuestions((prev) =>
-                                prev.map((q) => (q.groupId === group.id ? { ...q, groupId: null } : q))
-                              );
-                              showToast('Passage Deleted', 'Passage removed and linked questions unlinked.', 'error');
+                              const nextGroups = questionGroups.filter((g) => g.id !== group.id);
+                              const nextQs = questions
+                                .filter((q) => q.groupId !== group.id)
+                                .map((q, i) => ({ ...q, position: i + 1 }));
+                              setQuestionGroups(nextGroups);
+                              setQuestions(nextQs);
+                              void persistQuestionsToServer(nextQs, nextGroups);
+                              showToast('Passage & Linked Qs Deleted', 'Passage and its linked questions removed from test.', 'error');
                             }}
                             className="px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
                           >
-                            <Trash2 className="w-3.5 h-3.5" /> Delete Passage
+                            <Trash2 className="w-3.5 h-3.5" /> Delete Passage &amp; Qs
                           </button>
                         </div>
                       </div>
@@ -2684,26 +2929,100 @@ Ans: A`}
                         </div>
                       )}
 
-                      {/* Linked Questions List */}
-                      <div className="space-y-1.5 pt-1">
+                      {/* Linked Questions List with Full Statement & Delete Action */}
+                      <div className="space-y-2 pt-1">
                         <span className="text-[11px] font-black uppercase tracking-wider text-slate-700">
                           Linked Questions ({linked.length}):
                         </span>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="space-y-2">
                           {linked.map((lq) => (
-                            <span
+                            <div
                               key={lq.id}
-                              className="px-2.5 py-1 rounded-lg bg-white border border-purple-200 text-purple-900 text-xs font-bold inline-flex items-center gap-1 shadow-2xs"
+                              className="p-3 rounded-xl bg-white border border-purple-200 flex items-center justify-between gap-3 text-xs shadow-2xs"
                             >
-                              Q{lq.position}
-                              {lq.imagePath && <ImageIcon className="w-3 h-3 text-emerald-600" />}
-                            </span>
+                              <div className="flex-1 min-w-0">
+                                <span className="font-black text-purple-900 mr-2">Q{lq.position}.</span>
+                                <span className="font-semibold text-slate-800">{lq.question}</span>
+                                <span className="ml-2 text-[11px] font-bold text-emerald-700">
+                                  (Ans: {String.fromCharCode(65 + (lq.correctOptionIndex ?? 0))})
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const nextQs = questions
+                                    .filter((item) => item.id !== lq.id)
+                                    .map((item, i) => ({ ...item, position: i + 1 }));
+                                  setQuestions(nextQs);
+                                  void persistQuestionsToServer(nextQs, questionGroups);
+                                  showToast('Question Removed', `Q${lq.position} removed from test.`, 'error');
+                                }}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-[#dc2626] hover:bg-red-50 cursor-pointer shrink-0"
+                                title="Delete this question"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           ))}
                         </div>
                       </div>
                     </div>
                   );
                 })}
+              </div>
+            )}
+
+            {/* Total Test Question Bank Summary (All Passage + Standard Questions) */}
+            {questions.length > 0 && (
+              <div className="pt-4 border-t border-slate-200 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                    <ClipboardCheck className="w-4 h-4 text-[#0056b3]" />
+                    <span>Unified Test Question Bank ({questions.length} Total Questions in Test)</span>
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('paste')}
+                    className="text-xs font-bold text-[#0056b3] hover:underline cursor-pointer"
+                  >
+                    Add More Standard MCQs or Diagrams →
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-72 overflow-y-auto pr-1">
+                  {questions.map((q, qIdx) => (
+                    <div
+                      key={q.id || qIdx}
+                      className={`p-3 rounded-xl border text-xs flex items-center justify-between gap-2 ${
+                        q.groupId ? 'bg-purple-50/40 border-purple-200' : 'bg-white border-slate-200'
+                      }`}
+                    >
+                      <div className="truncate flex-1">
+                        <span className="font-black text-[#0056b3] mr-1.5">Q{qIdx + 1}.</span>
+                        {q.groupId && (
+                          <span className="px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 text-[10px] font-bold mr-1.5">
+                            Passage
+                          </span>
+                        )}
+                        <span className="font-semibold text-slate-800">{q.question}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextQs = questions
+                            .filter((_, i) => i !== qIdx)
+                            .map((item, i) => ({ ...item, position: i + 1 }));
+                          setQuestions(nextQs);
+                          void persistQuestionsToServer(nextQs, questionGroups);
+                          showToast('Question Removed', `Q${qIdx + 1} deleted from Test Question Bank.`, 'error');
+                        }}
+                        className="p-1 rounded-lg text-slate-400 hover:text-[#dc2626] hover:bg-red-50 cursor-pointer shrink-0"
+                        title="Delete question"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

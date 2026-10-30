@@ -61,10 +61,11 @@ export async function POST(request: Request) {
       }
 
       // Query all used image paths from DB
-      const [groupsRes, questionsRes, keysRes] = await Promise.all([
+      const [groupsRes, questionsRes, keysRes, testsRes] = await Promise.all([
         supabaseAdmin.from('mock_question_groups').select('image_path'),
         supabaseAdmin.from('mock_questions').select('image_path, options, options_bn'),
         supabaseAdmin.from('mock_question_keys').select('explanation_image_path'),
+        supabaseAdmin.from('mock_tests').select('questions'),
       ]);
 
       const referencedPaths = new Set<string>();
@@ -100,6 +101,17 @@ export async function POST(request: Request) {
         if (k.explanation_image_path) referencedPaths.add(k.explanation_image_path);
       }
 
+      // Mock Tests JSONB questions
+      for (const tRow of testsRes.data || []) {
+        if (Array.isArray(tRow.questions)) {
+          for (const q of tRow.questions) {
+            if (q?.imagePath) referencedPaths.add(q.imagePath);
+            if (q?.passageImagePath) referencedPaths.add(q.passageImagePath);
+            if (q?.explanationImagePath) referencedPaths.add(q.explanationImagePath);
+          }
+        }
+      }
+
       // Find orphaned files
       const orphanedFiles = allFiles.filter((filePath) => !referencedPaths.has(filePath));
 
@@ -123,6 +135,80 @@ export async function POST(request: Request) {
         totalFilesScanned: allFiles.length,
         orphanedCount: orphanedFiles.length,
         deletedCount,
+      });
+    }
+
+    // 1B. Delete a Single Diagram Image immediately to free space
+    if (action === 'delete-image') {
+      const storagePath = (formData.get('storagePath') as string) || '';
+      if (storagePath) {
+        await supabaseAdmin.storage.from('mock-question-images').remove([storagePath]).catch(() => null);
+      }
+      return NextResponse.json({ success: true, deletedPath: storagePath });
+    }
+
+    // 1C. Clean Up All Diagram Images for a Specific Test (Post-Test Space Cleanup)
+    if (action === 'clean-test-images') {
+      const targetTestId = (formData.get('testId') as string) || '';
+      if (!targetTestId) {
+        return NextResponse.json({ error: 'testId is required to clean test images.' }, { status: 400 });
+      }
+
+      const pathsToRemove = new Set<string>();
+      const safeFolder = targetTestId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
+
+      // List all files under the test folder in storage
+      const { data: folderFiles } = await supabaseAdmin.storage
+        .from('mock-question-images')
+        .list(safeFolder, { limit: 1000 });
+      for (const f of folderFiles || []) {
+        if (f.name) pathsToRemove.add(`${safeFolder}/${f.name}`);
+      }
+
+      // Also collect any paths referenced in DB rows for this test
+      const [{ data: qRows }, { data: gRows }, { data: tRow }] = await Promise.all([
+        supabaseAdmin.from('mock_questions').select('id, image_path').eq('test_id', targetTestId),
+        supabaseAdmin.from('mock_question_groups').select('id, image_path').eq('test_id', targetTestId),
+        supabaseAdmin.from('mock_tests').select('questions').eq('id', targetTestId).maybeSingle(),
+      ]);
+
+      for (const q of qRows || []) {
+        if (q.image_path) pathsToRemove.add(q.image_path);
+      }
+      for (const g of gRows || []) {
+        if (g.image_path) pathsToRemove.add(g.image_path);
+      }
+      if (tRow && Array.isArray(tRow.questions)) {
+        for (const q of tRow.questions) {
+          if (q?.imagePath) pathsToRemove.add(q.imagePath);
+          if (q?.passageImagePath) pathsToRemove.add(q.passageImagePath);
+        }
+      }
+
+      const removeList = Array.from(pathsToRemove);
+      if (removeList.length > 0) {
+        await supabaseAdmin.storage.from('mock-question-images').remove(removeList).catch(() => null);
+      }
+
+      // Clear image references in DB while keeping questions, passages, and student results intact
+      await supabaseAdmin.from('mock_questions').update({ image_path: null, image_alt: null }).eq('test_id', targetTestId);
+      await supabaseAdmin.from('mock_question_groups').update({ image_path: null }).eq('test_id', targetTestId);
+
+      if (tRow && Array.isArray(tRow.questions)) {
+        const cleanedQs = tRow.questions.map((q: any) => ({
+          ...q,
+          imagePath: null,
+          imageAlt: null,
+          passageImagePath: null,
+          explanationImagePath: null,
+        }));
+        await supabaseAdmin.from('mock_tests').update({ questions: cleanedQs }).eq('id', targetTestId);
+      }
+
+      return NextResponse.json({
+        success: true,
+        deletedCount: removeList.length,
+        message: `Cleaned up ${removeList.length} diagram image(s) for this test and freed storage space.`,
       });
     }
 

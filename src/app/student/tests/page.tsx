@@ -690,17 +690,27 @@ export default function StudentMockTestsPage() {
 
               {/* Reading Comprehension Passage Section */}
               {(() => {
-                let group = activeTest.questionGroups?.find((g: any) => g.id === currentQ.groupId || String(g.id) === String(currentQ.groupId));
-                if (!group && activeTest.questionGroups?.length === 1) {
+                let group = currentQ?.groupId
+                  ? activeTest.questionGroups?.find((g: any) => g.id === currentQ.groupId || String(g.id) === String(currentQ.groupId))
+                  : undefined;
+                if (!group && (currentQ as any)?.passageText) {
+                  group = {
+                    id: currentQ.groupId || 'grp-inline',
+                    testId: activeTest.id,
+                    position: 1,
+                    passageText: (currentQ as any).passageText,
+                    imagePath: (currentQ as any).passageImagePath || null,
+                    imageAlt: (currentQ as any).passageTitle || 'Comprehension Passage',
+                  };
+                }
+                const anyExplicitLink = activeTest.questions.some((q: any) => Boolean(q?.groupId || q?.passageText));
+                if (!group && !anyExplicitLink && activeTest.questionGroups && activeTest.questionGroups.length > 0) {
                   group = activeTest.questionGroups[0];
-                } else if (!group && activeTest.questionGroups && activeTest.questionGroups.length > 0) {
-                  const matchByPos = activeTest.questionGroups.find((g: any) => (g.position || 1) === (currentQ.groupId || 1));
-                  group = matchByPos || activeTest.questionGroups[0];
                 }
                 if (!group) return null;
-                const pText = group.passageText || group.passage_text;
-                const pImg = group.imagePath || group.image_path;
-                const pAlt = group.imageAlt || group.image_alt || 'Passage Section';
+                const pText = group.passageText || (group as any).passage_text;
+                const pImg = group.imagePath || (group as any).image_path;
+                const pAlt = group.imageAlt || (group as any).image_alt || 'Passage Section';
                 if (!pText && !pImg) return null;
 
                 return (

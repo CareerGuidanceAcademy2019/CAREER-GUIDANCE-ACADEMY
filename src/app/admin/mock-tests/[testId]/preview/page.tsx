@@ -78,19 +78,113 @@ export default function AdminMockTestPreviewPage() {
         throw new Error('Failed to load test preview data from server.');
       }
       const data = await res.json();
-      setTest(data.test || null);
-      setQuestions(data.questions || []);
-      const mappedGroups = (data.questionGroups || []).map((g: any) => ({
-        ...g,
-        passageText: g.passageText || g.passage_text || '',
-        passage_text: g.passageText || g.passage_text || '',
-        imagePath: g.imagePath || g.image_path || null,
-        image_path: g.imagePath || g.image_path || null,
-        imageAlt: g.imageAlt || g.image_alt || null,
-        image_alt: g.imageAlt || g.image_alt || null,
-      }));
-      setQuestionGroups(mappedGroups);
-      setTimeRemaining((data.test?.durationMinutes || data.test?.duration_minutes || 60) * 60);
+      const contextTest = db.mockTests.find((t) => t.id === testId);
+      setTest(data.test || contextTest || null);
+
+      const groupMap = new Map<string, any>();
+      for (const g of data.questionGroups || []) {
+        if (g && g.id) {
+          groupMap.set(g.id, {
+            ...g,
+            passageText: g.passageText || g.passage_text || '',
+            passage_text: g.passageText || g.passage_text || '',
+            imagePath: g.imagePath || g.image_path || null,
+            image_path: g.imagePath || g.image_path || null,
+            imageAlt: g.imageAlt || g.image_alt || null,
+            image_alt: g.imageAlt || g.image_alt || null,
+          });
+        }
+      }
+      if (contextTest && Array.isArray(contextTest.questionGroups)) {
+        for (const g of contextTest.questionGroups) {
+          if (g && g.id && !groupMap.has(g.id)) {
+            groupMap.set(g.id, {
+              ...g,
+              passageText: g.passageText || (g as any).passage_text || '',
+              passage_text: g.passageText || (g as any).passage_text || '',
+              imagePath: g.imagePath || (g as any).image_path || null,
+              image_path: g.imagePath || (g as any).image_path || null,
+              imageAlt: g.imageAlt || (g as any).image_alt || null,
+              image_alt: g.imageAlt || (g as any).image_alt || null,
+            });
+          }
+        }
+      }
+
+      const combinedQs: any[] = [];
+      const seenIds = new Set<string>();
+      const seenStems = new Set<string>();
+
+      for (const q of data.questions || []) {
+        const stem = (q.questionText || q.question || '').trim();
+        if (q.id) seenIds.add(q.id);
+        if (stem) seenStems.add(stem.toLowerCase());
+        if (q.groupId && q.passageText && !groupMap.has(q.groupId)) {
+          groupMap.set(q.groupId, {
+            id: q.groupId,
+            testId,
+            position: groupMap.size + 1,
+            passageText: q.passageText,
+            passage_text: q.passageText,
+            imagePath: q.passageImagePath || null,
+            image_path: q.passageImagePath || null,
+            imageAlt: q.passageTitle || 'Comprehension Passage',
+            image_alt: q.passageTitle || 'Comprehension Passage',
+          });
+        }
+        combinedQs.push({
+          ...q,
+          position: combinedQs.length + 1,
+        });
+      }
+
+      if (contextTest && Array.isArray(contextTest.questions)) {
+        for (let i = 0; i < contextTest.questions.length; i++) {
+          const cq: any = contextTest.questions[i];
+          const cId = cq.id || `q-ctx-${i}`;
+          const stem = (cq.question || cq.questionText || '').trim();
+          if (seenIds.has(cId) || (stem && seenStems.has(stem.toLowerCase()))) {
+            continue;
+          }
+          seenIds.add(cId);
+          if (stem) seenStems.add(stem.toLowerCase());
+          if (cq.groupId && cq.passageText && !groupMap.has(cq.groupId)) {
+            groupMap.set(cq.groupId, {
+              id: cq.groupId,
+              testId,
+              position: groupMap.size + 1,
+              passageText: cq.passageText,
+              passage_text: cq.passageText,
+              imagePath: cq.passageImagePath || null,
+              image_path: cq.passageImagePath || null,
+              imageAlt: cq.passageTitle || 'Comprehension Passage',
+              image_alt: cq.passageTitle || 'Comprehension Passage',
+            });
+          }
+          combinedQs.push({
+            id: cId,
+            position: combinedQs.length + 1,
+            questionText: stem,
+            question: stem,
+            questionTextBn: cq.questionBn || cq.questionTextBn || null,
+            options: cq.options || [],
+            optionsBn: cq.optionsBn || null,
+            correctOption: cq.correctOptionIndex ?? cq.correctOption ?? 0,
+            explanation: cq.explanation || '',
+            explanationBn: cq.explanationBn || null,
+            imagePath: cq.imagePath || null,
+            imageAlt: cq.imageAlt || null,
+            groupId: cq.groupId || null,
+            passageText: cq.passageText || null,
+            passageTitle: cq.passageTitle || null,
+            passageImagePath: cq.passageImagePath || null,
+          });
+        }
+      }
+
+      setQuestions(combinedQs);
+      setQuestionGroups(Array.from(groupMap.values()));
+      setTimeRemaining((data.test?.durationMinutes || data.test?.duration_minutes || contextTest?.durationMinutes || 60) * 60);
     } catch (err: unknown) {
       // Fallback to local / context test so preview ALWAYS works
       const fallbackTest = db.mockTests.find((t) => t.id === testId);
@@ -258,12 +352,22 @@ export default function AdminMockTestPreviewPage() {
     ? questionGroups.find((g) => g.id === currentQ.groupId || String(g.id) === String(currentQ.groupId))
     : null;
 
-  // Smart fallback: If this test has comprehension passage groups, link properly
-  if (!linkedGroup && questionGroups.length === 1) {
+  if (!linkedGroup && currentQ?.passageText) {
+    linkedGroup = {
+      id: currentQ.groupId || 'grp-inline',
+      passageText: currentQ.passageText,
+      passage_text: currentQ.passageText,
+      imageAlt: currentQ.passageTitle || 'Comprehension Passage',
+      image_alt: currentQ.passageTitle || 'Comprehension Passage',
+      imagePath: currentQ.passageImagePath || null,
+      image_path: currentQ.passageImagePath || null,
+    };
+  }
+
+  // Fallback only if no question in the test has explicit groupId/passageText links
+  const anyExplicitGroupLink = questions.some((q) => Boolean(q?.groupId || q?.passageText));
+  if (!linkedGroup && !anyExplicitGroupLink && questionGroups.length > 0) {
     linkedGroup = questionGroups[0];
-  } else if (!linkedGroup && questionGroups.length > 0 && currentQ) {
-    const matchByPos = questionGroups.find((g) => (g.position || 1) === (currentQ.groupId || 1));
-    linkedGroup = matchByPos || questionGroups[0];
   }
 
   const langMode = test?.languageMode || test?.language_mode || 'english_only';

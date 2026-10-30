@@ -99,8 +99,8 @@ export async function processMockTestImage(
       .resize({ width: cap, withoutEnlargement: true, fit: 'inside' });
 
     const [lossy, lossless] = await Promise.all([
-      pipeline.clone().webp({ quality: WEBP_LOSSY_QUALITY, effort: 4 }).toBuffer({ resolveWithObject: true }),
-      pipeline.clone().webp({ lossless: true, effort: 4 }).toBuffer({ resolveWithObject: true }),
+      pipeline.clone().webp({ quality: WEBP_LOSSY_QUALITY, alphaQuality: 90, smartSubsample: true, effort: 5 }).toBuffer({ resolveWithObject: true }),
+      pipeline.clone().webp({ lossless: true, effort: 5 }).toBuffer({ resolveWithObject: true }),
     ]);
     const useLossless = lossless.data.length < lossy.data.length;
     const chosen = useLossless ? lossless : lossy;

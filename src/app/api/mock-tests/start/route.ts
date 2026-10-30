@@ -197,23 +197,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing testId parameter.' }, { status: 400 });
     }
 
-    // 1. First attempt: call standard DB RPC get_test_questions
-    try {
-      const { data, error } = await supabase.rpc('get_test_questions', {
-        p_test_id: testId,
-      });
-
-      if (!error && data && Array.isArray(data.questions) && data.questions.length > 0) {
-        return NextResponse.json({
-          success: true,
-          ...data,
-        });
-      }
-    } catch {
-      // Proceed to authoritative admin client check below
-    }
-
-    // 2. Authoritative Server-side Verification & Fallback via Admin Client
+    // Authoritative Server-side Verification & Question Retrieval via Admin Client
     const admin = createAdminSupabase();
 
     // Check if user is an administrator
@@ -354,20 +338,81 @@ export async function POST(request: Request) {
       }
     }
 
-    // 4. Retrieve Questions (From mock_questions table or test.questions JSONB)
-    const { data: dbQuestions } = await admin
-      .from('mock_questions')
-      .select('*')
-      .eq('test_id', testId)
-      .order('position', { ascending: true });
+    // 4. Retrieve Question Groups & Questions (Unifying mock_questions table and test.questions JSONB)
+    const [{ data: dbQuestions }, { data: dbGroups }] = await Promise.all([
+      admin.from('mock_questions').select('*').eq('test_id', testId).order('position', { ascending: true }),
+      admin.from('mock_question_groups').select('*').eq('test_id', testId).order('position', { ascending: true }),
+    ]);
 
-    let rawQuestions: any[] = [];
+    const groupMap = new Map<string, any>();
+    for (const g of dbGroups || []) {
+      groupMap.set(g.id, {
+        id: g.id,
+        testId: g.test_id || testId,
+        position: g.position || 1,
+        passageText: g.passage_text || g.passageText || '',
+        imagePath: g.image_path || g.imagePath || null,
+        imageAlt: g.image_alt || g.imageAlt || null,
+      });
+    }
+    if (Array.isArray(testRecord.questionGroups)) {
+      for (const g of testRecord.questionGroups) {
+        if (g && g.id && !groupMap.has(g.id)) {
+          groupMap.set(g.id, {
+            id: g.id,
+            testId: g.testId || testId,
+            position: g.position || groupMap.size + 1,
+            passageText: g.passageText || g.passage_text || '',
+            imagePath: g.imagePath || g.image_path || null,
+            imageAlt: g.imageAlt || g.image_alt || null,
+          });
+        }
+      }
+    }
+
+    const jsonQs = Array.isArray(testRecord.questions) && testRecord.questions.length > 0
+      ? testRecord.questions
+      : seedTest && Array.isArray(seedTest.questions)
+      ? seedTest.questions
+      : [];
+
+    for (const jq of jsonQs) {
+      if (jq && jq.groupId && jq.passageText && !groupMap.has(jq.groupId)) {
+        groupMap.set(jq.groupId, {
+          id: jq.groupId,
+          testId,
+          position: groupMap.size + 1,
+          passageText: jq.passageText,
+          imagePath: jq.passageImagePath || null,
+          imageAlt: jq.passageTitle || 'Comprehension Passage',
+        });
+      }
+    }
+
+    const rawGroups = Array.from(groupMap.values());
+
+    const seenIds = new Set<string>();
+    const seenStems = new Set<string>();
+    const rawQuestions: any[] = [];
+
     if (dbQuestions && dbQuestions.length > 0) {
-      rawQuestions = dbQuestions;
-    } else if (Array.isArray(testRecord.questions) && testRecord.questions.length > 0) {
-      rawQuestions = testRecord.questions;
-    } else if (seedTest && Array.isArray(seedTest.questions)) {
-      rawQuestions = seedTest.questions;
+      for (const dq of dbQuestions) {
+        const stem = (dq.question_text || dq.question || '').trim();
+        seenIds.add(dq.id);
+        if (stem) seenStems.add(stem.toLowerCase());
+        rawQuestions.push(dq);
+      }
+    }
+    for (let idx = 0; idx < jsonQs.length; idx++) {
+      const jq = jsonQs[idx];
+      const qId = jq.id || `q-${idx + 1}`;
+      const stem = (jq.question || jq.questionText || '').trim();
+      if (seenIds.has(qId) || (stem && seenStems.has(stem.toLowerCase()))) {
+        continue;
+      }
+      seenIds.add(qId);
+      if (stem) seenStems.add(stem.toLowerCase());
+      rawQuestions.push(jq);
     }
 
     if (rawQuestions.length === 0) {
@@ -383,17 +428,22 @@ export async function POST(request: Request) {
       const qTextBn = q.questionTextBn || q.question_text_bn || q.questionBn || undefined;
       const opts = q.options || [];
       const optsBn = q.optionsBn || q.options_bn || undefined;
+      const gId = q.groupId || q.group_id || null;
+      const grp = gId ? groupMap.get(gId) : null;
 
       return {
         id: q.id || `q-${idx + 1}`,
-        position: q.position ?? idx + 1,
+        position: idx + 1,
         questionText: qText,
         question: qText,
         questionTextBn: qTextBn,
         questionBn: qTextBn,
         options: opts,
         optionsBn: optsBn,
-        groupId: q.groupId || q.group_id || null,
+        groupId: gId,
+        passageText: grp?.passageText || q.passageText || null,
+        passageTitle: grp?.imageAlt || q.passageTitle || null,
+        passageImagePath: grp?.imagePath || q.passageImagePath || null,
         imagePath: q.imagePath || q.image_path || null,
         imageAlt: q.imageAlt || q.image_alt || null,
         imageWidth: q.imageWidth || q.image_width || null,
@@ -404,29 +454,6 @@ export async function POST(request: Request) {
         explanationBn: '',
       };
     });
-
-    // 6. Retrieve Question Groups / Comprehension Passages
-    const { data: dbGroups } = await admin
-      .from('mock_question_groups')
-      .select('*')
-      .eq('test_id', testId)
-      .order('position', { ascending: true });
-
-    let rawGroups: any[] = [];
-    if (dbGroups && dbGroups.length > 0) {
-      rawGroups = dbGroups.map((g: any) => ({
-        id: g.id,
-        testId: g.test_id || testId,
-        position: g.position || 1,
-        passageText: g.passage_text || g.passageText || '',
-        imagePath: g.image_path || g.imagePath || null,
-        imageAlt: g.image_alt || g.imageAlt || null,
-      }));
-    } else if (Array.isArray(testRecord.questionGroups) && testRecord.questionGroups.length > 0) {
-      rawGroups = testRecord.questionGroups;
-    } else if (seedTest && Array.isArray((seedTest as any).questionGroups)) {
-      rawGroups = (seedTest as any).questionGroups;
-    }
 
     // 7. Ensure in-progress attempt is initiated in mock_attempts
     let startedAt = new Date().toISOString();

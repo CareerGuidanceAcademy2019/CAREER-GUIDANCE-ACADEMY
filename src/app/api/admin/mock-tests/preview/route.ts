@@ -35,79 +35,145 @@ export async function GET(request: Request) {
       .maybeSingle();
 
     if (testRow) {
-      // 2. Fetch questions from mock_questions table if available
-      const { data: dbQs } = await supabaseAdmin
-        .from('mock_questions')
-        .select('*')
-        .eq('test_id', testId)
-        .order('position', { ascending: true });
+      // 2. Fetch questions, answer keys, and passage groups from tables
+      const [{ data: dbQs }, { data: dbGroups }] = await Promise.all([
+        supabaseAdmin.from('mock_questions').select('*').eq('test_id', testId).order('position', { ascending: true }),
+        supabaseAdmin.from('mock_question_groups').select('*').eq('test_id', testId).order('position', { ascending: true }),
+      ]);
 
-      const { data: dbGroups } = await supabaseAdmin
-        .from('mock_question_groups')
-        .select('*')
-        .eq('test_id', testId)
-        .order('position', { ascending: true });
-
-      const mappedGroups = (dbGroups || []).map((g: any) => ({
-        id: g.id,
-        testId: g.test_id || testId,
-        position: g.position || 1,
-        passageText: g.passage_text || g.passageText || '',
-        passage_text: g.passage_text || g.passageText || '',
-        imagePath: g.image_path || g.imagePath || null,
-        image_path: g.image_path || g.imagePath || null,
-        imageAlt: g.image_alt || g.imageAlt || null,
-        image_alt: g.image_alt || g.imageAlt || null,
-      }));
-
-      if (mappedGroups.length === 0 && Array.isArray((testRow as any).questionGroups)) {
-        mappedGroups.push(
-          ...(testRow as any).questionGroups.map((g: any) => ({
-            id: g.id,
-            testId: g.testId || testId,
-            position: g.position || 1,
-            passageText: g.passageText || g.passage_text || '',
-            passage_text: g.passageText || g.passage_text || '',
-            imagePath: g.imagePath || g.image_path || null,
-            image_path: g.imagePath || g.image_path || null,
-            imageAlt: g.imageAlt || g.image_alt || null,
-            image_alt: g.imageAlt || g.image_alt || null,
-          }))
-        );
+      const qIds = (dbQs || []).map((q: any) => q.id);
+      const keyMap = new Map<string, any>();
+      if (qIds.length > 0) {
+        const { data: keysData } = await supabaseAdmin
+          .from('mock_question_keys')
+          .select('*')
+          .in('question_id', qIds);
+        for (const k of keysData || []) {
+          keyMap.set(k.question_id, k);
+        }
       }
 
-      let finalQs: any[] = [];
+      const groupMap = new Map<string, any>();
+      for (const g of dbGroups || []) {
+        groupMap.set(g.id, {
+          id: g.id,
+          testId: g.test_id || testId,
+          position: g.position || 1,
+          passageText: g.passage_text || g.passageText || '',
+          passage_text: g.passage_text || g.passageText || '',
+          imagePath: g.image_path || g.imagePath || null,
+          image_path: g.image_path || g.imagePath || null,
+          imageAlt: g.image_alt || g.imageAlt || null,
+          image_alt: g.image_alt || g.imageAlt || null,
+        });
+      }
+
+      if (Array.isArray((testRow as any).questionGroups)) {
+        for (const g of (testRow as any).questionGroups) {
+          if (g && g.id && !groupMap.has(g.id)) {
+            groupMap.set(g.id, {
+              id: g.id,
+              testId: g.testId || testId,
+              position: g.position || groupMap.size + 1,
+              passageText: g.passageText || g.passage_text || '',
+              passage_text: g.passageText || g.passage_text || '',
+              imagePath: g.imagePath || g.image_path || null,
+              image_path: g.imagePath || g.image_path || null,
+              imageAlt: g.imageAlt || g.image_alt || null,
+              image_alt: g.imageAlt || g.image_alt || null,
+            });
+          }
+        }
+      }
+
+      const rawQs = Array.isArray(testRow.questions) ? testRow.questions : [];
+      for (const rq of rawQs) {
+        if (rq && rq.groupId && rq.passageText && !groupMap.has(rq.groupId)) {
+          groupMap.set(rq.groupId, {
+            id: rq.groupId,
+            testId,
+            position: groupMap.size + 1,
+            passageText: rq.passageText,
+            passage_text: rq.passageText,
+            imagePath: rq.passageImagePath || null,
+            image_path: rq.passageImagePath || null,
+            imageAlt: rq.passageTitle || 'Comprehension Passage',
+            image_alt: rq.passageTitle || 'Comprehension Passage',
+          });
+        }
+      }
+
+      const mappedGroups = Array.from(groupMap.values());
+
+      // Combine dbQs and rawQs so neither passage questions nor newly loaded modal questions are ever missing
+      const seenIds = new Set<string>();
+      const seenStems = new Set<string>();
+      const finalQs: any[] = [];
+
       if (dbQs && dbQs.length > 0) {
-        finalQs = dbQs.map((q: any) => ({
-          id: q.id,
-          position: q.position,
-          questionText: q.question_text || q.question || '',
+        for (const q of dbQs) {
+          const k = keyMap.get(q.id);
+          const qText = (q.question_text || q.question || '').trim();
+          const grp = q.group_id ? groupMap.get(q.group_id) : null;
+          seenIds.add(q.id);
+          if (qText) seenStems.add(qText.toLowerCase());
+          const corr = k?.correct_option ?? q.correct_option ?? 0;
+          finalQs.push({
+            id: q.id,
+            position: finalQs.length + 1,
+            questionText: qText,
+            question: qText,
+            options: q.options || [],
+            questionTextBn: q.question_text_bn || null,
+            questionBn: q.question_text_bn || null,
+            optionsBn: q.options_bn || null,
+            correctOption: corr,
+            correctOptionIndex: corr,
+            explanation: k?.explanation || q.explanation || '',
+            explanationBn: k?.explanation_bn || q.explanation_bn || null,
+            explanationImagePath: k?.explanation_image_path || null,
+            explanationImageAlt: k?.explanation_image_alt || null,
+            imagePath: q.image_path || null,
+            imageAlt: q.image_alt || null,
+            groupId: q.group_id || null,
+            passageText: grp?.passageText || null,
+            passageTitle: grp?.imageAlt || null,
+            passageImagePath: grp?.imagePath || null,
+          });
+        }
+      }
+
+      for (let idx = 0; idx < rawQs.length; idx++) {
+        const q = rawQs[idx];
+        const qId = q.id || `q-${idx}`;
+        const qText = (q.question || q.questionText || '').trim();
+        if (seenIds.has(qId) || (qText && seenStems.has(qText.toLowerCase()))) {
+          continue;
+        }
+        seenIds.add(qId);
+        if (qText) seenStems.add(qText.toLowerCase());
+        const grp = q.groupId ? groupMap.get(q.groupId) : null;
+        const corr = q.correctOptionIndex ?? q.correctOption ?? 0;
+        finalQs.push({
+          id: qId,
+          position: finalQs.length + 1,
+          questionText: qText,
+          question: qText,
           options: q.options || [],
-          questionTextBn: q.question_text_bn || null,
-          optionsBn: q.options_bn || null,
-          correctOption: q.correct_option ?? 0,
-          explanation: q.explanation || '',
-          explanationBn: q.explanation_bn || null,
-          imagePath: q.image_path || null,
-          imageAlt: q.image_alt || null,
-          groupId: q.group_id || null,
-        }));
-      } else {
-        const rawQs = Array.isArray(testRow.questions) ? testRow.questions : [];
-        finalQs = rawQs.map((q: any, idx: number) => ({
-          id: q.id || `q-${idx}`,
-          position: idx + 1,
-          questionText: q.question || q.questionText || '',
-          options: q.options || [],
-          questionTextBn: q.questionBn || null,
+          questionTextBn: q.questionBn || q.questionTextBn || null,
+          questionBn: q.questionBn || q.questionTextBn || null,
           optionsBn: q.optionsBn || null,
-          correctOption: q.correctOptionIndex ?? q.correctOption ?? 0,
+          correctOption: corr,
+          correctOptionIndex: corr,
           explanation: q.explanation || '',
           explanationBn: q.explanationBn || null,
           imagePath: q.imagePath || null,
           imageAlt: q.imageAlt || null,
           groupId: q.groupId || null,
-        }));
+          passageText: grp?.passageText || q.passageText || null,
+          passageTitle: grp?.imageAlt || q.passageTitle || null,
+          passageImagePath: grp?.imagePath || q.passageImagePath || null,
+        });
       }
 
       return NextResponse.json({

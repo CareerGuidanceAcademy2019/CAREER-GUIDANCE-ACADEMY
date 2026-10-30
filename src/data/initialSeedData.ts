@@ -155,6 +155,9 @@ export interface MCQQuestion {
   explanationBn?: string;
   subject?: string;
   groupId?: string | null;
+  passageText?: string | null;
+  passageTitle?: string | null;
+  passageImagePath?: string | null;
   imagePath?: string | null;
   imageAlt?: string | null;
   imageWidth?: number | null;

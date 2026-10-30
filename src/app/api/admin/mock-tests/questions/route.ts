@@ -54,30 +54,63 @@ export async function GET(request: Request) {
       keyMap.set(k.question_id, k);
     }
 
-    const mappedGroups = (dbGroups || []).map((g: any) => ({
-      id: g.id,
-      testId: g.test_id || testId,
-      position: g.position || 1,
-      passageText: g.passage_text || g.passageText || '',
-      passage_text: g.passage_text || g.passageText || '',
-      imagePath: g.image_path || g.imagePath || null,
-      image_path: g.image_path || g.imagePath || null,
-      imageAlt: g.image_alt || g.imageAlt || null,
-      image_alt: g.image_alt || g.imageAlt || null,
-    }));
+    const groupMap = new Map<string, any>();
+    for (const g of dbGroups || []) {
+      groupMap.set(g.id, {
+        id: g.id,
+        testId: g.test_id || testId,
+        position: g.position || 1,
+        passageText: g.passage_text || g.passageText || '',
+        passage_text: g.passage_text || g.passageText || '',
+        imagePath: g.image_path || g.imagePath || null,
+        image_path: g.image_path || g.imagePath || null,
+        imageAlt: g.image_alt || g.imageAlt || null,
+        image_alt: g.image_alt || g.imageAlt || null,
+      });
+    }
 
-    let finalQs: any[] = [];
+    const rawJsonQs = Array.isArray(testRow.questions) ? testRow.questions : [];
+    for (const jq of rawJsonQs) {
+      if (jq && jq.groupId && jq.passageText && !groupMap.has(jq.groupId)) {
+        groupMap.set(jq.groupId, {
+          id: jq.groupId,
+          testId,
+          position: groupMap.size + 1,
+          passageText: jq.passageText,
+          passage_text: jq.passageText,
+          imagePath: jq.passageImagePath || null,
+          image_path: jq.passageImagePath || null,
+          imageAlt: jq.passageTitle || 'Comprehension Passage',
+          image_alt: jq.passageTitle || 'Comprehension Passage',
+        });
+      }
+    }
+
+    const mappedGroups = Array.from(groupMap.values());
+
+    // Combine dbQs and rawJsonQs so no question from either source is ever lost
+    const seenIds = new Set<string>();
+    const seenStems = new Set<string>();
+    const finalQs: any[] = [];
+
     if (dbQs && dbQs.length > 0) {
-      finalQs = dbQs.map((q: any) => {
+      for (const q of dbQs) {
         const k = keyMap.get(q.id);
-        return {
+        const qText = (q.question_text || q.question || '').trim();
+        const grp = q.group_id ? groupMap.get(q.group_id) : null;
+        seenIds.add(q.id);
+        if (qText) seenStems.add(qText.toLowerCase());
+        finalQs.push({
           id: q.id,
-          position: q.position,
-          questionText: q.question_text || q.question || '',
+          position: finalQs.length + 1,
+          questionText: qText,
+          question: qText,
           options: q.options || [],
           questionTextBn: q.question_text_bn || null,
+          questionBn: q.question_text_bn || null,
           optionsBn: q.options_bn || null,
           correctOption: k?.correct_option ?? 0,
+          correctOptionIndex: k?.correct_option ?? 0,
           explanation: k?.explanation || '',
           explanationBn: k?.explanation_bn || null,
           explanationImagePath: k?.explanation_image_path || null,
@@ -85,18 +118,35 @@ export async function GET(request: Request) {
           imagePath: q.image_path || null,
           imageAlt: q.image_alt || null,
           groupId: q.group_id || null,
-        };
-      });
-    } else {
-      const rawQs = Array.isArray(testRow.questions) ? testRow.questions : [];
-      finalQs = rawQs.map((q: any, idx: number) => ({
-        id: q.id || `q-${idx}`,
-        position: idx + 1,
-        questionText: q.question || q.questionText || '',
+          passageText: grp?.passageText || null,
+          passageTitle: grp?.imageAlt || null,
+          passageImagePath: grp?.imagePath || null,
+        });
+      }
+    }
+
+    for (let idx = 0; idx < rawJsonQs.length; idx++) {
+      const q = rawJsonQs[idx];
+      const qId = q.id || `q-${idx}`;
+      const qText = (q.question || q.questionText || '').trim();
+      if (seenIds.has(qId) || (qText && seenStems.has(qText.toLowerCase()))) {
+        continue;
+      }
+      seenIds.add(qId);
+      if (qText) seenStems.add(qText.toLowerCase());
+      const grp = q.groupId ? groupMap.get(q.groupId) : null;
+      const corr = q.correctOptionIndex ?? q.correctOption ?? 0;
+      finalQs.push({
+        id: qId,
+        position: finalQs.length + 1,
+        questionText: qText,
+        question: qText,
         options: q.options || [],
-        questionTextBn: q.questionBn || null,
+        questionTextBn: q.questionBn || q.questionTextBn || null,
+        questionBn: q.questionBn || q.questionTextBn || null,
         optionsBn: q.optionsBn || null,
-        correctOption: q.correctOptionIndex ?? q.correctOption ?? 0,
+        correctOption: corr,
+        correctOptionIndex: corr,
         explanation: q.explanation || '',
         explanationBn: q.explanationBn || null,
         explanationImagePath: q.explanationImagePath || null,
@@ -104,7 +154,10 @@ export async function GET(request: Request) {
         imagePath: q.imagePath || null,
         imageAlt: q.imageAlt || null,
         groupId: q.groupId || null,
-      }));
+        passageText: grp?.passageText || q.passageText || null,
+        passageTitle: grp?.imageAlt || q.passageTitle || null,
+        passageImagePath: grp?.imagePath || q.passageImagePath || null,
+      });
     }
 
     return NextResponse.json({
@@ -225,18 +278,21 @@ export async function POST(request: Request) {
 
     // 4. Insert updated question groups
     const groupInsertMap = new Map<string, string>(); // oldId -> newId
+    const groupById = new Map<string, any>();
     if (questionGroups.length > 0) {
       const groupRows = questionGroups.map((g: any, idx: number) => {
         const generatedId = g.id && !g.id.startsWith('temp-') ? g.id : `grp-${Date.now()}-${idx}`;
         if (g.id) groupInsertMap.set(g.id, generatedId);
-        return {
+        const row = {
           id: generatedId,
           test_id: testId,
           position: idx + 1,
-          passage_text: g.passageText || null,
-          image_path: g.imagePath || null,
-          image_alt: g.imageAlt || null,
+          passage_text: g.passageText || g.passage_text || null,
+          image_path: g.imagePath || g.image_path || null,
+          image_alt: g.imageAlt || g.image_alt || null,
         };
+        groupById.set(generatedId, row);
+        return row;
       });
 
       const { error: groupErr } = await supabaseAdmin.from('mock_question_groups').insert(groupRows);
@@ -246,9 +302,11 @@ export async function POST(request: Request) {
     }
 
     // 5. Insert questions and their answer keys
+    let savedQIds: string[] = [];
     if (questions.length > 0) {
       const qRows = questions.map((q: any, idx: number) => {
         const qId = q.id && !q.id.startsWith('temp-') ? q.id : `q-${Date.now()}-${idx}`;
+        savedQIds.push(qId);
         const mappedGroupId = q.groupId ? groupInsertMap.get(q.groupId) || q.groupId : null;
 
         return {
@@ -298,28 +356,49 @@ export async function POST(request: Request) {
       }
     }
 
-    // 6. Update question_count and questions array on mock_tests
-    await supabaseAdmin
+    // 6. Update question_count, total_marks, and self-contained questions array on mock_tests
+    const { data: currentTestRow } = await supabaseAdmin
       .from('mock_tests')
-      .update({
-        question_count: questions.length,
-        questions: questions.map((q: any, idx: number) => ({
-          id: q.id || `q-${idx}`,
-          position: idx + 1,
-          question: q.questionText || q.question || '',
-          options: q.options || [],
-          correctOptionIndex: typeof q.correctOption === 'number'
+      .select('marks_per_question')
+      .eq('id', testId)
+      .maybeSingle();
+    const marksPerQ = Number(currentTestRow?.marks_per_question || 1);
+
+    const enrichedQuestionsForTest = questions.map((q: any, idx: number) => {
+      const mappedGroupId = q.groupId ? groupInsertMap.get(q.groupId) || q.groupId : null;
+      const grp = mappedGroupId ? groupById.get(mappedGroupId) : null;
+      return {
+        id: savedQIds[idx] || q.id || `q-${idx}`,
+        position: idx + 1,
+        question: q.questionText || q.question || '',
+        questionBn: q.questionTextBn || q.questionBn || null,
+        options: q.options || [],
+        optionsBn: q.optionsBn || null,
+        correctOptionIndex:
+          typeof q.correctOption === 'number'
             ? q.correctOption
             : typeof q.correctOptionIndex === 'number'
             ? q.correctOptionIndex
             : 0,
-          explanation: q.explanation || '',
-          explanationImagePath: q.explanationImagePath || null,
-          explanationImageAlt: q.explanationImageAlt || null,
-          groupId: q.groupId || null,
-          imagePath: q.imagePath || null,
-          imageAlt: q.imageAlt || null,
-        })),
+        explanation: q.explanation || '',
+        explanationBn: q.explanationBn || null,
+        explanationImagePath: q.explanationImagePath || null,
+        explanationImageAlt: q.explanationImageAlt || null,
+        groupId: mappedGroupId,
+        passageText: grp?.passage_text || q.passageText || null,
+        passageTitle: grp?.image_alt || q.passageTitle || null,
+        passageImagePath: grp?.image_path || q.passageImagePath || null,
+        imagePath: q.imagePath || null,
+        imageAlt: q.imageAlt || null,
+      };
+    });
+
+    await supabaseAdmin
+      .from('mock_tests')
+      .update({
+        question_count: enrichedQuestionsForTest.length,
+        total_marks: enrichedQuestionsForTest.length > 0 ? enrichedQuestionsForTest.length * marksPerQ : 30,
+        questions: enrichedQuestionsForTest,
       })
       .eq('id', testId);
 
@@ -328,6 +407,7 @@ export async function POST(request: Request) {
       savedQuestionsCount: questions.length,
       savedGroupsCount: questionGroups.length,
       deletedImagesCount: removedPaths.length,
+      questions: enrichedQuestionsForTest,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to save questions';

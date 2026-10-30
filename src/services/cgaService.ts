@@ -252,12 +252,50 @@ const toMaterial = (r: Row, courseName: string): StudyMaterial => ({
 
 const toTest = (r: Row, courseName: string, isStudent = false, hasSubmitted = false): MockTest => {
   const allQs: MCQQuestion[] = r.questions ?? [];
+  const groupMap = new Map<string, any>();
+
+  if (Array.isArray(r.question_groups || r.questionGroups)) {
+    for (const g of r.question_groups || r.questionGroups) {
+      if (g && g.id) {
+        groupMap.set(g.id, {
+          id: g.id,
+          testId: r.id,
+          position: g.position || groupMap.size + 1,
+          passageText: g.passageText || g.passage_text || '',
+          imagePath: g.imagePath || g.image_path || null,
+          imageAlt: g.imageAlt || g.image_alt || null,
+        });
+      }
+    }
+  }
+
+  for (const q of allQs) {
+    if (q && q.groupId && q.passageText && !groupMap.has(q.groupId)) {
+      groupMap.set(q.groupId, {
+        id: q.groupId,
+        testId: r.id,
+        position: groupMap.size + 1,
+        passageText: q.passageText,
+        imagePath: q.passageImagePath || null,
+        imageAlt: q.passageTitle || 'Comprehension Passage',
+      });
+    }
+  }
+
   const questions: MCQQuestion[] =
     isStudent && !hasSubmitted
       ? allQs.map((q) => ({
           id: q.id,
           question: q.question,
+          questionBn: q.questionBn,
           options: q.options,
+          optionsBn: q.optionsBn,
+          groupId: q.groupId ?? null,
+          passageText: q.passageText ?? null,
+          passageTitle: q.passageTitle ?? null,
+          passageImagePath: q.passageImagePath ?? null,
+          imagePath: q.imagePath ?? null,
+          imageAlt: q.imageAlt ?? null,
           correctOptionIndex: -1, // Hidden prior to test submission
           explanation: '', // Hidden prior to test submission
         }))
@@ -293,6 +331,7 @@ const toTest = (r: Row, courseName: string, isStudent = false, hasSubmitted = fa
     retentionDays: r.retention_days ?? 7,
     archiveDownloadedAt: r.archive_downloaded_at ?? undefined,
     questions,
+    questionGroups: Array.from(groupMap.values()),
   };
 };
 
@@ -1194,9 +1233,74 @@ export const cgaService = {
 
     const mergedTestsMap = new Map<string, MockTest>();
     baseMasterTests.forEach((t) => mergedTestsMap.set(t.id, t));
-    localTests.forEach((t) => mergedTestsMap.set(t.id, t));
+    localTests.forEach((lt) => {
+      const serverTest = mergedTestsMap.get(lt.id);
+      if (!serverTest) {
+        mergedTestsMap.set(lt.id, lt);
+      } else {
+        // Reconcile serverTest and localTest so passage questions saved in Studio are never overwritten by stale localStorage
+        const seenIds = new Set<string>();
+        const seenStems = new Set<string>();
+        const combinedQs: MCQQuestion[] = [];
+
+        for (const sq of serverTest.questions || []) {
+          const stem = (sq.question || '').trim().toLowerCase();
+          if (sq.id) seenIds.add(sq.id);
+          if (stem) seenStems.add(stem);
+          combinedQs.push(sq);
+        }
+        for (const lq of lt.questions || []) {
+          const stem = (lq.question || '').trim().toLowerCase();
+          if ((lq.id && seenIds.has(lq.id)) || (stem && seenStems.has(stem))) {
+            continue;
+          }
+          if (lq.id) seenIds.add(lq.id);
+          if (stem) seenStems.add(stem);
+          combinedQs.push(lq);
+        }
+
+        const grpMap = new Map<string, any>();
+        for (const g of serverTest.questionGroups || []) {
+          if (g && g.id) grpMap.set(g.id, g);
+        }
+        for (const g of lt.questionGroups || []) {
+          if (g && g.id && !grpMap.has(g.id)) grpMap.set(g.id, g);
+        }
+        for (const q of combinedQs) {
+          if (q.groupId && q.passageText && !grpMap.has(q.groupId)) {
+            grpMap.set(q.groupId, {
+              id: q.groupId,
+              testId: serverTest.id,
+              position: grpMap.size + 1,
+              passageText: q.passageText,
+              imagePath: q.passageImagePath || null,
+              imageAlt: q.passageTitle || 'Comprehension Passage',
+            });
+          }
+        }
+
+        const marksPerQ = serverTest.marksPerQuestion || lt.marksPerQuestion || 1;
+        mergedTestsMap.set(lt.id, {
+          ...lt,
+          ...serverTest,
+          questions: combinedQs,
+          questionGroups: Array.from(grpMap.values()),
+          totalMarks: combinedQs.length > 0 ? combinedQs.length * marksPerQ : serverTest.totalMarks,
+        });
+      }
+    });
     localDeletedIds.forEach((id) => mergedTestsMap.delete(id));
     const allMasterTests = Array.from(mergedTestsMap.values());
+
+    // Keep localStorage in sync with reconciled server tests
+    if (typeof window !== 'undefined' && localTests.length > 0) {
+      try {
+        const syncedLocal = localTests
+          .filter((lt) => !localDeletedIds.includes(lt.id))
+          .map((lt) => mergedTestsMap.get(lt.id) || lt);
+        localStorage.setItem('cga_custom_tests', JSON.stringify(syncedLocal));
+      } catch {}
+    }
 
     // Only authentic students who have registered and possess phone, email, and required details
     // angatsaha825@gmail.com is granted multi-role access across Admin, Student, and Faculty

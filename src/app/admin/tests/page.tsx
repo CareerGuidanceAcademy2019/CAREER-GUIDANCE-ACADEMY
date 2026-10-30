@@ -474,6 +474,11 @@ export default function AdminMockTestsPage() {
     setIsNew(true);
     setPastedText('');
     setParseError('');
+    setModalPassageTitle('');
+    setModalPassageBody('');
+    setModalPassageQsText('');
+    setSingleQDiagramFile(null);
+    setSingleQDiagramPreview('');
     setImportMode('paste');
     setModalTargetScope('mock_series_only');
 
@@ -496,6 +501,164 @@ export default function AdminMockTestsPage() {
       scheduledDate: new Date().toISOString().split('T')[0],
       status: 'Draft',
       questions: [],
+      questionGroups: [],
+    });
+  };
+
+  const openEditModal = async (test: MockTest) => {
+    setIsNew(false);
+    setPastedText('');
+    setParseError('');
+    setModalPassageTitle('');
+    setModalPassageBody('');
+    setModalPassageQsText('');
+    setSingleQDiagramFile(null);
+    setSingleQDiagramPreview('');
+    setImportMode('paste');
+
+    const isMock = Boolean(
+      test.seriesId &&
+      (!test.courseId ||
+        test.courseName?.includes('Mock') ||
+        test.batchName?.includes('Mock Series') ||
+        test.batchName?.includes('Enrolled Students Only'))
+    );
+    const isCourse = Boolean(test.courseId && !test.seriesId && !test.courseName?.includes('Mock'));
+    const scope = isMock ? 'mock_series_only' : isCourse ? 'course_only' : 'combined';
+    setModalTargetScope(scope);
+    setEditingTest({ ...test, questionGroups: test.questionGroups || [] });
+
+    // Fetch authoritative questions and passage groups from server so Passage Studio questions are always visible
+    try {
+      const res = await fetch(`/api/admin/mock-tests/questions?testId=${encodeURIComponent(test.id)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setEditingTest((prev) => {
+            if (!prev || prev.id !== test.id) return prev;
+            const grpMap = new Map<string, any>();
+            for (const g of prev.questionGroups || []) {
+              if (g && g.id) grpMap.set(g.id, g);
+            }
+            for (const g of data.questionGroups || []) {
+              if (g && g.id) {
+                grpMap.set(g.id, {
+                  id: g.id,
+                  testId: test.id,
+                  position: g.position || grpMap.size + 1,
+                  passageText: g.passageText || g.passage_text || '',
+                  imagePath: g.imagePath || g.image_path || null,
+                  imageAlt: g.imageAlt || g.image_alt || null,
+                });
+              }
+            }
+
+            const seenIds = new Set<string>();
+            const seenStems = new Set<string>();
+            const mergedQs: MCQQuestion[] = [];
+
+            for (const sq of data.questions || []) {
+              const stem = (sq.questionText || sq.question || '').trim();
+              const qId = sq.id || `q-${mergedQs.length + 1}`;
+              const grp = sq.groupId ? grpMap.get(sq.groupId) : null;
+              seenIds.add(qId);
+              if (stem) seenStems.add(stem.toLowerCase());
+              mergedQs.push({
+                id: qId,
+                question: stem,
+                questionBn: sq.questionTextBn || sq.questionBn || undefined,
+                options: sq.options || [],
+                optionsBn: sq.optionsBn || undefined,
+                correctOptionIndex: sq.correctOption ?? sq.correctOptionIndex ?? 0,
+                explanation: sq.explanation || '',
+                explanationBn: sq.explanationBn || undefined,
+                groupId: sq.groupId || null,
+                passageText: grp?.passageText || sq.passageText || null,
+                passageTitle: grp?.imageAlt || sq.passageTitle || null,
+                passageImagePath: grp?.imagePath || sq.passageImagePath || null,
+                imagePath: sq.imagePath || null,
+                imageAlt: sq.imageAlt || null,
+              });
+            }
+
+            for (const lq of prev.questions || []) {
+              const stem = (lq.question || '').trim();
+              if ((lq.id && seenIds.has(lq.id)) || (stem && seenStems.has(stem.toLowerCase()))) {
+                continue;
+              }
+              if (lq.id) seenIds.add(lq.id);
+              if (stem) seenStems.add(stem.toLowerCase());
+              mergedQs.push(lq);
+            }
+
+            const marksPerQ = prev.marksPerQuestion || 1;
+            return {
+              ...prev,
+              questions: mergedQs,
+              questionGroups: Array.from(grpMap.values()),
+              totalMarks: mergedQs.length > 0 ? mergedQs.length * marksPerQ : prev.totalMarks,
+            };
+          });
+        }
+      }
+    } catch {
+      // Non-fatal: local test state remains active
+    }
+  };
+
+  // Client-side smart image compression before upload (preserves crisp diagram text while reducing payload size)
+  const compressDiagramFileBeforeUpload = async (file: File): Promise<File> => {
+    if (typeof window === 'undefined' || !file.type.startsWith('image/') || file.size <= 350 * 1024) {
+      return file;
+    }
+    return new Promise((resolve) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        try {
+          const maxDim = 1400;
+          let { width, height } = img;
+          if (width > maxDim || height > maxDim) {
+            if (width >= height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(file);
+            return;
+          }
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, width, height);
+          ctx.drawImage(img, 0, 0, width, height);
+          canvas.toBlob(
+            (blob) => {
+              if (blob && blob.size < file.size) {
+                resolve(new File([blob], file.name.replace(/\.[^.]+$/, '.webp'), { type: 'image/webp' }));
+              } else {
+                resolve(file);
+              }
+            },
+            'image/webp',
+            0.9
+          );
+        } catch {
+          resolve(file);
+        }
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve(file);
+      };
+      img.src = url;
     });
   };
 
@@ -591,35 +754,110 @@ export default function AdminMockTestsPage() {
     }
   };
 
-  // 2. Bulk Text Parse Handler (Instant client-side extraction)
-  const handleParsePastedText = () => {
-    if (!pastedText.trim() || !editingTest) return;
-    setParseError('');
+  // Helper to automatically commit any pending Passage or Paste inputs so questions are never lost when switching tabs or saving
+  const flushPendingInputsIntoTest = (baseTest: MockTest, silent = false): MockTest => {
+    let updatedGroups = [...(baseTest.questionGroups || [])];
+    let updatedQuestions = [...(baseTest.questions || [])];
+    let addedPassageQsCount = 0;
+    let addedPasteQsCount = 0;
 
-    try {
-      const extracted = parseRawQuestionsText(pastedText);
-      if (extracted.length === 0) {
-        setParseError(
-          'Could not detect multiple-choice questions. Ensure questions start with 1. or Q1. and have options (A, B, C, D).'
-        );
-        return;
+    const pText = modalPassageBody.trim();
+    const qText = modalPassageQsText.trim();
+    if (pText && qText) {
+      const parsed = parseRawQuestionsText(qText);
+      if (parsed && parsed.length > 0) {
+        const newGrpId = `grp-${Date.now()}`;
+        const pTitle = modalPassageTitle.trim() || 'Reading Comprehension Passage';
+        const newGroup = {
+          id: newGrpId,
+          testId: baseTest.id,
+          position: updatedGroups.length + 1,
+          passageText: pText,
+          imagePath: null,
+          imageAlt: pTitle,
+        };
+        const linkedQs: MCQQuestion[] = parsed.map((q, idx) => ({
+          id: `q-psg-${Date.now()}-${idx}`,
+          question: q.question,
+          options: q.options as any,
+          correctOptionIndex: q.correctOptionIndex,
+          explanation: q.explanation || '',
+          groupId: newGrpId,
+          passageText: pText,
+          passageTitle: pTitle,
+          passageImagePath: null,
+          imagePath: q.imagePath || null,
+          imageAlt: q.imageAlt || null,
+        }));
+        updatedGroups = [...updatedGroups, newGroup];
+        updatedQuestions = [...updatedQuestions, ...linkedQs];
+        addedPassageQsCount = linkedQs.length;
+        setModalPassageTitle('');
+        setModalPassageBody('');
+        setModalPassageQsText('');
       }
+    }
 
-      const combined = [...editingTest.questions, ...extracted];
-      const newTotal = combined.length * editingTest.marksPerQuestion;
+    const rawPaste = pastedText.trim();
+    if (rawPaste) {
+      const extracted = parseRawQuestionsText(rawPaste);
+      if (extracted && extracted.length > 0) {
+        updatedQuestions = [...updatedQuestions, ...extracted];
+        addedPasteQsCount = extracted.length;
+        setPastedText('');
+        setParseError('');
+      }
+    }
 
-      setEditingTest({
-        ...editingTest,
-        questions: combined,
-        totalMarks: newTotal,
-      });
-
-      setPastedText('');
+    if (!silent && (addedPassageQsCount > 0 || addedPasteQsCount > 0)) {
+      const parts: string[] = [];
+      if (addedPassageQsCount > 0) parts.push(`${addedPassageQsCount} passage question(s)`);
+      if (addedPasteQsCount > 0) parts.push(`${addedPasteQsCount} standard question(s)`);
       showToast(
-        'Parsed Successfully!',
-        `Added ${extracted.length} separated questions to this test.`,
+        'Questions Added to Bank',
+        `Added ${parts.join(' and ')}. Total in bank: ${updatedQuestions.length} questions.`,
         'success'
       );
+    }
+
+    return {
+      ...baseTest,
+      questionGroups: updatedGroups,
+      questions: updatedQuestions,
+      totalMarks: updatedQuestions.length * (baseTest.marksPerQuestion || 1),
+    };
+  };
+
+  const handleSwitchImportMode = (nextMode: 'paste' | 'manual' | 'diagram' | 'passage') => {
+    if (editingTest) {
+      const updated = flushPendingInputsIntoTest(editingTest);
+      setEditingTest(updated);
+    }
+    setImportMode(nextMode);
+  };
+
+  // 2. Bulk Text Parse Handler (Instant client-side extraction)
+  const handleParsePastedText = () => {
+    if (!editingTest) return;
+    setParseError('');
+
+    if (!pastedText.trim() && !(modalPassageBody.trim() && modalPassageQsText.trim())) {
+      setParseError('Please paste question text with options (A, B, C, D) before extracting.');
+      return;
+    }
+
+    try {
+      if (pastedText.trim()) {
+        const check = parseRawQuestionsText(pastedText);
+        if (check.length === 0) {
+          setParseError(
+            'Could not detect multiple-choice questions. Ensure questions start with 1. or Q1. and have options (A, B, C, D).'
+          );
+          return;
+        }
+      }
+      const nextTest = flushPendingInputsIntoTest(editingTest);
+      setEditingTest(nextTest);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Parsing error';
       setParseError(message);
@@ -691,12 +929,14 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
 
     let attachedImgPath: string | null = null;
     let attachedImgAlt: string | null = null;
+    let compressionNote = '';
 
     if (singleQDiagramFile) {
       try {
         setIsUploadingDiagram(true);
+        const compressedFile = await compressDiagramFileBeforeUpload(singleQDiagramFile);
         const form = new FormData();
-        form.append('file', singleQDiagramFile);
+        form.append('file', compressedFile);
         form.append('testId', editingTest.id);
         form.append('maxDimension', 'question');
         form.append('altText', `Diagram for question ${editingTest.questions.length + 1}`);
@@ -708,6 +948,10 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
           const data = await res.json();
           attachedImgPath = data.storagePath;
           attachedImgAlt = `Diagram for question ${editingTest.questions.length + 1}`;
+          if (data.processedSize) {
+            const kb = Math.max(1, Math.round(data.processedSize / 1024));
+            compressionNote = ` (${kb} KB HD WebP)`;
+          }
         }
       } catch {} finally {
         setIsUploadingDiagram(false);
@@ -762,10 +1006,10 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
     setSingleQDiagramFile(null);
     setSingleQDiagramPreview('');
     if (singleQDiagramInputRef.current) singleQDiagramInputRef.current.value = '';
-    showToast('Question Added', `Question ${nextQs.length} added to test${attachedImgPath ? ' with diagram' : ''}.`, 'success');
+    showToast('Question Added', `Question ${nextQs.length} added to test${attachedImgPath ? ` with compressed diagram${compressionNote}` : ''}.`, 'success');
   };
 
-  // 4. Attach diagram to existing question inside modal
+  // 4. Attach diagram to existing question inside modal (with smart compression)
   const handleModalQuestionDiagramUpload = async (qIndex: number, file: File) => {
     if (!editingTest || !file) return;
     if (!file.type.startsWith('image/')) {
@@ -774,8 +1018,9 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
     }
 
     try {
+      const compressedFile = await compressDiagramFileBeforeUpload(file);
       const form = new FormData();
-      form.append('file', file);
+      form.append('file', compressedFile);
       form.append('testId', editingTest.id);
       form.append('maxDimension', 'question');
       form.append('altText', `Diagram for question ${qIndex + 1}`);
@@ -802,14 +1047,20 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
         questions: updatedQs,
       });
 
-      showToast('Diagram Attached', `Diagram attached directly to Question ${qIndex + 1}.`, 'success');
+      const kb = data.processedSize ? Math.max(1, Math.round(data.processedSize / 1024)) : null;
+      showToast(
+        'Diagram Attached & Compressed',
+        `Diagram attached to Question ${qIndex + 1}${kb ? ` (Compressed to ${kb} KB HD WebP)` : ''}.`,
+        'success'
+      );
     } catch {
       showToast('Upload Error', 'Failed to upload question diagram.', 'error');
     }
   };
 
-  const handleModalRemoveDiagram = (qIndex: number) => {
+  const handleModalRemoveDiagram = async (qIndex: number) => {
     if (!editingTest) return;
+    const oldPath = editingTest.questions[qIndex]?.imagePath;
     const updatedQs = [...editingTest.questions];
     updatedQs[qIndex] = {
       ...updatedQs[qIndex],
@@ -820,7 +1071,56 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
       ...editingTest,
       questions: updatedQs,
     });
-    showToast('Diagram Removed', `Diagram removed from Question ${qIndex + 1}.`, 'error');
+    if (oldPath) {
+      try {
+        const form = new FormData();
+        form.append('action', 'delete-image');
+        form.append('storagePath', oldPath);
+        await fetch('/api/mock-tests/upload-image', { method: 'POST', body: form });
+      } catch {}
+    }
+    showToast('Diagram Removed & Space Freed', `Diagram removed from Question ${qIndex + 1} and deleted from cloud storage.`, 'success');
+  };
+
+  const [isCleaningTestImages, setIsCleaningTestImages] = useState(false);
+
+  const handleCleanAllTestImages = async (targetTest: MockTest) => {
+    setIsCleaningTestImages(true);
+    try {
+      const form = new FormData();
+      form.append('action', 'clean-test-images');
+      form.append('testId', targetTest.id);
+      const res = await fetch('/api/mock-tests/upload-image', { method: 'POST', body: form });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const cleanedQs = (targetTest.questions || []).map((q) => ({
+          ...q,
+          imagePath: null,
+          imageAlt: null,
+          passageImagePath: null,
+        }));
+        const cleanedGroups = (targetTest.questionGroups || []).map((g) => ({
+          ...g,
+          imagePath: null,
+        }));
+        const updatedTest = {
+          ...targetTest,
+          questions: cleanedQs,
+          questionGroups: cleanedGroups,
+        };
+        if (editingTest && editingTest.id === targetTest.id) {
+          setEditingTest(updatedTest);
+        }
+        void saveMockTest({ ...updatedTest, syncQuestions: true } as any, false, 'Test Diagrams Cleaned Up');
+        showToast('Storage Space Cleaned Up', data.message || 'All diagram images for this test have been removed to free storage space.', 'success');
+      } else {
+        showToast('Cleanup Failed', data.error || 'Could not clean test images.', 'error');
+      }
+    } catch {
+      showToast('Cleanup Error', 'Network error while cleaning up test images.', 'error');
+    } finally {
+      setIsCleaningTestImages(false);
+    }
   };
 
   // 5. Add Passage & Linked Questions in Modal
@@ -830,11 +1130,11 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
     const qText = modalPassageQsText.trim();
 
     if (!pText) {
-      showToast('Passage Text Required', 'Please enter the reading comprehension passage paragraph.', 'error');
+      showToast('Passage Text Required', 'Please enter the reading comprehension passage paragraph in Section 1.', 'error');
       return;
     }
     if (!qText) {
-      showToast('Questions Required', 'Please paste the questions and options for this passage.', 'error');
+      showToast('Questions Required', 'Please paste the questions and options for this passage in Section 2.', 'error');
       return;
     }
 
@@ -849,16 +1149,16 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
     }
 
     const newGrpId = `grp-${Date.now()}`;
+    const pTitle = modalPassageTitle.trim() || 'Reading Comprehension Passage';
     const newGroup = {
       id: newGrpId,
       testId: editingTest.id,
       position: (editingTest.questionGroups?.length || 0) + 1,
       passageText: pText,
       imagePath: null,
-      imageAlt: modalPassageTitle.trim() || 'Reading Comprehension Passage',
+      imageAlt: pTitle,
     };
 
-    const startIndex = editingTest.questions.length;
     const linkedQs: MCQQuestion[] = parsed.map((q, idx) => ({
       id: `q-psg-${Date.now()}-${idx}`,
       question: q.question,
@@ -866,6 +1166,9 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
       correctOptionIndex: q.correctOptionIndex,
       explanation: q.explanation || '',
       groupId: newGrpId,
+      passageText: pText,
+      passageTitle: pTitle,
+      passageImagePath: null,
       imagePath: q.imagePath || null,
       imageAlt: q.imageAlt || null,
     }));
@@ -884,17 +1187,42 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
     setModalPassageBody('');
     setModalPassageQsText('');
     showToast(
-      'Passage & Questions Added',
-      `Added 1 passage with ${linkedQs.length} questions. Questions are linked to the passage.`,
+      'Passage & Questions Added to Bank',
+      `Added 1 passage with ${linkedQs.length} linked questions. Total in Test Question Bank: ${updatedQuestions.length}.`,
       'success'
     );
   };
 
-  const handleRemoveQuestion = (qId: string) => {
+  const handleRemovePassageGroupInModal = (groupId: string) => {
     if (!editingTest) return;
-    const filtered = editingTest.questions.filter((q) => q.id !== qId);
+    const filteredQs = editingTest.questions.filter((q) => q.groupId !== groupId);
+    const filteredGroups = (editingTest.questionGroups || []).filter((g) => g.id !== groupId);
     setEditingTest({
       ...editingTest,
+      questionGroups: filteredGroups,
+      questions: filteredQs,
+      totalMarks: filteredQs.length * editingTest.marksPerQuestion,
+    });
+    showToast('Passage & Questions Removed', 'Removed the passage and its linked questions from the Test Question Bank.', 'success');
+  };
+
+  const handleRemoveQuestion = async (qId: string) => {
+    if (!editingTest) return;
+    const targetQ = editingTest.questions.find((q) => q.id === qId);
+    if (targetQ?.imagePath) {
+      try {
+        const form = new FormData();
+        form.append('action', 'delete-image');
+        form.append('storagePath', targetQ.imagePath);
+        void fetch('/api/mock-tests/upload-image', { method: 'POST', body: form });
+      } catch {}
+    }
+    const filtered = editingTest.questions.filter((q) => q.id !== qId);
+    const remainingGroupIds = new Set(filtered.map((q) => q.groupId).filter(Boolean));
+    const filteredGroups = (editingTest.questionGroups || []).filter((g) => remainingGroupIds.has(g.id));
+    setEditingTest({
+      ...editingTest,
+      questionGroups: filteredGroups,
       questions: filtered,
       totalMarks: filtered.length * editingTest.marksPerQuestion,
     });
@@ -914,25 +1242,29 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
       showToast('Validation Error', 'Please specify a mock test title.', 'error');
       return;
     }
-    if (editingTest.status === 'Published' && editingTest.questions.length === 0) {
+
+    // Automatically commit any pending passage or pasted questions in the input boxes before saving
+    const finalEditingTest = flushPendingInputsIntoTest(editingTest, true);
+
+    if (finalEditingTest.status === 'Published' && finalEditingTest.questions.length === 0) {
       showToast('No Questions Added', 'Please upload questions before publishing live, or set status to Draft.', 'error');
       return;
     }
 
     const seriesObj = (db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL).find(
-      (s) => s.id === editingTest.seriesId
+      (s) => s.id === finalEditingTest.seriesId
     );
 
-    let finalCourseId = editingTest.courseId;
-    let finalCourseName = editingTest.courseName;
-    let finalBatchName = editingTest.batchName;
+    let finalCourseId = finalEditingTest.courseId;
+    let finalCourseName = finalEditingTest.courseName;
+    let finalBatchName = finalEditingTest.batchName;
 
     if (modalTargetScope === 'mock_series_only') {
       finalCourseId = '';
       finalCourseName = seriesObj?.name || 'Dedicated Mock Test Series Package';
       finalBatchName = `${seriesObj?.name || 'Mock Series'} (Enrolled Students Only)`;
     } else if (modalTargetScope === 'course_only') {
-      const crs = db.courses.find((c) => c.id === editingTest.courseId);
+      const crs = db.courses.find((c) => c.id === finalEditingTest.courseId);
       if (!crs) {
         showToast('Course Batch Required', 'Please select a specific course batch for this test.', 'error');
         return;
@@ -941,19 +1273,20 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
       finalCourseName = crs.name;
       finalBatchName = crs.batchName;
     } else if (modalTargetScope === 'combined') {
-      const crs = db.courses.find((c) => c.id === editingTest.courseId);
+      const crs = db.courses.find((c) => c.id === finalEditingTest.courseId);
       finalCourseId = crs?.id || '';
       finalCourseName = crs?.name || 'Course Batch';
       finalBatchName = `${seriesObj?.name || 'Mock Series'} + ${crs?.batchName || 'Course Batch'}`;
     }
 
-    const computedMarks = editingTest.questions.length * editingTest.marksPerQuestion;
+    const computedMarks = finalEditingTest.questions.length * finalEditingTest.marksPerQuestion;
     const testToSave = {
-      ...editingTest,
+      ...finalEditingTest,
       totalMarks: computedMarks,
       courseId: finalCourseId,
       courseName: finalCourseName,
       batchName: finalBatchName,
+      syncQuestions: true,
     };
 
     if (isNew) {
@@ -961,7 +1294,7 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
     }
 
     setEditingTest(null);
-    void saveMockTest(testToSave, isNew);
+    await saveMockTest(testToSave as MockTest, isNew);
   };
 
   const togglePublish = async (test: MockTest) => {
@@ -1656,22 +1989,9 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                         <div className="grid grid-cols-3 gap-1.5">
                           <button
                             type="button"
-                            onClick={() => {
-                              setIsNew(false);
-                              const isMock = Boolean(
-                                test.seriesId &&
-                                (!test.courseId ||
-                                  test.courseName?.includes('Mock') ||
-                                  test.batchName?.includes('Mock Series') ||
-                                  test.batchName?.includes('Enrolled Students Only'))
-                              );
-                              const isCourse = Boolean(test.courseId && !test.seriesId && !test.courseName?.includes('Mock'));
-                              const scope = isMock ? 'mock_series_only' : isCourse ? 'course_only' : 'combined';
-                              setModalTargetScope(scope);
-                              setEditingTest({ ...test });
-                            }}
+                            onClick={() => void openEditModal(test)}
                             className="h-8 px-2 rounded-xl bg-blue-50 text-[#0056b3] hover:bg-blue-100 text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors"
-                            title="Edit Mock Test Details & Questions"
+                            title="Edit Mock Test Details, Passages & Questions"
                           >
                             <Edit2 className="w-3.5 h-3.5 shrink-0" />
                             <span className="truncate">Edit</span>
@@ -1680,10 +2000,10 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                             type="button"
                             onClick={() => router.push(`/admin/mock-tests/${test.id}/questions`)}
                             className="h-8 px-2 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors"
-                            title="Diagrams, Uploads & Questions Review"
+                            title="Diagrams, Passages & Questions Studio"
                           >
                             <ImageIcon className="w-3.5 h-3.5 shrink-0" />
-                            <span className="truncate">Diagrams</span>
+                            <span className="truncate">Studio</span>
                           </button>
                           <button
                             type="button"
@@ -1695,6 +2015,23 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                             <span className="truncate">Preview</span>
                           </button>
                         </div>
+
+                        {/* Optional Post-Test Image Cleanup Button when diagrams exist */}
+                        {(test.questions.some((q) => Boolean(q.imagePath || q.passageImagePath)) ||
+                          (test.questionGroups || []).some((g) => Boolean(g.imagePath))) && (
+                          <button
+                            type="button"
+                            disabled={isCleaningTestImages}
+                            onClick={() => void handleCleanAllTestImages(test)}
+                            className="w-full h-7 px-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-[10px] font-extrabold flex items-center justify-center gap-1.5 cursor-pointer transition-colors disabled:opacity-50"
+                            title="Remove uploaded diagrams from this test to free storage space while keeping all questions and student results"
+                          >
+                            <Trash2 className="w-3 h-3 shrink-0 text-amber-700" />
+                            <span className="truncate">
+                              {isCleaningTestImages ? 'Cleaning Diagrams...' : 'Remove Test Images & Free Space'}
+                            </span>
+                          </button>
+                        )}
 
                         {/* Row 2: Launch/Unpublish + Archive ZIP + Delete */}
                         <div className="flex items-center gap-1.5">
@@ -2926,7 +3263,7 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                 <div className="flex flex-wrap bg-white rounded-xl p-1 border border-slate-200 shadow-2xs gap-1">
                   <button
                     type="button"
-                    onClick={() => setImportMode('paste')}
+                    onClick={() => handleSwitchImportMode('paste')}
                     className={`px-3 py-1.5 rounded-lg font-extrabold text-xs transition-colors cursor-pointer flex items-center gap-1.5 ${
                       importMode === 'paste' ? 'bg-[#0056b3] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                     }`}
@@ -2935,7 +3272,7 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                   </button>
                   <button
                     type="button"
-                    onClick={() => setImportMode('manual')}
+                    onClick={() => handleSwitchImportMode('manual')}
                     className={`px-3 py-1.5 rounded-lg font-extrabold text-xs transition-colors cursor-pointer flex items-center gap-1.5 ${
                       importMode === 'manual' ? 'bg-[#0056b3] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                     }`}
@@ -2944,7 +3281,7 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                   </button>
                   <button
                     type="button"
-                    onClick={() => setImportMode('diagram')}
+                    onClick={() => handleSwitchImportMode('diagram')}
                     className={`px-3 py-1.5 rounded-lg font-extrabold text-xs transition-colors cursor-pointer flex items-center gap-1.5 ${
                       importMode === 'diagram' ? 'bg-[#0056b3] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                     }`}
@@ -2953,7 +3290,7 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                   </button>
                   <button
                     type="button"
-                    onClick={() => setImportMode('passage')}
+                    onClick={() => handleSwitchImportMode('passage')}
                     className={`px-3 py-1.5 rounded-lg font-extrabold text-xs transition-colors cursor-pointer flex items-center gap-1.5 ${
                       importMode === 'passage' ? 'bg-[#0056b3] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                     }`}
@@ -3345,15 +3682,41 @@ Explanation: Paragraph 1 highlights exponential industrial growth and urban expa
 
             {/* ==================== EXTRACTED QUESTIONS INVENTORY ==================== */}
             <div className="space-y-3">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-100">
+                <div className="flex flex-wrap items-center gap-2">
                   <ClipboardCheck className="w-4 h-4 text-[#0056b3]" />
                   <span className="font-extrabold text-sm text-[#0a0e2a]">
-                    Test Question Bank ({editingTest.questions.length} Questions Separated)
+                    Test Question Bank ({editingTest.questions.length} Total Questions)
                   </span>
+                  {editingTest.questions.some((q) => Boolean(q.groupId || q.passageText)) && (
+                    <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-800 border border-purple-200 text-[10px] font-bold">
+                      {editingTest.questions.filter((q) => Boolean(q.groupId || q.passageText)).length} Passage Qs
+                    </span>
+                  )}
+                  {editingTest.questions.some((q) => !q.groupId && !q.passageText) && (
+                    <span className="px-2 py-0.5 rounded-full bg-blue-50 text-[#0056b3] border border-blue-200 text-[10px] font-bold">
+                      {editingTest.questions.filter((q) => !q.groupId && !q.passageText).length} Standard MCQs
+                    </span>
+                  )}
                 </div>
-                <div className="text-xs font-bold text-[#0056b3] bg-blue-50 px-2.5 py-1 rounded-lg">
-                  Total Marks: {editingTest.questions.length * editingTest.marksPerQuestion}
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {(editingTest.questions.some((q) => Boolean(q.imagePath || q.passageImagePath)) ||
+                    (editingTest.questionGroups || []).some((g) => Boolean(g.imagePath))) && (
+                    <button
+                      type="button"
+                      disabled={isCleaningTestImages}
+                      onClick={() => void handleCleanAllTestImages(editingTest)}
+                      className="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-[11px] font-extrabold inline-flex items-center gap-1 cursor-pointer transition-colors disabled:opacity-50"
+                      title="Delete all uploaded diagram images for this test to free storage space while keeping all questions and passages"
+                    >
+                      <Trash2 className="w-3 h-3 text-amber-700" />
+                      <span>{isCleaningTestImages ? 'Cleaning...' : 'Remove All Diagrams (Free Space)'}</span>
+                    </button>
+                  )}
+                  <div className="text-xs font-bold text-[#0056b3] bg-blue-50 px-2.5 py-1 rounded-lg">
+                    Total Marks: {editingTest.questions.length * editingTest.marksPerQuestion}
+                  </div>
                 </div>
               </div>
 
@@ -3365,106 +3728,150 @@ Explanation: Paragraph 1 highlights exponential industrial growth and urban expa
                   </p>
                 </div>
               ) : (
-                <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
-                  {editingTest.questions.map((q, idx) => (
-                    <div
-                      key={q.id || idx}
-                      className="p-3.5 rounded-2xl bg-white border border-slate-200 space-y-2 hover:border-blue-300 transition-all shadow-2xs"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 space-y-0.5">
-                          <p className="font-extrabold text-slate-900 text-xs">
-                            <span className="text-[#0056b3] font-bold mr-1.5">Q{idx + 1}.</span>
-                            {q.question}
-                          </p>
-                          {q.questionBn && (
-                            <p className="text-[11px] font-semibold text-blue-900">
-                              {q.questionBn}
-                            </p>
-                          )}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveQuestion(q.id)}
-                          className="p-1 rounded-lg text-slate-400 hover:text-[#dc2626] hover:bg-red-50 cursor-pointer"
-                          title="Remove Question"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+                  {editingTest.questions.map((q, idx) => {
+                    const prevQ = idx > 0 ? editingTest.questions[idx - 1] : null;
+                    const groupObj = (editingTest.questionGroups || []).find((g) => g.id === q.groupId);
+                    const effectivePassageText = groupObj?.passageText || q.passageText || null;
+                    const effectivePassageTitle =
+                      groupObj?.imageAlt || q.passageTitle || 'Reading Comprehension Passage';
+                    const isFirstInPassageGroup =
+                      Boolean(effectivePassageText) &&
+                      (!prevQ ||
+                        (q.groupId && prevQ.groupId !== q.groupId) ||
+                        (!q.groupId && prevQ.passageText !== q.passageText));
 
-                      {/* Diagram or Passage indicators */}
-                      <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                        {q.imagePath ? (
-                          <div className="flex items-center gap-2">
-                            <span className="px-2 py-0.5 rounded-full bg-blue-50 text-[#0056b3] border border-blue-200 text-[10px] font-bold inline-flex items-center gap-1">
-                              <ImageIcon className="w-3 h-3" /> Diagram Attached
-                            </span>
+                    return (
+                      <React.Fragment key={q.id || idx}>
+                        {isFirstInPassageGroup && effectivePassageText && (
+                          <div className="p-3.5 rounded-2xl bg-purple-50/70 border-2 border-purple-200 space-y-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="text-xs font-extrabold text-purple-900 flex items-center gap-1.5">
+                                <BookOpen className="w-3.5 h-3.5 text-purple-700" />
+                                <span>{effectivePassageTitle}</span>
+                              </span>
+                              {q.groupId && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemovePassageGroupInModal(q.groupId!)}
+                                  className="px-2.5 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-[#dc2626] border border-red-200 text-[10px] font-bold inline-flex items-center gap-1 cursor-pointer"
+                                  title="Delete this passage and all its linked questions"
+                                >
+                                  <Trash2 className="w-3 h-3" /> Delete Passage &amp; Linked Qs
+                                </button>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-slate-700 bg-white p-2.5 rounded-xl border border-purple-100 whitespace-pre-line max-h-28 overflow-y-auto leading-relaxed">
+                              {effectivePassageText}
+                            </p>
+                          </div>
+                        )}
+
+                        <div
+                          className={`p-3.5 rounded-2xl bg-white border space-y-2 transition-all shadow-2xs ${
+                            effectivePassageText
+                              ? 'border-purple-200 hover:border-purple-300'
+                              : 'border-slate-200 hover:border-blue-300'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 space-y-0.5">
+                              <p className="font-extrabold text-slate-900 text-xs">
+                                <span className="text-[#0056b3] font-bold mr-1.5">Q{idx + 1}.</span>
+                                {q.question}
+                              </p>
+                              {q.questionBn && (
+                                <p className="text-[11px] font-semibold text-blue-900">
+                                  {q.questionBn}
+                                </p>
+                              )}
+                            </div>
                             <button
                               type="button"
-                              onClick={() => handleModalRemoveDiagram(idx)}
-                              className="text-[10px] font-bold text-red-600 hover:underline cursor-pointer"
+                              onClick={() => handleRemoveQuestion(q.id)}
+                              className="p-1 rounded-lg text-slate-400 hover:text-[#dc2626] hover:bg-red-50 cursor-pointer"
+                              title="Remove Question"
                             >
-                              Remove Diagram
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
-                        ) : (
-                          <label className="text-[11px] font-bold text-[#0056b3] hover:underline cursor-pointer inline-flex items-center gap-1">
-                            <Upload className="w-3 h-3" /> Attach Diagram
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={(e) => {
-                                const f = e.target.files?.[0];
-                                if (f) handleModalQuestionDiagramUpload(idx, f);
-                              }}
-                              className="hidden"
-                            />
-                          </label>
-                        )}
 
-                        {q.groupId && (
-                          <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-bold inline-flex items-center gap-1">
-                            <BookOpen className="w-3 h-3" /> Linked to Passage
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Options Grid with Clickable Correct Answer Selector */}
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {q.options.map((opt, oIdx) => {
-                          const isCorrect = q.correctOptionIndex === oIdx;
-                          const optBn = q.optionsBn?.[oIdx];
-                          return (
-                            <button
-                              key={oIdx}
-                              type="button"
-                              onClick={() => handleUpdateQuestionCorrectOpt(q.id, oIdx)}
-                              className={`p-2 rounded-xl text-left border flex items-center gap-2 cursor-pointer transition-all ${isCorrect
-                                  ? 'bg-emerald-50 border-emerald-500 text-emerald-800 font-bold'
-                                  : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
-                                }`}
-                            >
-                              <span
-                                className={`w-5 h-5 rounded-full text-[10px] font-extrabold flex items-center justify-center shrink-0 ${isCorrect ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700'
-                                  }`}
-                              >
-                                {String.fromCharCode(65 + oIdx)}
-                              </span>
-                              <div className="truncate flex-1">
-                                <span className="truncate block text-xs">{getOptionText(opt)}</span>
-                                {optBn && (
-                                  <span className="truncate block text-[10px] text-slate-500">
-                                    {getOptionText(optBn)}
-                                  </span>
-                                )}
+                          {/* Diagram or Passage indicators */}
+                          <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                            {q.imagePath ? (
+                              <div className="flex items-center gap-2">
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold inline-flex items-center gap-1">
+                                  <ImageIcon className="w-3 h-3 text-emerald-600" /> Compressed Diagram Attached
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleModalRemoveDiagram(idx)}
+                                  className="text-[10px] font-bold text-red-600 hover:underline cursor-pointer"
+                                >
+                                  Remove &amp; Free Space
+                                </button>
                               </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
+                            ) : (
+                              <label className="text-[11px] font-bold text-[#0056b3] hover:underline cursor-pointer inline-flex items-center gap-1">
+                                <Upload className="w-3 h-3" /> Attach Diagram
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={(e) => {
+                                    const f = e.target.files?.[0];
+                                    if (f) void handleModalQuestionDiagramUpload(idx, f);
+                                  }}
+                                  className="hidden"
+                                />
+                              </label>
+                            )}
+
+                            {(q.groupId || q.passageText) && (
+                              <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-bold inline-flex items-center gap-1">
+                                <BookOpen className="w-3 h-3" /> Linked to Passage
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Options Grid with Clickable Correct Answer Selector */}
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {q.options.map((opt, oIdx) => {
+                              const isCorrect = q.correctOptionIndex === oIdx;
+                              const optBn = q.optionsBn?.[oIdx];
+                              return (
+                                <button
+                                  key={oIdx}
+                                  type="button"
+                                  onClick={() => handleUpdateQuestionCorrectOpt(q.id, oIdx)}
+                                  className={`p-2 rounded-xl text-left border flex items-center gap-2 cursor-pointer transition-all ${
+                                    isCorrect
+                                      ? 'bg-emerald-50 border-emerald-500 text-emerald-800 font-bold'
+                                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                                  }`}
+                                >
+                                  <span
+                                    className={`w-5 h-5 rounded-full text-[10px] font-extrabold flex items-center justify-center shrink-0 ${
+                                      isCorrect ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700'
+                                    }`}
+                                  >
+                                    {String.fromCharCode(65 + oIdx)}
+                                  </span>
+                                  <div className="truncate flex-1">
+                                    <span className="truncate block text-xs">{getOptionText(opt)}</span>
+                                    {optBn && (
+                                      <span className="truncate block text-[10px] text-slate-500">
+                                        {getOptionText(optBn)}
+                                      </span>
+                                    )}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </React.Fragment>
+                    );
+                  })}
                 </div>
               )}
             </div>
