@@ -15,27 +15,25 @@ export function ToastContainer() {
       className="fixed bottom-5 right-5 z-[100] flex flex-col gap-2.5 max-w-md w-full px-4 sm:px-0 pointer-events-none"
     >
       {toasts.map((t) => {
-        const borderStyles =
-          t.type === 'error'
-            ? 'border-l-4 border-l-[#dc2626] bg-white'
-            : t.type === 'info'
-            ? 'border-l-4 border-l-[#ea580c] bg-white'
-            : 'border-l-4 border-l-[#0056b3] bg-white';
+        const isError = t.type === 'error';
+        const borderStyles = isError
+          ? 'border-l-4 border-l-red-600 border-red-200 bg-white ring-1 ring-red-500/20'
+          : 'border-l-4 border-l-emerald-600 border-emerald-200 bg-white ring-1 ring-emerald-500/20';
 
         return (
           <div
             key={t.id}
-            className={`${borderStyles} pointer-events-auto rounded-xl shadow-xl border border-slate-200 p-4 flex items-start gap-3 transition-all duration-200`}
+            className={`${borderStyles} pointer-events-auto rounded-xl shadow-xl border p-4 flex items-start gap-3 transition-all duration-200`}
           >
-            {t.type === 'error' ? (
-              <AlertCircle className="w-5 h-5 text-[#dc2626] shrink-0 mt-0.5" />
+            {isError ? (
+              <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
             ) : t.type === 'info' ? (
-              <Info className="w-5 h-5 text-[#ea580c] shrink-0 mt-0.5" />
+              <Info className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
             ) : (
-              <CheckCircle2 className="w-5 h-5 text-[#0056b3] shrink-0 mt-0.5" />
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
             )}
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-slate-900">{t.title}</p>
+              <p className={`text-sm font-bold ${isError ? 'text-red-950' : 'text-slate-900'}`}>{t.title}</p>
               {t.message && <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">{t.message}</p>}
             </div>
             <button

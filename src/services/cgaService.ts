@@ -2531,17 +2531,28 @@ export const cgaService = {
 
   async upsertTest(t: MockTest): Promise<ServiceResult> {
     invalidateDbCache();
-    let validCourseId: string | null = null;
-    if (t.courseId && t.courseId.trim()) {
-      const trimmed = t.courseId.trim();
-      const { data: matchedCourse } = await this.client()
-        .from('courses')
-        .select('id')
-        .eq('id', trimmed)
-        .maybeSingle();
-      if (matchedCourse) {
-        validCourseId = matchedCourse.id;
-      }
+    const validCourseId: string | null = t.courseId?.trim() || null;
+
+    // Fast-path: persist immediately to local storage state
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('cga_custom_tests');
+        const list: MockTest[] = stored ? JSON.parse(stored) : [];
+        const idx = list.findIndex((item) => item.id === t.id);
+        if (idx >= 0) {
+          list[idx] = t;
+        } else {
+          list.push(t);
+        }
+        localStorage.setItem('cga_custom_tests', JSON.stringify(list));
+
+        const delStored = localStorage.getItem('cga_deleted_tests');
+        if (delStored) {
+          const delList: string[] = JSON.parse(delStored);
+          const nextDelList = delList.filter((id) => id !== t.id);
+          localStorage.setItem('cga_deleted_tests', JSON.stringify(nextDelList));
+        }
+      } catch {}
     }
 
     let finalSeriesId: string = (t as any).seriesId ?? '';

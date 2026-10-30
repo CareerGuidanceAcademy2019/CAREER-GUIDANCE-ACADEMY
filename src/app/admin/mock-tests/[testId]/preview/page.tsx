@@ -25,6 +25,7 @@ import {
   Image as ImageIcon,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
+import { cgaService } from '@/services/cgaService';
 import { MathText } from '@/components/ui/MathText';
 import { MockQuestionImage } from '@/components/mock-tests/MockQuestionImage';
 import { MockQuestionOption, getOptionText, getOptionImage } from '@/data/initialSeedData';
@@ -33,7 +34,7 @@ export default function AdminMockTestPreviewPage() {
   const params = useParams();
   const router = useRouter();
   const testId = params?.testId as string;
-  const { showToast } = useCga();
+  const { db, showToast } = useCga();
 
   const [loading, setLoading] = useState(true);
   const [test, setTest] = useState<any>(null);
@@ -62,9 +63,18 @@ export default function AdminMockTestPreviewPage() {
     if (!testId) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/mock-tests/preview?testId=${encodeURIComponent(testId)}`);
+      let token: string | undefined;
+      try {
+        const s = (await cgaService.client().auth.getSession()).data?.session;
+        token = s?.access_token;
+      } catch {}
+
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`/api/admin/mock-tests/preview?testId=${encodeURIComponent(testId)}`, { headers });
       if (!res.ok) {
-        throw new Error('Failed to load test preview data.');
+        throw new Error('Failed to load test preview data from server.');
       }
       const data = await res.json();
       setTest(data.test || null);
@@ -72,8 +82,27 @@ export default function AdminMockTestPreviewPage() {
       setQuestionGroups(data.questionGroups || []);
       setTimeRemaining((data.test?.durationMinutes || data.test?.duration_minutes || 60) * 60);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Error fetching preview';
-      showToast('Error', msg, 'error');
+      // Fallback to local / context test so preview ALWAYS works
+      const fallbackTest = db.mockTests.find((t) => t.id === testId);
+      if (fallbackTest) {
+        setTest(fallbackTest);
+        const mapped = (fallbackTest.questions || []).map((q: any, i: number) => ({
+          id: q.id || `q-${i}`,
+          position: i + 1,
+          questionText: q.question || q.questionText || '',
+          options: q.options || [],
+          correctOption: q.correctOptionIndex ?? q.correctOption ?? 0,
+          explanation: q.explanation || '',
+          imagePath: q.imagePath || null,
+          imageAlt: q.imageAlt || null,
+          groupId: q.groupId || null,
+        }));
+        setQuestions(mapped);
+        setTimeRemaining((fallbackTest.durationMinutes || 60) * 60);
+      } else {
+        const msg = err instanceof Error ? err.message : 'Error fetching preview';
+        showToast('Notice', msg, 'info');
+      }
     } finally {
       setLoading(false);
     }

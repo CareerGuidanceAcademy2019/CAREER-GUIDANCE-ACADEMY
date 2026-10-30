@@ -1009,34 +1009,65 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         studyMaterials: prev.studyMaterials.filter((m) => m.id !== id),
       }));
-      await run(cgaService.deleteMaterial(id), {
-        title: 'Study Material Deleted',
-        message: 'PDF resource removed from the library.',
-        type: 'info',
+      showToast('Study Material Deleted', 'PDF resource removed from the library.', 'error');
+      void cgaService.deleteMaterial(id).then((res) => {
+        if (!res.success) {
+          showToast('Delete Failed', res.error || 'Could not delete material.', 'error');
+          void refresh(true);
+        }
       });
     },
-    [run]
+    [refresh, showToast]
   );
 
   const saveMockTest = useCallback(
     async (t: MockTest, isNew: boolean, customSuccessTitle?: string) => {
-      return await run(cgaService.upsertTest(t), {
-        title: customSuccessTitle || (isNew ? 'Mock Test Created' : t.status === 'Published' ? 'Test Launched Live!' : 'Test Set to Draft'),
-        message: `"${t.title}" (${t.status}) saved for ${t.batchName || 'students'}.`,
-        type: t.status === 'Published' ? 'success' : 'info',
+      // 0ms instant optimistic update
+      setDb((prev) => {
+        const idx = prev.mockTests.findIndex((x) => x.id === t.id);
+        const next = idx >= 0
+          ? prev.mockTests.map((x, i) => (i === idx ? t : x))
+          : [t, ...prev.mockTests];
+        return { ...prev, mockTests: next };
       });
+
+      showToast(
+        customSuccessTitle || (isNew ? 'Mock Test Created' : t.status === 'Published' ? 'Test Launched Live!' : 'Test Set to Draft'),
+        `"${t.title}" (${t.status}) saved for ${t.batchName || 'students'}.`,
+        'success'
+      );
+
+      // Execute persistence in background without blocking UI
+      void cgaService.upsertTest(t).then((res) => {
+        if (!res.success) {
+          showToast('Save Failed', res.error || 'Failed to save test to database.', 'error');
+          void refresh(true);
+        }
+      });
+      return true;
     },
-    [run]
+    [refresh, showToast]
   );
   const deleteMockTest = useCallback(
     async (id: string) => {
-      await run(cgaService.deleteTest(id), {
-        title: 'Mock Test Deleted',
-        message: 'Test removed from the portal.',
-        type: 'info',
+      // 0ms instant optimistic removal
+      setDb((prev) => ({
+        ...prev,
+        mockTests: prev.mockTests.filter((x) => x.id !== id),
+      }));
+
+      // Negative action uses red
+      showToast('Mock Test Deleted', 'Test removed from the portal.', 'error');
+
+      // Execute cascade delete in background
+      void cgaService.deleteTest(id).then((res) => {
+        if (!res.success) {
+          showToast('Delete Failed', res.error || 'Could not delete test from server.', 'error');
+          void refresh(true);
+        }
       });
     },
-    [run]
+    [refresh, showToast]
   );
 
   const saveAchievement = useCallback(

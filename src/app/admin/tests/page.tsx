@@ -34,6 +34,7 @@ import {
   GraduationCap,
   Users,
   ShieldCheck,
+  CheckCircle2,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCga } from '@/context/CgaContext';
@@ -404,6 +405,7 @@ export default function AdminMockTestsPage() {
   const [activeAdminTab, setActiveAdminTab] = useState<'tests' | 'series' | 'subject_posts' | 'storage_meter'>('tests');
   const [editingTest, setEditingTest] = useState<MockTest | null>(null);
   const [isNew, setIsNew] = useState(false);
+  const [justCreatedTest, setJustCreatedTest] = useState<{ id: string; title: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MockTest | null>(null);
   const [selectedTestForRanks, setSelectedTestForRanks] = useState<string>(
     db.mockTests[0]?.id || ''
@@ -774,19 +776,20 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
     }
 
     const computedMarks = editingTest.questions.length * editingTest.marksPerQuestion;
-    const ok = await saveMockTest(
-      {
-        ...editingTest,
-        totalMarks: computedMarks,
-        courseId: finalCourseId,
-        courseName: finalCourseName,
-        batchName: finalBatchName,
-      },
-      isNew
-    );
-    if (ok) {
-      setEditingTest(null);
+    const testToSave = {
+      ...editingTest,
+      totalMarks: computedMarks,
+      courseId: finalCourseId,
+      courseName: finalCourseName,
+      batchName: finalBatchName,
+    };
+
+    if (isNew) {
+      setJustCreatedTest({ id: testToSave.id, title: testToSave.title });
     }
+
+    setEditingTest(null);
+    void saveMockTest(testToSave, isNew);
   };
 
   const togglePublish = async (test: MockTest) => {
@@ -997,7 +1000,51 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
         });
 
         return (
-          <div className="space-y-8">
+          <div className="space-y-6">
+            {/* Positive Navigation Prompt with Green Border */}
+            {justCreatedTest && (
+              <div className="p-4 sm:p-5 rounded-2xl bg-emerald-50 border-2 border-emerald-500 text-emerald-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md animate-in fade-in duration-200">
+                <div className="flex items-center gap-3">
+                  <span className="p-2.5 bg-emerald-100 rounded-xl text-emerald-700 shrink-0">
+                    <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+                  </span>
+                  <div>
+                    <p className="text-xs sm:text-sm font-black text-emerald-900">
+                      Mock Test Created Successfully: &quot;{justCreatedTest.title}&quot;
+                    </p>
+                    <p className="text-[11px] text-emerald-700 mt-0.5">
+                      The test has been registered. Follow the navigation buttons to attach question diagrams or preview the CBT layout.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/admin/mock-tests/${justCreatedTest.id}/questions`)}
+                    className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black cursor-pointer inline-flex items-center gap-1.5 shadow-sm transition-all"
+                  >
+                    <ImageIcon className="w-4 h-4" /> Go to Questions &amp; Attach Diagrams →
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/admin/mock-tests/${justCreatedTest.id}/preview`)}
+                    className="px-3.5 py-2.5 rounded-xl bg-white hover:bg-emerald-100 text-emerald-900 border border-emerald-300 text-xs font-bold cursor-pointer inline-flex items-center gap-1.5 shadow-2xs transition-all"
+                  >
+                    <Eye className="w-4 h-4 text-emerald-700" /> Preview Test
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setJustCreatedTest(null)}
+                    className="p-2 rounded-xl text-emerald-600 hover:bg-emerald-200/60 cursor-pointer"
+                    aria-label="Dismiss banner"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Search, Scope & Series Filter Bar */}
             <div className="bg-white rounded-3xl border border-slate-200 p-4 shadow-2xs space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
@@ -1113,7 +1160,11 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                   return (
                     <div
                       key={test.id}
-                      className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-2xs flex flex-col justify-between hover:border-blue-300 transition-all hover:shadow-md"
+                      className={`bg-white rounded-3xl p-5 sm:p-6 shadow-2xs flex flex-col justify-between transition-all hover:shadow-md ${
+                        justCreatedTest?.id === test.id
+                          ? 'border-2 border-emerald-500 ring-2 ring-emerald-500/20'
+                          : 'border border-slate-200 hover:border-blue-300'
+                      }`}
                     >
                       <div className="space-y-3">
                         {/* Top Header Row */}

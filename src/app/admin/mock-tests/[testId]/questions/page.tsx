@@ -27,13 +27,14 @@ import {
   PlusCircle,
   ListPlus,
   FileQuestion,
+  Edit3,
+  ClipboardCheck,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
 import { ParsedMCQ, generateMCQTemplateCsv, validateParsedQuestions } from '@/lib/mcqParser';
 import { MathText } from '@/components/ui/MathText';
 import { MockQuestionImage } from '@/components/mock-tests/MockQuestionImage';
 import { MockQuestionGroup, MockQuestionOption, getOptionText, getOptionImage } from '@/data/initialSeedData';
-import { ManualQuestionBuilder } from '@/components/admin/ManualQuestionBuilder';
 
 export default function AdminMockTestQuestionsPage() {
   const params = useParams();
@@ -41,7 +42,7 @@ export default function AdminMockTestQuestionsPage() {
   const testId = params?.testId as string;
   const { showToast } = useCga();
 
-  const [activeTab, setActiveTab] = useState<'review' | 'paste' | 'passageQ' | 'diagramQ' | 'csv' | 'passages'>('review');
+  const [activeTab, setActiveTab] = useState<'review' | 'paste' | 'csv' | 'passages'>('review');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testDetails, setTestDetails] = useState<any>(null);
@@ -338,6 +339,76 @@ export default function AdminMockTestQuestionsPage() {
     } finally {
       setUploadingImage(false);
     }
+  };
+
+  // Direct 1-click Question Diagram Upload
+  const handleDirectQuestionImageUpload = async (qIndex: number, file: File) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showToast('Invalid File', 'Please select an image file (PNG, JPG, WebP).', 'error');
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      showToast('File Too Large', 'Diagram image must be under 8 MB.', 'error');
+      return;
+    }
+
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('testId', testId);
+      form.append('maxDimension', 'question');
+      form.append('altText', `Diagram for question ${questions[qIndex]?.position || qIndex + 1}`);
+
+      const res = await fetch('/api/mock-tests/upload-image', {
+        method: 'POST',
+        body: form,
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Upload failed.');
+      }
+
+      const data = await res.json();
+      setQuestions((prev) => {
+        const next = [...prev];
+        next[qIndex] = {
+          ...next[qIndex],
+          imagePath: data.storagePath,
+          imageAlt: `Diagram for question ${next[qIndex]?.position || qIndex + 1}`,
+          needsDiagram: false,
+        };
+        return next;
+      });
+
+      showToast(
+        'Diagram Attached',
+        `Diagram attached to Question ${questions[qIndex]?.position || qIndex + 1}.`,
+        'success'
+      );
+      fetchStorageUsage();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to attach diagram.';
+      showToast('Upload Error', msg, 'error');
+    }
+  };
+
+  const handleRemoveQuestionDiagram = (qIndex: number) => {
+    setQuestions((prev) => {
+      const next = [...prev];
+      next[qIndex] = {
+        ...next[qIndex],
+        imagePath: null,
+        imageAlt: null,
+      };
+      return next;
+    });
+    showToast(
+      'Diagram Removed',
+      `Diagram removed from Question ${questions[qIndex]?.position || qIndex + 1}.`,
+      'error'
+    );
   };
 
   // Delete All Questions Action
@@ -784,18 +855,7 @@ export default function AdminMockTestQuestionsPage() {
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
-          Paste Questions
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('passageQ')}
-          className={`px-4 py-2 rounded-xl text-xs font-extrabold cursor-pointer transition-all ${
-            activeTab === 'passageQ'
-              ? 'bg-[#0056b3] text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          Add Passage + Questions
+          Paste Questions &amp; Attach Diagrams
         </button>
         <button
           type="button"
@@ -807,17 +867,6 @@ export default function AdminMockTestQuestionsPage() {
           }`}
         >
           CSV / XLSX + ZIP Import
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('diagramQ')}
-          className={`px-4 py-2 rounded-xl text-xs font-extrabold cursor-pointer transition-all ${
-            activeTab === 'diagramQ'
-              ? 'bg-[#0056b3] text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          Add Diagram Question
         </button>
         <button
           type="button"
@@ -1157,30 +1206,26 @@ export default function AdminMockTestQuestionsPage() {
                     </span>
 
                     <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setImageTarget({ qIndex: activeQIndex, targetType: 'question' });
-                          setImageModalOpen(true);
-                        }}
-                        className="px-3 py-1.5 rounded-lg bg-[#0056b3] hover:bg-blue-700 text-white text-xs font-bold cursor-pointer inline-flex items-center gap-1"
-                      >
+                      <label className="px-3.5 py-1.5 rounded-xl bg-[#0056b3] hover:bg-blue-700 text-white text-xs font-bold cursor-pointer inline-flex items-center gap-1.5 shadow-2xs">
                         <Upload className="w-3.5 h-3.5" /> Attach / Replace Diagram
-                      </button>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) handleDirectQuestionImageUpload(activeQIndex, f);
+                          }}
+                          className="hidden"
+                        />
+                      </label>
 
                       {currentQ.imagePath && (
                         <button
                           type="button"
-                          onClick={() => {
-                            setQuestions((prev) => {
-                              const copy = [...prev];
-                              copy[activeQIndex] = { ...copy[activeQIndex], imagePath: null, imageAlt: null };
-                              return copy;
-                            });
-                          }}
-                          className="px-3 py-1.5 rounded-lg bg-red-100 hover:bg-red-200 text-[#dc2626] text-xs font-bold cursor-pointer inline-flex items-center gap-1"
+                          onClick={() => handleRemoveQuestionDiagram(activeQIndex)}
+                          className="px-3 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-[#dc2626] border border-red-200 text-xs font-bold cursor-pointer inline-flex items-center gap-1"
                         >
-                          <Trash2 className="w-3.5 h-3.5" /> Remove
+                          <Trash2 className="w-3.5 h-3.5" /> Remove Diagram
                         </button>
                       )}
                     </div>
@@ -1197,77 +1242,43 @@ export default function AdminMockTestQuestionsPage() {
                       />
                       <div className="text-xs text-slate-600 space-y-1">
                         <p><strong className="text-slate-800">Storage Path:</strong> {currentQ.imagePath}</p>
-                        <p><strong className="text-slate-800">Alt Text:</strong> {currentQ.imageAlt || 'Diagram for question'}</p>
+                        <p><strong className="text-slate-800">Alt Text:</strong> {currentQ.imageAlt || `Diagram for Question ${activeQIndex + 1}`}</p>
                       </div>
                     </div>
                   ) : (
-                    <div className="p-4 rounded-xl border border-dashed border-slate-300 text-center text-xs text-slate-500 space-y-2">
-                      {currentQ.needsDiagram ? (
-                        <div>
-                          <p className="text-amber-700 font-bold">
-                            Warning: This question references a diagram or table. Please attach an image.
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setQuestions((prev) => {
-                                const copy = [...prev];
-                                copy[activeQIndex] = { ...copy[activeQIndex], needsDiagram: false };
-                                return copy;
-                              });
-                              showToast('Notice', 'Diagram requirement dismissed for this question.', 'info');
-                            }}
-                            className="mt-2 px-3 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold text-xs cursor-pointer"
-                          >
-                            Dismiss / No Diagram Needed
-                          </button>
-                        </div>
-                      ) : (
-                        <span>No diagram attached. Drag &amp; drop an image here or press Ctrl+V to paste.</span>
-                      )}
+                    <div className="p-4 rounded-xl border-2 border-dashed border-slate-300 text-center text-xs text-slate-500 space-y-1">
+                      <ImageIcon className="w-6 h-6 text-slate-400 mx-auto mb-1" />
+                      <p className="font-bold text-slate-700">No diagram attached to Question {activeQIndex + 1}</p>
+                      <p className="text-[11px] text-slate-400">Click &quot;Attach / Replace Diagram&quot; above to select an image, or drag &amp; drop an image here.</p>
                     </div>
                   )}
                 </div>
 
-                {/* Options 4 Editor */}
+                {/* Options 4 Normal Text Choices Editor */}
                 <div className="space-y-3">
-                  <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-600">
-                    Option Choices (Select the circle to set the correct answer)
-                  </label>
-                  {currentQ.options.map((opt, optIdx) => {
-                    const isCorrect = currentQ.correctOptionIndex === optIdx;
-                    const optText = getOptionText(opt);
-                    const optImg = getOptionImage(opt);
-                    const isDropTarget = dragOverTarget === `option-${optIdx}`;
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700">
+                      Option Choices (Normal Text — Click letter to set correct answer)
+                    </label>
+                    <span className="text-[11px] font-extrabold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-300">
+                      Correct Answer: Option {String.fromCharCode(65 + currentQ.correctOptionIndex)}
+                    </span>
+                  </div>
 
-                    return (
-                      <div
-                        key={optIdx}
-                        onDragOver={(e) => {
-                          e.preventDefault();
-                          setDragOverTarget(`option-${optIdx}`);
-                        }}
-                        onDragLeave={() => setDragOverTarget(null)}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          setDragOverTarget(null);
-                          const f = e.dataTransfer?.files?.[0];
-                          if (f && f.type.startsWith('image/')) {
-                            setPendingImageFile(f);
-                            setImageTarget({ qIndex: activeQIndex, targetType: 'option', optionIdx: optIdx });
-                            setPendingAltText(`Diagram for Option ${String.fromCharCode(65 + optIdx)}`);
-                            setImageModalOpen(true);
-                          }
-                        }}
-                        className={`p-3 rounded-2xl border transition-all space-y-2 ${
-                          isDropTarget
-                            ? 'bg-blue-50 border-[#0056b3] ring-2 ring-[#0056b3]/20'
-                            : isCorrect
-                            ? 'border-emerald-500 bg-emerald-50/50'
-                            : 'border-slate-200 bg-white'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
+                  <div className="space-y-2.5">
+                    {currentQ.options.map((opt, optIdx) => {
+                      const isCorrect = currentQ.correctOptionIndex === optIdx;
+                      const optText = getOptionText(opt);
+
+                      return (
+                        <div
+                          key={optIdx}
+                          className={`p-2.5 rounded-2xl border transition-all flex items-center gap-3 ${
+                            isCorrect
+                              ? 'border-2 border-emerald-500 bg-emerald-50/70 shadow-2xs'
+                              : 'border-slate-200 bg-white hover:border-slate-300'
+                          }`}
+                        >
                           <button
                             type="button"
                             onClick={() => {
@@ -1277,9 +1288,12 @@ export default function AdminMockTestQuestionsPage() {
                                 return copy;
                               });
                             }}
-                            className={`w-7 h-7 rounded-full text-xs font-extrabold flex items-center justify-center shrink-0 cursor-pointer ${
-                              isCorrect ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700'
+                            className={`w-8 h-8 rounded-xl text-xs font-black flex items-center justify-center shrink-0 cursor-pointer transition-all ${
+                              isCorrect
+                                ? 'bg-emerald-600 text-white shadow-xs scale-105'
+                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                             }`}
+                            title={`Set Option ${String.fromCharCode(65 + optIdx)} as correct answer`}
                           >
                             {String.fromCharCode(65 + optIdx)}
                           </button>
@@ -1292,71 +1306,24 @@ export default function AdminMockTestQuestionsPage() {
                               setQuestions((prev) => {
                                 const copy = [...prev];
                                 const opts = [...copy[activeQIndex].options];
-                                if (optImg) {
-                                  opts[optIdx] = { text: val, imagePath: optImg.imagePath, imageAlt: optImg.imageAlt };
-                                } else {
-                                  opts[optIdx] = val;
-                                }
+                                opts[optIdx] = val;
                                 copy[activeQIndex] = { ...copy[activeQIndex], options: opts };
                                 return copy;
                               });
                             }}
-                            placeholder={`Option ${String.fromCharCode(65 + optIdx)}`}
-                            className="flex-1 px-3 py-1.5 rounded-xl border border-slate-200 text-xs sm:text-sm font-semibold"
+                            placeholder={`Enter text for Option ${String.fromCharCode(65 + optIdx)}`}
+                            className="flex-1 px-3.5 py-2 rounded-xl border border-slate-200 text-xs sm:text-sm font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                           />
 
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setImageTarget({ qIndex: activeQIndex, targetType: 'option', optionIdx: optIdx });
-                              setImageModalOpen(true);
-                            }}
-                            className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold inline-flex items-center gap-1 cursor-pointer shrink-0"
-                          >
-                            <ImageIcon className="w-3.5 h-3.5 text-slate-500" />
-                            {optImg ? 'Change Diagram' : 'Add Diagram'}
-                          </button>
-
                           {isCorrect && (
-                            <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-lg shrink-0">
-                              Correct Answer
+                            <span className="text-xs font-extrabold text-emerald-700 bg-emerald-100 px-3 py-1 rounded-xl shrink-0 inline-flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Correct Choice
                             </span>
                           )}
                         </div>
-
-                        {optImg?.imagePath && (
-                          <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-xl border border-slate-200 ml-10">
-                            <MockQuestionImage
-                              path={optImg.imagePath}
-                              alt={optImg.imageAlt || `Option ${String.fromCharCode(65 + optIdx)}`}
-                              testId={testId}
-                              type="option"
-                              className="w-24 h-16"
-                            />
-                            <div className="text-xs text-slate-600 flex-1">
-                              <span className="font-semibold block">{optImg.imageAlt || 'Option diagram'}</span>
-                              <span className="text-[11px] text-slate-400 font-mono">{optImg.imagePath}</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setQuestions((prev) => {
-                                  const copy = [...prev];
-                                  const opts = [...copy[activeQIndex].options];
-                                  opts[optIdx] = optText;
-                                  copy[activeQIndex] = { ...copy[activeQIndex], options: opts };
-                                  return copy;
-                                });
-                              }}
-                              className="p-1 rounded text-red-500 hover:text-red-700 hover:bg-red-50 cursor-pointer"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Explanation */}
@@ -1468,29 +1435,78 @@ export default function AdminMockTestQuestionsPage() {
       {activeTab === 'paste' && (
         <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-6">
           <div>
-            <h2 className="text-base font-extrabold text-slate-900">Paste Multiple-Choice Questions</h2>
+            <h2 className="text-base font-extrabold text-slate-900">Paste Multiple-Choice Questions &amp; Attach Diagrams</h2>
             <p className="text-xs text-slate-500">
-              Paste questions, options, and answers. Handles English & Bengali numbering, single-line options, and separate answer key sheets.
+              Paste questions and options in standard format. Options are normal text. Diagrams attach directly to the question statement.
+            </p>
+          </div>
+
+          {/* Sample Question Format Card */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-emerald-50/70 border-2 border-emerald-500 text-emerald-950 space-y-3 shadow-2xs">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs font-black uppercase tracking-wider text-emerald-900 flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-emerald-600" />
+                Sample Question Format (Follow this format when pasting questions)
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setPastedText(`1. In the circuit diagram shown below, find the equivalent resistance between terminals A and B.
+(A) 5 Ω
+(B) 10 Ω
+(C) 15 Ω
+(D) 20 Ω
+Ans: B
+Explanation: The two 20 Ω parallel resistors yield 10 Ω equivalent resistance.
+
+2. Which organelle is known as the powerhouse of the eukaryotic cell?
+(A) Ribosome
+(B) Golgi Body
+(C) Mitochondria
+(D) Endoplasmic Reticulum
+Ans: C
+Explanation: Mitochondria generate adenosine triphosphate (ATP) through cellular respiration.
+
+3. নিচের কোনটি ভারতীয় সংবিধানের প্রস্তাবনার অংশ?
+(A) সার্বভৌম (Sovereign)
+(B) সমাজতান্ত্রিক (Socialist)
+(C) ধর্মনিরপেক্ষ (Secular)
+(D) উপরের সবকটি
+Ans: D
+Explanation: ৪২তম সংবিধান সংশোধনী দ্বারা সমাজতান্ত্রিক ও ধর্মনিরপেক্ষ শব্দ যুক্ত হয়।`);
+                  showToast('Sample Loaded', 'Sample questions inserted into paste box.', 'success');
+                }}
+                className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black inline-flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              >
+                <PlusCircle className="w-3.5 h-3.5" /> Insert Sample Template into Box
+              </button>
+            </div>
+
+            <div className="bg-white p-3.5 rounded-xl border border-emerald-200 font-mono text-[11px] leading-relaxed text-slate-800 space-y-2 overflow-x-auto">
+              <p className="font-bold text-emerald-900">1. In the circuit diagram shown below, find the equivalent resistance between terminals A and B.</p>
+              <p className="text-slate-600">(A) 5 Ω &nbsp;&nbsp; (B) 10 Ω &nbsp;&nbsp; (C) 15 Ω &nbsp;&nbsp; (D) 20 Ω</p>
+              <p className="text-emerald-700 font-bold">Ans: B</p>
+              <p className="text-slate-500">Explanation: The two 20 Ω parallel resistors yield 10 Ω.</p>
+            </div>
+
+            <p className="text-[11px] text-emerald-800 font-medium">
+              💡 <strong>Note on Diagrams:</strong> Options are always normal text. Diagrams attach strictly to the question statement (e.g., Q1). Once parsed, you can attach any diagram image directly beside that specific question below.
             </p>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div className="lg:col-span-8 space-y-2">
               <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-600">
-                Question Text & Options
+                Question Text &amp; Options
               </label>
               <textarea
-                rows={16}
+                rows={14}
                 value={pastedText}
                 onChange={(e) => setPastedText(e.target.value)}
-                placeholder={`1. What is the SI unit of power?
-(A) Joule (B) Watt (C) Newton (D) Pascal
+                placeholder={`1. Look at the circuit diagram shown below. What is the equivalent resistance?
+(A) 5 Ω (B) 10 Ω (C) 15 Ω (D) 20 Ω
 Ans: B
-Explanation: Power is the rate of doing work.
-
-2. নিচের কোনটি মৌলিক অধিকার?
-(A) সম্পত্তির অধিকার (B) সাম্যের অধিকার (C) ধর্মীয় কর (D) কোনটিই নয়
-Ans: B`}
+Explanation: The two resistors are in parallel.`}
                 className="w-full p-4 rounded-2xl border border-slate-200 font-mono text-xs leading-relaxed"
               />
             </div>
@@ -1501,7 +1517,7 @@ Ans: B`}
                   Optional Separate Answer Key Sheet
                 </label>
                 <textarea
-                  rows={8}
+                  rows={6}
                   value={pastedAnswerKey}
                   onChange={(e) => setPastedAnswerKey(e.target.value)}
                   placeholder={`1-B, 2-D, 3-A, 4-C
@@ -1511,7 +1527,7 @@ or
                 />
               </div>
 
-              {/* Import Mode & Comprehension Section Options */}
+              {/* Import Mode */}
               <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 text-xs">
                 <div>
                   <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-700 block mb-1.5">
@@ -1556,7 +1572,7 @@ or
                       onChange={(e) => setAutoCreatePassage(e.target.checked)}
                       className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500"
                     />
-                    <span>Group as Comprehension / Reading Passage</span>
+                    <span>Group as Reading / Comprehension Passage</span>
                   </label>
 
                   {autoCreatePassage && (
@@ -1584,13 +1600,154 @@ or
                 type="button"
                 disabled={isParsing || !pastedText.trim()}
                 onClick={handleParseText}
-                className="w-full py-3.5 rounded-xl bg-[#0056b3] hover:bg-blue-700 text-white text-xs font-extrabold cursor-pointer inline-flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full py-3.5 rounded-xl bg-[#0056b3] hover:bg-blue-700 text-white text-xs font-extrabold cursor-pointer inline-flex items-center justify-center gap-2 disabled:opacity-50 shadow-xs"
               >
                 {isParsing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                {importMode === 'append' && questions.length > 0 ? 'Append Questions to Review Screen' : 'Parse and Send to Review Screen'}
+                {importMode === 'append' && questions.length > 0 ? 'Parse & Append to Test' : 'Parse Questions & Load'}
               </button>
             </div>
           </div>
+
+          {/* Questions & Diagram Attachment Section */}
+          {questions.length > 0 && (
+            <div className="pt-6 border-t border-slate-200 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                    <ImageIcon className="w-4 h-4 text-[#0056b3]" />
+                    <span>Questions &amp; Direct Diagram Attachment ({questions.length} Questions)</span>
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Options are normal text choices. For questions that need an image (e.g. Q1), click &quot;Attach Diagram&quot; directly beside the question.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('review')}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Eye className="w-4 h-4" /> Open Full Review Editor →
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {questions.map((q, qIdx) => {
+                  const hasImage = Boolean(q.imagePath);
+
+                  return (
+                    <div
+                      key={q.id || qIdx}
+                      className={`p-4 rounded-2xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                        hasImage
+                          ? 'border-2 border-emerald-500 bg-emerald-50/30'
+                          : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      {/* Left: Question statement & normal options */}
+                      <div className="flex-1 space-y-1.5 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-black ${
+                            hasImage ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700'
+                          }`}>
+                            Q{q.position || qIdx + 1}
+                          </span>
+                          {hasImage && (
+                            <span className="text-[11px] font-bold text-emerald-700 inline-flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Diagram Attached
+                            </span>
+                          )}
+                          <span className="text-[11px] font-bold text-slate-400">
+                            Ans: Option {String.fromCharCode(65 + (q.correctOptionIndex ?? 0))}
+                          </span>
+                        </div>
+
+                        <p className="text-xs font-semibold text-slate-800 line-clamp-2">
+                          {q.question || 'No question statement'}
+                        </p>
+
+                        <div className="flex flex-wrap gap-2 text-[11px] text-slate-500">
+                          {q.options.map((opt, oIdx) => (
+                            <span
+                              key={oIdx}
+                              className={`px-2 py-0.5 rounded-lg border ${
+                                q.correctOptionIndex === oIdx
+                                  ? 'bg-emerald-100 border-emerald-300 text-emerald-900 font-bold'
+                                  : 'bg-slate-50 border-slate-200 text-slate-600'
+                              }`}
+                            >
+                              ({String.fromCharCode(65 + oIdx)}) {getOptionText(opt)}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Right: Attached Diagram or Direct Upload Button */}
+                      <div className="flex items-center gap-3 shrink-0">
+                        {hasImage ? (
+                          <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-emerald-200 shadow-2xs">
+                            <MockQuestionImage
+                              path={q.imagePath!}
+                              alt={q.imageAlt || `Diagram for Q${qIdx + 1}`}
+                              testId={testId}
+                              type="question"
+                              className="w-24 h-16 rounded-lg"
+                            />
+                            <div className="space-y-1">
+                              <label className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-[#0056b3] text-[11px] font-bold cursor-pointer block text-center">
+                                Change
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={(e) => {
+                                    const f = e.target.files?.[0];
+                                    if (f) handleDirectQuestionImageUpload(qIdx, f);
+                                  }}
+                                  className="hidden"
+                                />
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveQuestionDiagram(qIdx)}
+                                className="px-2.5 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-[#dc2626] text-[11px] font-bold cursor-pointer block w-full text-center"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <label className="px-4 py-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[#0056b3] text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-2xs transition-all">
+                            <ImageIcon className="w-4 h-4 text-[#0056b3]" /> Attach Diagram to Q{q.position || qIdx + 1}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (f) handleDirectQuestionImageUpload(qIdx, f);
+                              }}
+                              className="hidden"
+                            />
+                          </label>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveQIndex(qIdx);
+                            setActiveTab('review');
+                          }}
+                          className="p-2 rounded-xl text-slate-400 hover:text-[#0056b3] hover:bg-blue-50 cursor-pointer"
+                          title="Edit this question in Review Screen"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1656,25 +1813,6 @@ or
             Parse Spreadsheet & Import
           </button>
         </div>
-      )}
-
-      {/* 4. MANUAL PASSAGE / DIAGRAM BUILDERS */}
-      {(activeTab === 'passageQ' || activeTab === 'diagramQ') && (
-        <ManualQuestionBuilder
-          key={activeTab}
-          mode={activeTab === 'passageQ' ? 'passage' : 'diagram'}
-          testId={testId}
-          existingCount={questions.length}
-          groupCount={questionGroups.length}
-          onError={(m) => showToast('Cannot Add', m, 'error')}
-          onAdd={(qs, grp) => {
-            if (grp) setQuestionGroups((prev) => [...prev, grp]);
-            setQuestions((prev) => [...prev, ...qs]);
-            setActiveQIndex(questions.length);
-            setActiveTab('review');
-            showToast('Added', `${qs.length} question(s) added${grp ? ' with passage' : ' with diagram'}. Review and Approve & Save to publish.`, 'success');
-          }}
-        />
       )}
 
       {/* 6. SHARED PASSAGES TAB */}
