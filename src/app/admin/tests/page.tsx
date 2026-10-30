@@ -36,6 +36,7 @@ import {
   ShieldCheck,
   CheckCircle2,
   Printer,
+  PlusCircle,
   RefreshCw,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -425,12 +426,21 @@ export default function AdminMockTestsPage() {
   // Series Packages editing state
   const [editingSeries, setEditingSeries] = useState<MockSeries | null>(null);
 
-  // Bulk Import Tab state inside the modal
-  const [importMode, setImportMode] = useState<'upload' | 'paste' | 'manual'>('upload');
+  // Question Builder Tab state inside the modal
+  const [importMode, setImportMode] = useState<'paste' | 'manual' | 'diagram' | 'passage'>('paste');
   const [pastedText, setPastedText] = useState('');
   const [isParsing, setIsParsing] = useState(false);
   const [parseError, setParseError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Diagram & Passage states inside modal
+  const [singleQDiagramFile, setSingleQDiagramFile] = useState<File | null>(null);
+  const [singleQDiagramPreview, setSingleQDiagramPreview] = useState<string>('');
+  const [isUploadingDiagram, setIsUploadingDiagram] = useState(false);
+  const [modalPassageTitle, setModalPassageTitle] = useState('');
+  const [modalPassageBody, setModalPassageBody] = useState('');
+  const [modalPassageQsText, setModalPassageQsText] = useState('');
+  const singleQDiagramInputRef = useRef<HTMLInputElement>(null);
 
   // Manual Question builder state inside modal
   const [newQText, setNewQText] = useState('');
@@ -463,7 +473,7 @@ export default function AdminMockTestsPage() {
     setIsNew(true);
     setPastedText('');
     setParseError('');
-    setImportMode('upload');
+    setImportMode('paste');
     setModalTargetScope('mock_series_only');
 
     const defaultSeries = (db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL)[0];
@@ -673,10 +683,35 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
     setPastedText(sample);
   };
 
-  // 3. Manual Single Question Add
-  const handleAddSingleQuestion = () => {
+  // 3. Manual Single Question Add with Diagram Attachment
+  const handleAddSingleQuestion = async () => {
     if (!editingTest || !newQText.trim() || !optA.trim() || !optB.trim()) return;
     const isEngOnly = editingTest.languageMode === 'english_only';
+
+    let attachedImgPath: string | null = null;
+    let attachedImgAlt: string | null = null;
+
+    if (singleQDiagramFile) {
+      try {
+        setIsUploadingDiagram(true);
+        const form = new FormData();
+        form.append('file', singleQDiagramFile);
+        form.append('testId', editingTest.id);
+        form.append('maxDimension', 'question');
+        form.append('altText', `Diagram for question ${editingTest.questions.length + 1}`);
+        const res = await fetch('/api/mock-tests/upload-image', {
+          method: 'POST',
+          body: form,
+        });
+        if (res.ok) {
+          const data = await res.json();
+          attachedImgPath = data.storagePath;
+          attachedImgAlt = `Diagram for question ${editingTest.questions.length + 1}`;
+        }
+      } catch {} finally {
+        setIsUploadingDiagram(false);
+      }
+    }
 
     const q: MCQQuestion = {
       id: `q-${Date.now()}`,
@@ -691,17 +726,19 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
       optionsBn: isEngOnly
         ? undefined
         : optABn.trim() || optBBn.trim()
-        ? [
+          ? [
             optABn.trim() || optA.trim(),
             optBBn.trim() || optB.trim(),
             optCBn.trim() || optC.trim(),
             optDBn.trim() || optD.trim(),
           ]
-        : undefined,
+          : undefined,
       correctOptionIndex: correctIdx,
       explanation: explanation.trim() || 'Refer to C.G.A classroom notes and model solutions.',
       explanationBn: isEngOnly ? undefined : (explanationBn.trim() || undefined),
       subject: editingTest.subject,
+      imagePath: attachedImgPath,
+      imageAlt: attachedImgAlt,
     };
     const nextQs = [...editingTest.questions, q];
     setEditingTest({
@@ -721,6 +758,135 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
     setOptDBn('');
     setExplanation('');
     setExplanationBn('');
+    setSingleQDiagramFile(null);
+    setSingleQDiagramPreview('');
+    if (singleQDiagramInputRef.current) singleQDiagramInputRef.current.value = '';
+    showToast('Question Added', `Question ${nextQs.length} added to test${attachedImgPath ? ' with diagram' : ''}.`, 'success');
+  };
+
+  // 4. Attach diagram to existing question inside modal
+  const handleModalQuestionDiagramUpload = async (qIndex: number, file: File) => {
+    if (!editingTest || !file) return;
+    if (!file.type.startsWith('image/')) {
+      showToast('Invalid File', 'Please select an image file (PNG, JPG, WebP).', 'error');
+      return;
+    }
+
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('testId', editingTest.id);
+      form.append('maxDimension', 'question');
+      form.append('altText', `Diagram for question ${qIndex + 1}`);
+
+      const res = await fetch('/api/mock-tests/upload-image', {
+        method: 'POST',
+        body: form,
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to upload image');
+      }
+
+      const data = await res.json();
+      const updatedQs = [...editingTest.questions];
+      updatedQs[qIndex] = {
+        ...updatedQs[qIndex],
+        imagePath: data.storagePath,
+        imageAlt: `Diagram for question ${qIndex + 1}`,
+      };
+
+      setEditingTest({
+        ...editingTest,
+        questions: updatedQs,
+      });
+
+      showToast('Diagram Attached', `Diagram attached directly to Question ${qIndex + 1}.`, 'success');
+    } catch {
+      showToast('Upload Error', 'Failed to upload question diagram.', 'error');
+    }
+  };
+
+  const handleModalRemoveDiagram = (qIndex: number) => {
+    if (!editingTest) return;
+    const updatedQs = [...editingTest.questions];
+    updatedQs[qIndex] = {
+      ...updatedQs[qIndex],
+      imagePath: null,
+      imageAlt: null,
+    };
+    setEditingTest({
+      ...editingTest,
+      questions: updatedQs,
+    });
+    showToast('Diagram Removed', `Diagram removed from Question ${qIndex + 1}.`, 'error');
+  };
+
+  // 5. Add Passage & Linked Questions in Modal
+  const handleAddPassageInModal = () => {
+    if (!editingTest) return;
+    const pText = modalPassageBody.trim();
+    const qText = modalPassageQsText.trim();
+
+    if (!pText) {
+      showToast('Passage Text Required', 'Please enter the reading comprehension passage paragraph.', 'error');
+      return;
+    }
+    if (!qText) {
+      showToast('Questions Required', 'Please paste the questions and options for this passage.', 'error');
+      return;
+    }
+
+    const parsed = parseRawQuestionsText(qText);
+    if (!parsed || parsed.length === 0) {
+      showToast(
+        'Format Not Recognized',
+        'Could not parse questions. Ensure questions have numbers (1.), options ((A), (B), (C), (D)), and Ans: ...',
+        'error'
+      );
+      return;
+    }
+
+    const newGrpId = `grp-${Date.now()}`;
+    const newGroup = {
+      id: newGrpId,
+      testId: editingTest.id,
+      position: (editingTest.questionGroups?.length || 0) + 1,
+      passageText: pText,
+      imagePath: null,
+      imageAlt: modalPassageTitle.trim() || 'Reading Comprehension Passage',
+    };
+
+    const startIndex = editingTest.questions.length;
+    const linkedQs: MCQQuestion[] = parsed.map((q, idx) => ({
+      id: `q-psg-${Date.now()}-${idx}`,
+      question: q.question,
+      options: q.options as any,
+      correctOptionIndex: q.correctOptionIndex,
+      explanation: q.explanation || '',
+      groupId: newGrpId,
+      imagePath: q.imagePath || null,
+      imageAlt: q.imageAlt || null,
+    }));
+
+    const updatedGroups = [...(editingTest.questionGroups || []), newGroup];
+    const updatedQuestions = [...editingTest.questions, ...linkedQs];
+
+    setEditingTest({
+      ...editingTest,
+      questionGroups: updatedGroups,
+      questions: updatedQuestions,
+      totalMarks: updatedQuestions.length * editingTest.marksPerQuestion,
+    });
+
+    setModalPassageTitle('');
+    setModalPassageBody('');
+    setModalPassageQsText('');
+    showToast(
+      'Passage & Questions Added',
+      `Added 1 passage with ${linkedQs.length} questions. Questions are linked to the passage.`,
+      'success'
+    );
   };
 
   const handleRemoveQuestion = (qId: string) => {
@@ -1145,44 +1311,40 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
         <button
           type="button"
           onClick={() => setActiveAdminTab('tests')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
-            activeAdminTab === 'tests'
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${activeAdminTab === 'tests'
               ? 'bg-[#0056b3] text-white shadow-sm'
               : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-          }`}
+            }`}
         >
           <ClipboardCheck className="w-4 h-4" /> Batch & Sectional Tests ({db.mockTests.length})
         </button>
         <button
           type="button"
           onClick={() => setActiveAdminTab('series')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
-            activeAdminTab === 'series'
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${activeAdminTab === 'series'
               ? 'bg-[#0056b3] text-white shadow-sm'
               : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-          }`}
+            }`}
         >
           <Flame className="w-4 h-4 text-amber-300" /> T-TET Daily Series Packages ({db.mockSeries.length})
         </button>
         <button
           type="button"
           onClick={() => setActiveAdminTab('subject_posts')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
-            activeAdminTab === 'subject_posts'
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${activeAdminTab === 'subject_posts'
               ? 'bg-[#0056b3] text-white shadow-sm'
               : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-          }`}
+            }`}
         >
           <BookOpen className="w-4 h-4 text-amber-300" /> Subject Question Drive Links ({db.mockSubjectPosts?.length || 0})
         </button>
         <button
           type="button"
           onClick={() => setActiveAdminTab('storage_meter')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
-            activeAdminTab === 'storage_meter'
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${activeAdminTab === 'storage_meter'
               ? 'bg-[#0056b3] text-white shadow-sm'
               : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-          }`}
+            }`}
         >
           <HardDrive className="w-4 h-4 text-purple-400" /> Storage Meter &amp; Lifecycle
         </button>
@@ -1201,10 +1363,10 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
 
           const isMockOnly = Boolean(
             test.seriesId &&
-              (!test.courseId ||
-                test.courseName?.includes('Mock') ||
-                test.batchName?.includes('Mock Series') ||
-                test.batchName?.includes('Enrolled Students Only'))
+            (!test.courseId ||
+              test.courseName?.includes('Mock') ||
+              test.batchName?.includes('Mock Series') ||
+              test.batchName?.includes('Enrolled Students Only'))
           );
           const isCourseOnly = Boolean(test.courseId && !test.seriesId && !test.courseName?.includes('Mock'));
           const isCombined = Boolean(test.seriesId && test.courseId && !isMockOnly);
@@ -1378,21 +1540,20 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
 
                   const isMockOnly = Boolean(
                     test.seriesId &&
-                      (!test.courseId ||
-                        test.courseName?.includes('Mock') ||
-                        test.batchName?.includes('Mock Series') ||
-                        test.batchName?.includes('Enrolled Students Only'))
+                    (!test.courseId ||
+                      test.courseName?.includes('Mock') ||
+                      test.batchName?.includes('Mock Series') ||
+                      test.batchName?.includes('Enrolled Students Only'))
                   );
                   const isCourseOnly = Boolean(test.courseId && !test.seriesId && !test.courseName?.includes('Mock'));
 
                   return (
                     <div
                       key={test.id}
-                      className={`bg-white rounded-3xl p-5 sm:p-6 shadow-2xs flex flex-col justify-between transition-all hover:shadow-md ${
-                        justCreatedTest?.id === test.id
+                      className={`bg-white rounded-3xl p-5 sm:p-6 shadow-2xs flex flex-col justify-between transition-all hover:shadow-md ${justCreatedTest?.id === test.id
                           ? 'border-2 border-emerald-500 ring-2 ring-emerald-500/20'
                           : 'border border-slate-200 hover:border-blue-300'
-                      }`}
+                        }`}
                     >
                       <div className="space-y-3">
                         {/* Top Header Row */}
@@ -1404,16 +1565,14 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                             {test.batchName}
                           </span>
                           <span
-                            className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
-                              test.status === 'Published'
+                            className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold whitespace-nowrap shrink-0 flex items-center gap-1.5 ${test.status === 'Published'
                                 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                 : 'bg-amber-50 text-[#ea580c] border border-amber-200'
-                            }`}
+                              }`}
                           >
                             <span
-                              className={`w-1.5 h-1.5 rounded-full ${
-                                test.status === 'Published' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
-                              }`}
+                              className={`w-1.5 h-1.5 rounded-full ${test.status === 'Published' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+                                }`}
                             />
                             {test.status === 'Published' ? 'Launched' : 'Draft / Scheduled'}
                           </span>
@@ -1500,10 +1659,10 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                               setIsNew(false);
                               const isMock = Boolean(
                                 test.seriesId &&
-                                  (!test.courseId ||
-                                    test.courseName?.includes('Mock') ||
-                                    test.batchName?.includes('Mock Series') ||
-                                    test.batchName?.includes('Enrolled Students Only'))
+                                (!test.courseId ||
+                                  test.courseName?.includes('Mock') ||
+                                  test.batchName?.includes('Mock Series') ||
+                                  test.batchName?.includes('Enrolled Students Only'))
                               );
                               const isCourse = Boolean(test.courseId && !test.seriesId && !test.courseName?.includes('Mock'));
                               const scope = isMock ? 'mock_series_only' : isCourse ? 'course_only' : 'combined';
@@ -1541,11 +1700,10 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                           <button
                             type="button"
                             onClick={() => togglePublish(test)}
-                            className={`h-8 flex-1 px-3 rounded-xl text-[11px] font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap ${
-                              test.status === 'Published'
+                            className={`h-8 flex-1 px-3 rounded-xl text-[11px] font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap ${test.status === 'Published'
                                 ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                                 : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
-                            }`}
+                              }`}
                           >
                             <Send className="w-3.5 h-3.5 shrink-0" />
                             <span>{test.status === 'Published' ? 'Unpublish' : 'Launch Now'}</span>
@@ -1576,373 +1734,371 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
               </div>
             )}
 
-          {/* Batch Rank List & Results Table */}
-          <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-2xs space-y-6">
-            {/* Header Row */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-              <div>
-                <h2 className="text-lg font-extrabold text-[#0a0e2a] flex items-center gap-2">
-                  <Trophy className="w-5 h-5 text-[#ea580c]" />
-                  <span>Batch Results &amp; Merit Rank List</span>
-                  <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-[#0056b3] text-xs font-black">
-                    {totalAppeared} Candidates Appeared
+            {/* Batch Rank List & Results Table */}
+            <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-2xs space-y-6">
+              {/* Header Row */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                <div>
+                  <h2 className="text-lg font-extrabold text-[#0a0e2a] flex items-center gap-2">
+                    <Trophy className="w-5 h-5 text-[#ea580c]" />
+                    <span>Batch Results &amp; Merit Rank List</span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-[#0056b3] text-xs font-black">
+                      {totalAppeared} Candidates Appeared
+                    </span>
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Official student scores, merit ranks, accuracy, and instant image / page export for 100–150+ students.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={selectedTestForRanks}
+                    onChange={(e) => setSelectedTestForRanks(e.target.value)}
+                    className="px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold bg-white text-slate-800 shadow-2xs"
+                  >
+                    {db.mockTests.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.title} ({t.batchName || 'General'})
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Export as Image Button */}
+                  <button
+                    type="button"
+                    disabled={isExportingImage || totalAppeared === 0}
+                    onClick={downloadRankListImage}
+                    className="px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black inline-flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50 transition-all"
+                    title="Download rank list as a high-resolution PNG image"
+                  >
+                    {isExportingImage ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
+                    Download as Image (PNG)
+                  </button>
+
+                  {/* Print / Download as Page Button */}
+                  <button
+                    type="button"
+                    disabled={totalAppeared === 0}
+                    onClick={() => setPrintableRankModal(true)}
+                    className="px-3.5 py-2.5 rounded-xl bg-[#0056b3] hover:bg-blue-700 text-white text-xs font-black inline-flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50 transition-all"
+                    title="Open formatted A4 page to print or Save as PDF"
+                  >
+                    <Printer className="w-4 h-4" />
+                    Print / Save as Page (PDF)
+                  </button>
+
+                  {/* Export as CSV Button */}
+                  <button
+                    type="button"
+                    disabled={totalAppeared === 0}
+                    onClick={downloadRankListCSV}
+                    className="px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    title="Export records to CSV"
+                  >
+                    <Download className="w-4 h-4" /> CSV
+                  </button>
+                </div>
+              </div>
+
+              {/* Performance KPI Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                <div className="p-4 rounded-2xl bg-blue-50/70 border border-blue-200">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-blue-700 block">
+                    Total Candidates
                   </span>
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Official student scores, merit ranks, accuracy, and instant image / page export for 100–150+ students.
-                </p>
+                  <p className="text-xl sm:text-2xl font-black text-blue-950 mt-1">
+                    {totalAppeared}
+                  </p>
+                  <span className="text-[11px] text-blue-600 font-medium">Submissions recorded</span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 block">
+                    Highest Score
+                  </span>
+                  <p className="text-xl sm:text-2xl font-black text-emerald-950 mt-1">
+                    {highestScore} <span className="text-xs font-normal text-emerald-700">/ {totalMaxMarks}</span>
+                  </p>
+                  <span className="text-[11px] text-emerald-600 font-medium">Top candidate marks</span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 block">
+                    Average Score
+                  </span>
+                  <p className="text-xl sm:text-2xl font-black text-amber-950 mt-1">
+                    {avgScore} <span className="text-xs font-normal text-amber-700">/ {totalMaxMarks}</span>
+                  </p>
+                  <span className="text-[11px] text-amber-600 font-medium">Batch average</span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-purple-50/70 border border-purple-200">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 block">
+                    Average Accuracy
+                  </span>
+                  <p className="text-xl sm:text-2xl font-black text-purple-950 mt-1">
+                    {avgAccuracy}%
+                  </p>
+                  <span className="text-[11px] text-purple-600 font-medium">Correct answer ratio</span>
+                </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  value={selectedTestForRanks}
-                  onChange={(e) => setSelectedTestForRanks(e.target.value)}
-                  className="px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold bg-white text-slate-800 shadow-2xs"
-                >
-                  {db.mockTests.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.title} ({t.batchName || 'General'})
-                    </option>
-                  ))}
-                </select>
-
-                {/* Export as Image Button */}
-                <button
-                  type="button"
-                  disabled={isExportingImage || totalAppeared === 0}
-                  onClick={downloadRankListImage}
-                  className="px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black inline-flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50 transition-all"
-                  title="Download rank list as a high-resolution PNG image"
-                >
-                  {isExportingImage ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
-                  Download as Image (PNG)
-                </button>
-
-                {/* Print / Download as Page Button */}
-                <button
-                  type="button"
-                  disabled={totalAppeared === 0}
-                  onClick={() => setPrintableRankModal(true)}
-                  className="px-3.5 py-2.5 rounded-xl bg-[#0056b3] hover:bg-blue-700 text-white text-xs font-black inline-flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50 transition-all"
-                  title="Open formatted A4 page to print or Save as PDF"
-                >
-                  <Printer className="w-4 h-4" />
-                  Print / Save as Page (PDF)
-                </button>
-
-                {/* Export as CSV Button */}
-                <button
-                  type="button"
-                  disabled={totalAppeared === 0}
-                  onClick={downloadRankListCSV}
-                  className="px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  title="Export records to CSV"
-                >
-                  <Download className="w-4 h-4" /> CSV
-                </button>
-              </div>
-            </div>
-
-            {/* Performance KPI Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-              <div className="p-4 rounded-2xl bg-blue-50/70 border border-blue-200">
-                <span className="text-[10px] font-black uppercase tracking-wider text-blue-700 block">
-                  Total Candidates
-                </span>
-                <p className="text-xl sm:text-2xl font-black text-blue-950 mt-1">
-                  {totalAppeared}
-                </p>
-                <span className="text-[11px] text-blue-600 font-medium">Submissions recorded</span>
+              {/* Search Filter Bar */}
+              <div className="flex items-center justify-between gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={rankSearchQuery}
+                    onChange={(e) => setRankSearchQuery(e.target.value)}
+                    placeholder="Search student by name..."
+                    className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+                {rankSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setRankSearchQuery('')}
+                    className="text-xs font-bold text-slate-500 hover:text-slate-800 px-2 py-1"
+                  >
+                    Clear Filter
+                  </button>
+                )}
               </div>
 
-              <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200">
-                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 block">
-                  Highest Score
-                </span>
-                <p className="text-xl sm:text-2xl font-black text-emerald-950 mt-1">
-                  {highestScore} <span className="text-xs font-normal text-emerald-700">/ {totalMaxMarks}</span>
-                </p>
-                <span className="text-[11px] text-emerald-600 font-medium">Top candidate marks</span>
-              </div>
+              {totalAppeared === 0 ? (
+                <div className="p-10 text-center border-2 border-dashed border-slate-200 rounded-2xl space-y-2">
+                  <Trophy className="w-10 h-10 text-slate-300 mx-auto" />
+                  <p className="text-sm font-bold text-slate-700">No Student Attempts Recorded Yet</p>
+                  <p className="text-xs text-slate-400 max-w-md mx-auto">
+                    When students take this mock test and submit their answers, their authoritative marks, merit ranks, and accuracy will appear here in real time.
+                  </p>
+                </div>
+              ) : filteredRankAttempts.length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-500 border border-slate-200 rounded-2xl">
+                  No students match &quot;{rankSearchQuery}&quot;. Try a different search term.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-black uppercase tracking-wider text-[11px]">
+                        <th className="py-3.5 px-4">Merit Rank</th>
+                        <th className="py-3.5 px-4">Student Name</th>
+                        <th className="py-3.5 px-4">Total Obtained Marks</th>
+                        <th className="py-3.5 px-4">Correct / Wrong</th>
+                        <th className="py-3.5 px-4">Accuracy %</th>
+                        <th className="py-3.5 px-4">Submitted At</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {filteredRankAttempts.map((att, idx) => {
+                        const actualRank = rawRankAttempts.findIndex((x) => x.id === att.id) + 1;
+                        const isTop1 = actualRank === 1;
+                        const isTop2 = actualRank === 2;
+                        const isTop3 = actualRank === 3;
 
-              <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200">
-                <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 block">
-                  Average Score
-                </span>
-                <p className="text-xl sm:text-2xl font-black text-amber-950 mt-1">
-                  {avgScore} <span className="text-xs font-normal text-amber-700">/ {totalMaxMarks}</span>
-                </p>
-                <span className="text-[11px] text-amber-600 font-medium">Batch average</span>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-purple-50/70 border border-purple-200">
-                <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 block">
-                  Average Accuracy
-                </span>
-                <p className="text-xl sm:text-2xl font-black text-purple-950 mt-1">
-                  {avgAccuracy}%
-                </p>
-                <span className="text-[11px] text-purple-600 font-medium">Correct answer ratio</span>
-              </div>
-            </div>
-
-            {/* Search Filter Bar */}
-            <div className="flex items-center justify-between gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-200">
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={rankSearchQuery}
-                  onChange={(e) => setRankSearchQuery(e.target.value)}
-                  placeholder="Search student by name..."
-                  className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                />
-              </div>
-              {rankSearchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setRankSearchQuery('')}
-                  className="text-xs font-bold text-slate-500 hover:text-slate-800 px-2 py-1"
-                >
-                  Clear Filter
-                </button>
+                        return (
+                          <tr
+                            key={att.id}
+                            className={`hover:bg-slate-50 transition-colors ${isTop1 ? 'bg-amber-50/30' : isTop2 ? 'bg-slate-50/40' : isTop3 ? 'bg-orange-50/20' : ''
+                              }`}
+                          >
+                            <td className="py-3.5 px-4 whitespace-nowrap">
+                              {isTop1 ? (
+                                <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-black text-xs inline-flex items-center gap-1 shadow-2xs">
+                                  🥇 Rank #1
+                                </span>
+                              ) : isTop2 ? (
+                                <span className="px-3 py-1 rounded-full bg-slate-200 text-slate-800 border border-slate-300 font-black text-xs inline-flex items-center gap-1 shadow-2xs">
+                                  🥈 Rank #2
+                                </span>
+                              ) : isTop3 ? (
+                                <span className="px-3 py-1 rounded-full bg-orange-100 text-orange-900 border border-orange-300 font-black text-xs inline-flex items-center gap-1 shadow-2xs">
+                                  🥉 Rank #3
+                                </span>
+                              ) : (
+                                <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-bold text-xs">
+                                  #{actualRank}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <div className="flex items-center gap-2.5">
+                                <span className="w-7 h-7 rounded-full bg-gradient-to-br from-[#0056b3] to-[#1e3a8a] text-white text-[11px] font-black inline-flex items-center justify-center shrink-0">
+                                  {(att.studentName || 'S').slice(0, 1).toUpperCase()}
+                                </span>
+                                <span className="font-extrabold text-slate-900 text-xs">
+                                  {att.studentName}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-4 whitespace-nowrap">
+                              <span className="text-sm font-black text-[#0056b3]">
+                                {att.score}
+                              </span>
+                              <span className="text-xs font-semibold text-slate-400"> / {att.totalMarks || totalMaxMarks}</span>
+                            </td>
+                            <td className="py-3.5 px-4 whitespace-nowrap">
+                              <span className="text-emerald-700 font-bold inline-flex items-center gap-1">
+                                {att.correctCount} <CustomCheckSvg className="w-3.5 h-3.5 text-emerald-600" />
+                              </span>{' '}
+                              /{' '}
+                              <span className="text-red-600 font-bold inline-flex items-center gap-1">
+                                {att.wrongCount} <CustomCrossSvg className="w-3.5 h-3.5 text-red-500" />
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 whitespace-nowrap">
+                              <div className="flex items-center gap-2">
+                                <div className="w-16 bg-slate-100 rounded-full h-2 overflow-hidden">
+                                  <div
+                                    className={`h-full ${att.accuracy >= 75
+                                        ? 'bg-emerald-500'
+                                        : att.accuracy >= 50
+                                          ? 'bg-blue-500'
+                                          : 'bg-amber-500'
+                                      }`}
+                                    style={{ width: `${Math.min(100, att.accuracy)}%` }}
+                                  />
+                                </div>
+                                <span className="font-bold text-slate-700 text-xs">{att.accuracy}%</span>
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-4 text-slate-500 whitespace-nowrap text-[11px]">
+                              {att.submittedAt}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
 
-            {totalAppeared === 0 ? (
-              <div className="p-10 text-center border-2 border-dashed border-slate-200 rounded-2xl space-y-2">
-                <Trophy className="w-10 h-10 text-slate-300 mx-auto" />
-                <p className="text-sm font-bold text-slate-700">No Student Attempts Recorded Yet</p>
-                <p className="text-xs text-slate-400 max-w-md mx-auto">
-                  When students take this mock test and submit their answers, their authoritative marks, merit ranks, and accuracy will appear here in real time.
-                </p>
-              </div>
-            ) : filteredRankAttempts.length === 0 ? (
-              <div className="p-8 text-center text-xs text-slate-500 border border-slate-200 rounded-2xl">
-                No students match &quot;{rankSearchQuery}&quot;. Try a different search term.
-              </div>
-            ) : (
-              <div className="overflow-x-auto rounded-2xl border border-slate-200">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-black uppercase tracking-wider text-[11px]">
-                      <th className="py-3.5 px-4">Merit Rank</th>
-                      <th className="py-3.5 px-4">Student Name</th>
-                      <th className="py-3.5 px-4">Total Obtained Marks</th>
-                      <th className="py-3.5 px-4">Correct / Wrong</th>
-                      <th className="py-3.5 px-4">Accuracy %</th>
-                      <th className="py-3.5 px-4">Submitted At</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 bg-white">
-                    {filteredRankAttempts.map((att, idx) => {
-                      const actualRank = rawRankAttempts.findIndex((x) => x.id === att.id) + 1;
-                      const isTop1 = actualRank === 1;
-                      const isTop2 = actualRank === 2;
-                      const isTop3 = actualRank === 3;
+            {/* Printable Page Modal (Formatted for A4 Printing & Save as PDF) */}
+            {printableRankModal && (
+              <div className="fixed inset-0 z-[120] bg-black/70 flex items-center justify-center p-4 backdrop-blur-xs overflow-y-auto">
+                <div className="bg-white rounded-3xl max-w-4xl w-full p-6 sm:p-8 space-y-6 shadow-2xl border border-slate-200 my-8">
+                  <div className="flex items-center justify-between pb-4 border-b border-slate-200">
+                    <div className="flex items-center gap-2">
+                      <Printer className="w-5 h-5 text-[#0056b3]" />
+                      <h3 className="font-black text-base text-slate-900">
+                        Official Printable Rank List Page
+                      </h3>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => window.print()}
+                        className="px-4 py-2 rounded-xl bg-[#0056b3] hover:bg-blue-700 text-white text-xs font-black inline-flex items-center gap-1.5 cursor-pointer shadow-sm"
+                      >
+                        <Printer className="w-4 h-4" /> Print / Save as PDF
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPrintableRankModal(false)}
+                        className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
 
-                      return (
-                        <tr
-                          key={att.id}
-                          className={`hover:bg-slate-50 transition-colors ${
-                            isTop1 ? 'bg-amber-50/30' : isTop2 ? 'bg-slate-50/40' : isTop3 ? 'bg-orange-50/20' : ''
-                          }`}
-                        >
-                          <td className="py-3.5 px-4 whitespace-nowrap">
-                            {isTop1 ? (
-                              <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-black text-xs inline-flex items-center gap-1 shadow-2xs">
-                                🥇 Rank #1
-                              </span>
-                            ) : isTop2 ? (
-                              <span className="px-3 py-1 rounded-full bg-slate-200 text-slate-800 border border-slate-300 font-black text-xs inline-flex items-center gap-1 shadow-2xs">
-                                🥈 Rank #2
-                              </span>
-                            ) : isTop3 ? (
-                              <span className="px-3 py-1 rounded-full bg-orange-100 text-orange-900 border border-orange-300 font-black text-xs inline-flex items-center gap-1 shadow-2xs">
-                                🥉 Rank #3
-                              </span>
-                            ) : (
-                              <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-bold text-xs">
-                                #{actualRank}
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-3.5 px-4">
-                            <div className="flex items-center gap-2.5">
-                              <span className="w-7 h-7 rounded-full bg-gradient-to-br from-[#0056b3] to-[#1e3a8a] text-white text-[11px] font-black inline-flex items-center justify-center shrink-0">
-                                {(att.studentName || 'S').slice(0, 1).toUpperCase()}
-                              </span>
-                              <span className="font-extrabold text-slate-900 text-xs">
-                                {att.studentName}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="py-3.5 px-4 whitespace-nowrap">
-                            <span className="text-sm font-black text-[#0056b3]">
-                              {att.score}
-                            </span>
-                            <span className="text-xs font-semibold text-slate-400"> / {att.totalMarks || totalMaxMarks}</span>
-                          </td>
-                          <td className="py-3.5 px-4 whitespace-nowrap">
-                            <span className="text-emerald-700 font-bold inline-flex items-center gap-1">
-                              {att.correctCount} <CustomCheckSvg className="w-3.5 h-3.5 text-emerald-600" />
-                            </span>{' '}
-                            /{' '}
-                            <span className="text-red-600 font-bold inline-flex items-center gap-1">
-                              {att.wrongCount} <CustomCrossSvg className="w-3.5 h-3.5 text-red-500" />
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-4 whitespace-nowrap">
-                            <div className="flex items-center gap-2">
-                              <div className="w-16 bg-slate-100 rounded-full h-2 overflow-hidden">
-                                <div
-                                  className={`h-full ${
-                                    att.accuracy >= 75
-                                      ? 'bg-emerald-500'
-                                      : att.accuracy >= 50
-                                      ? 'bg-blue-500'
-                                      : 'bg-amber-500'
-                                  }`}
-                                  style={{ width: `${Math.min(100, att.accuracy)}%` }}
-                                />
-                              </div>
-                              <span className="font-bold text-slate-700 text-xs">{att.accuracy}%</span>
-                            </div>
-                          </td>
-                          <td className="py-3.5 px-4 text-slate-500 whitespace-nowrap text-[11px]">
-                            {att.submittedAt}
-                          </td>
+                  {/* Print Sheet Document */}
+                  <div className="p-6 sm:p-8 bg-white border border-slate-300 rounded-2xl shadow-xs space-y-6 print:p-0 print:border-none print:shadow-none">
+                    {/* Academy Header */}
+                    <div className="text-center pb-4 border-b-2 border-slate-800 space-y-1">
+                      <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-wider">
+                        CAREER GUIDANCE ACADEMY
+                      </h1>
+                      <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">
+                        Tripura Academic Examination &amp; Mock Test Verification Portal
+                      </p>
+                      <div className="pt-2">
+                        <span className="inline-block px-4 py-1 rounded-full bg-slate-900 text-white text-xs font-black uppercase tracking-wider">
+                          Official Merit &amp; Rank List
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Test Details */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+                      <div>
+                        <span className="text-[10px] text-slate-500 font-bold uppercase block">Examination</span>
+                        <p className="font-black text-slate-900 mt-0.5">{selectedTestObj?.title || 'Mock Test'}</p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-500 font-bold uppercase block">Batch / Target</span>
+                        <p className="font-black text-slate-900 mt-0.5">{selectedTestObj?.batchName || 'General Batch'}</p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-500 font-bold uppercase block">Total Candidates</span>
+                        <p className="font-black text-slate-900 mt-0.5">{totalAppeared}</p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-500 font-bold uppercase block">Max Marks</span>
+                        <p className="font-black text-slate-900 mt-0.5">{totalMaxMarks}</p>
+                      </div>
+                    </div>
+
+                    {/* Printable Table */}
+                    <table className="w-full text-left border-collapse text-xs border border-slate-300">
+                      <thead>
+                        <tr className="bg-slate-100 border-b border-slate-300 text-slate-700 font-black uppercase text-[10px]">
+                          <th className="py-2.5 px-3 border-r border-slate-300">Rank</th>
+                          <th className="py-2.5 px-3 border-r border-slate-300">Candidate Name</th>
+                          <th className="py-2.5 px-3 border-r border-slate-300">Marks Obtained</th>
+                          <th className="py-2.5 px-3 border-r border-slate-300">Correct / Wrong</th>
+                          <th className="py-2.5 px-3 border-r border-slate-300">Accuracy</th>
+                          <th className="py-2.5 px-3">Date</th>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {rawRankAttempts.map((att, idx) => (
+                          <tr key={att.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                            <td className="py-2.5 px-3 font-black border-r border-slate-200">
+                              #{idx + 1}
+                            </td>
+                            <td className="py-2.5 px-3 font-bold text-slate-900 border-r border-slate-200">
+                              {att.studentName}
+                            </td>
+                            <td className="py-2.5 px-3 font-black text-slate-900 border-r border-slate-200">
+                              {att.score} / {att.totalMarks || totalMaxMarks}
+                            </td>
+                            <td className="py-2.5 px-3 border-r border-slate-200">
+                              {att.correctCount} / {att.wrongCount}
+                            </td>
+                            <td className="py-2.5 px-3 font-bold border-r border-slate-200">
+                              {att.accuracy}%
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-600 text-[11px]">
+                              {att.submittedAt}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+
+                    {/* Signature Section */}
+                    <div className="pt-8 flex items-center justify-between border-t border-slate-300 text-xs">
+                      <div>
+                        <p className="text-[11px] text-slate-500 font-medium">Verified by: Academic Examination Committee</p>
+                        <p className="font-bold text-slate-800 mt-0.5">Career Guidance Academy</p>
+                      </div>
+                      <div className="text-right">
+                        <div className="w-40 border-b border-slate-400 mb-1" />
+                        <p className="text-[11px] text-slate-500 font-bold uppercase">Authorized Signatory</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
-
-          {/* Printable Page Modal (Formatted for A4 Printing & Save as PDF) */}
-          {printableRankModal && (
-            <div className="fixed inset-0 z-[120] bg-black/70 flex items-center justify-center p-4 backdrop-blur-xs overflow-y-auto">
-              <div className="bg-white rounded-3xl max-w-4xl w-full p-6 sm:p-8 space-y-6 shadow-2xl border border-slate-200 my-8">
-                <div className="flex items-center justify-between pb-4 border-b border-slate-200">
-                  <div className="flex items-center gap-2">
-                    <Printer className="w-5 h-5 text-[#0056b3]" />
-                    <h3 className="font-black text-base text-slate-900">
-                      Official Printable Rank List Page
-                    </h3>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => window.print()}
-                      className="px-4 py-2 rounded-xl bg-[#0056b3] hover:bg-blue-700 text-white text-xs font-black inline-flex items-center gap-1.5 cursor-pointer shadow-sm"
-                    >
-                      <Printer className="w-4 h-4" /> Print / Save as PDF
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPrintableRankModal(false)}
-                      className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Print Sheet Document */}
-                <div className="p-6 sm:p-8 bg-white border border-slate-300 rounded-2xl shadow-xs space-y-6 print:p-0 print:border-none print:shadow-none">
-                  {/* Academy Header */}
-                  <div className="text-center pb-4 border-b-2 border-slate-800 space-y-1">
-                    <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-wider">
-                      CAREER GUIDANCE ACADEMY
-                    </h1>
-                    <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">
-                      Tripura Academic Examination &amp; Mock Test Verification Portal
-                    </p>
-                    <div className="pt-2">
-                      <span className="inline-block px-4 py-1 rounded-full bg-slate-900 text-white text-xs font-black uppercase tracking-wider">
-                        Official Merit &amp; Rank List
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Test Details */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs">
-                    <div>
-                      <span className="text-[10px] text-slate-500 font-bold uppercase block">Examination</span>
-                      <p className="font-black text-slate-900 mt-0.5">{selectedTestObj?.title || 'Mock Test'}</p>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-500 font-bold uppercase block">Batch / Target</span>
-                      <p className="font-black text-slate-900 mt-0.5">{selectedTestObj?.batchName || 'General Batch'}</p>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-500 font-bold uppercase block">Total Candidates</span>
-                      <p className="font-black text-slate-900 mt-0.5">{totalAppeared}</p>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-500 font-bold uppercase block">Max Marks</span>
-                      <p className="font-black text-slate-900 mt-0.5">{totalMaxMarks}</p>
-                    </div>
-                  </div>
-
-                  {/* Printable Table */}
-                  <table className="w-full text-left border-collapse text-xs border border-slate-300">
-                    <thead>
-                      <tr className="bg-slate-100 border-b border-slate-300 text-slate-700 font-black uppercase text-[10px]">
-                        <th className="py-2.5 px-3 border-r border-slate-300">Rank</th>
-                        <th className="py-2.5 px-3 border-r border-slate-300">Candidate Name</th>
-                        <th className="py-2.5 px-3 border-r border-slate-300">Marks Obtained</th>
-                        <th className="py-2.5 px-3 border-r border-slate-300">Correct / Wrong</th>
-                        <th className="py-2.5 px-3 border-r border-slate-300">Accuracy</th>
-                        <th className="py-2.5 px-3">Date</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200">
-                      {rawRankAttempts.map((att, idx) => (
-                        <tr key={att.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
-                          <td className="py-2.5 px-3 font-black border-r border-slate-200">
-                            #{idx + 1}
-                          </td>
-                          <td className="py-2.5 px-3 font-bold text-slate-900 border-r border-slate-200">
-                            {att.studentName}
-                          </td>
-                          <td className="py-2.5 px-3 font-black text-slate-900 border-r border-slate-200">
-                            {att.score} / {att.totalMarks || totalMaxMarks}
-                          </td>
-                          <td className="py-2.5 px-3 border-r border-slate-200">
-                            {att.correctCount} / {att.wrongCount}
-                          </td>
-                          <td className="py-2.5 px-3 font-bold border-r border-slate-200">
-                            {att.accuracy}%
-                          </td>
-                          <td className="py-2.5 px-3 text-slate-600 text-[11px]">
-                            {att.submittedAt}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-
-                  {/* Signature Section */}
-                  <div className="pt-8 flex items-center justify-between border-t border-slate-300 text-xs">
-                    <div>
-                      <p className="text-[11px] text-slate-500 font-medium">Verified by: Academic Examination Committee</p>
-                      <p className="font-bold text-slate-800 mt-0.5">Career Guidance Academy</p>
-                    </div>
-                    <div className="text-right">
-                      <div className="w-40 border-b border-slate-400 mb-1" />
-                      <p className="text-[11px] text-slate-500 font-bold uppercase">Authorized Signatory</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      );
-    })()}
+        );
+      })()}
 
       {/* ==================== TAB 2: TRIPURA TET DAILY MOCK SERIES PACKAGES ==================== */}
       {activeAdminTab === 'series' && (
@@ -2134,11 +2290,10 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                 key={sub}
                 type="button"
                 onClick={() => setFilterPostSubject(sub)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  filterPostSubject === sub
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${filterPostSubject === sub
                     ? 'bg-[#0056b3] text-white shadow-xs'
                     : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-                }`}
+                  }`}
               >
                 {sub === 'all' ? 'All Subjects' : sub}
               </button>
@@ -2327,11 +2482,10 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                         batchName: `${sObj.name} (Dedicated Mock Series Students)`,
                       });
                     }}
-                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                      modalTargetScope === 'mock_series_only'
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${modalTargetScope === 'mock_series_only'
                         ? 'bg-blue-50/90 border-[#0056b3] ring-2 ring-[#0056b3]/20 shadow-xs'
                         : 'bg-white border-slate-200 hover:bg-slate-50'
-                    }`}
+                      }`}
                   >
                     <div>
                       <div className="flex items-center justify-between">
@@ -2362,11 +2516,10 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                         batchName: firstCourse?.batchName || 'Regular Batch',
                       });
                     }}
-                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                      modalTargetScope === 'course_only'
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${modalTargetScope === 'course_only'
                         ? 'bg-blue-50/90 border-[#0056b3] ring-2 ring-[#0056b3]/20 shadow-xs'
                         : 'bg-white border-slate-200 hover:bg-slate-50'
-                    }`}
+                      }`}
                   >
                     <div>
                       <div className="flex items-center justify-between">
@@ -2401,11 +2554,10 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                         batchName: `${sObj.name} & ${firstCourse?.batchName || 'Batch'}`,
                       });
                     }}
-                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                      modalTargetScope === 'combined'
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${modalTargetScope === 'combined'
                         ? 'bg-blue-50/90 border-[#0056b3] ring-2 ring-[#0056b3]/20 shadow-xs'
                         : 'bg-white border-slate-200 hover:bg-slate-50'
-                    }`}
+                      }`}
                   >
                     <div>
                       <div className="flex items-center justify-between">
@@ -2462,12 +2614,12 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                   {!ALL_MOCK_SUBJECT_GROUPS.some((g) =>
                     g.items.some((it) => it.seriesId === editingTest.seriesId && it.name === editingTest.subject)
                   ) && (
-                    <optgroup label="Other Subject">
-                      <option value={`${editingTest.seriesId || 'series-ttet-paper1'}:::${editingTest.subject || 'Custom'}`}>
-                        {editingTest.subject || 'Custom Subject'}
-                      </option>
-                    </optgroup>
-                  )}
+                      <optgroup label="Other Subject">
+                        <option value={`${editingTest.seriesId || 'series-ttet-paper1'}:::${editingTest.subject || 'Custom'}`}>
+                          {editingTest.subject || 'Custom Subject'}
+                        </option>
+                      </optgroup>
+                    )}
                 </select>
                 <p className="text-[10px] text-slate-500 mt-1">
                   Selecting a subject auto-configures the series, language mode, and default matching course.
@@ -2765,139 +2917,174 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-5 h-5 text-[#0056b3]" />
                   <span className="font-extrabold text-sm text-[#0a0e2a]">
-                    Add Questions (PDF Upload, Text Paste, or Manual)
+                    Add Questions &amp; Passages (Paste Text, Single MCQ, Diagrams, or Passages)
                   </span>
                 </div>
 
-                <div className="flex bg-white rounded-xl p-1 border border-slate-200 shadow-2xs">
-                  <button
-                    type="button"
-                    onClick={() => setImportMode('upload')}
-                    className={`px-3 py-1 rounded-lg font-bold text-xs transition-colors cursor-pointer ${
-                      importMode === 'upload' ? 'bg-[#0056b3] text-white' : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    Upload PDF / File
-                  </button>
+                <div className="flex flex-wrap bg-white rounded-xl p-1 border border-slate-200 shadow-2xs gap-1">
                   <button
                     type="button"
                     onClick={() => setImportMode('paste')}
-                    className={`px-3 py-1 rounded-lg font-bold text-xs transition-colors cursor-pointer ${
-                      importMode === 'paste' ? 'bg-[#0056b3] text-white' : 'text-slate-600 hover:text-slate-900'
+                    className={`px-3 py-1.5 rounded-lg font-extrabold text-xs transition-colors cursor-pointer flex items-center gap-1.5 ${
+                      importMode === 'paste' ? 'bg-[#0056b3] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    Paste Text
+                    <FileText className="w-3.5 h-3.5" /> Paste Questions
                   </button>
                   <button
                     type="button"
                     onClick={() => setImportMode('manual')}
-                    className={`px-3 py-1 rounded-lg font-bold text-xs transition-colors cursor-pointer ${
-                      importMode === 'manual' ? 'bg-[#0056b3] text-white' : 'text-slate-600 hover:text-slate-900'
+                    className={`px-3 py-1.5 rounded-lg font-extrabold text-xs transition-colors cursor-pointer flex items-center gap-1.5 ${
+                      importMode === 'manual' ? 'bg-[#0056b3] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    Single MCQ
+                    <PlusCircle className="w-3.5 h-3.5" /> Single MCQ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImportMode('diagram')}
+                    className={`px-3 py-1.5 rounded-lg font-extrabold text-xs transition-colors cursor-pointer flex items-center gap-1.5 ${
+                      importMode === 'diagram' ? 'bg-[#0056b3] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <ImageIcon className="w-3.5 h-3.5" /> Add Diagram
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImportMode('passage')}
+                    className={`px-3 py-1.5 rounded-lg font-extrabold text-xs transition-colors cursor-pointer flex items-center gap-1.5 ${
+                      importMode === 'passage' ? 'bg-[#0056b3] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <BookOpen className="w-3.5 h-3.5" /> Passage Questions
                   </button>
                 </div>
               </div>
 
-              {/* Mode 1: PDF Upload */}
-              {importMode === 'upload' && (
-                <div className="space-y-3">
-                  <div
-                    onClick={() => fileInputRef.current?.click()}
-                    className="border-2 border-dashed border-blue-300 hover:border-[#0056b3] bg-white/80 rounded-2xl p-6 text-center cursor-pointer transition-all hover:bg-white"
-                  >
-                    <Upload className="w-8 h-8 text-[#0056b3] mx-auto mb-2" />
-                    <p className="font-extrabold text-xs text-slate-800">
-                      {isParsing ? 'Extracting Questions from File...' : 'Click to Upload Question Paper (PDF, TXT)'}
-                    </p>
-                    <p className="text-[11px] text-slate-500 mt-1">
-                      Our system extracts questions, options (A, B, C, D), answer keys, and explanations automatically.
-                    </p>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept=".pdf,.txt"
-                      onChange={handleFileUpload}
-                      className="hidden"
-                    />
-                  </div>
-                  {parseError && (
-                    <div className="p-3 rounded-xl bg-red-50 text-[#dc2626] border border-red-200 flex items-center gap-2 text-xs">
-                      <AlertCircle className="w-4 h-4 shrink-0" />
-                      <span>{parseError}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Mode 2: Paste Raw Text */}
+              {/* Mode 1: Paste Raw Text */}
               {importMode === 'paste' && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] text-slate-500 font-semibold">
-                      Paste question paper text with answers:
+                      Paste question paper text with options and answer keys:
                     </span>
                     <button
                       type="button"
                       onClick={handleInsertSampleTemplate}
-                      className="text-xs text-[#0056b3] hover:underline font-bold"
+                      className="text-xs text-[#0056b3] hover:underline font-bold inline-flex items-center gap-1"
                     >
-                      Load Sample Questions
+                      <Sparkles className="w-3.5 h-3.5" /> Load Sample Questions
                     </button>
                   </div>
                   <textarea
                     rows={6}
                     value={pastedText}
                     onChange={(e) => setPastedText(e.target.value)}
-                    placeholder="1. Question stem...&#10;(A) Option A&#10;(B) Option B&#10;(C) Option C&#10;(D) Option D&#10;Ans: A"
-                    className="w-full p-3 rounded-2xl border border-slate-200 bg-white font-mono text-xs focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                    placeholder="1. Question statement...&#10;(A) Option A&#10;(B) Option B&#10;(C) Option C&#10;(D) Option D&#10;Ans: A&#10;Explanation: Solution notes..."
+                    className="w-full p-3.5 rounded-2xl border border-slate-200 bg-white font-mono text-xs focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
                   />
                   {parseError && (
                     <div className="p-2.5 rounded-xl bg-red-50 text-[#dc2626] border border-red-200 text-xs">
                       {parseError}
                     </div>
                   )}
-                  <button
-                    type="button"
-                    onClick={handleParsePastedText}
-                    className="px-4 py-2 rounded-xl bg-[#0056b3] text-white font-bold text-xs cursor-pointer hover:bg-[#1e3a8a]"
-                  >
-                    Extract & Add Questions
-                  </button>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={handleParsePastedText}
+                      className="px-5 py-2.5 rounded-xl bg-[#0056b3] text-white font-bold text-xs cursor-pointer hover:bg-[#1e3a8a] shadow-xs"
+                    >
+                      Extract &amp; Add Questions
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/admin/mock-tests/${editingTest.id}/questions?tab=paste`)}
+                      className="text-xs font-bold text-[#0056b3] hover:underline inline-flex items-center gap-1"
+                    >
+                      Open Full Studio for LaTeX &amp; OCR <ExternalLink className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               )}
 
-              {/* Mode 3: Manual Single Question */}
+              {/* Mode 2: Manual Single Question */}
               {importMode === 'manual' && (
-                <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-200">
+                <div className="space-y-3 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs">
                   <div>
-                    <label className="font-bold text-slate-700 block mb-1">
+                    <label className="font-bold text-slate-700 block mb-1 text-xs">
                       {editingTest.languageMode === 'bengali_only' ? 'প্রশ্ন (বাংলায়) *' : 'Question Statement (English) *'}
                     </label>
                     <input
                       type="text"
                       value={newQText}
                       onChange={(e) => setNewQText(e.target.value)}
-                      placeholder="e.g. According to Piaget, during which stage..."
-                      className="w-full px-3 py-1.5 rounded-xl border border-slate-200 text-xs"
+                      placeholder="e.g. In the given circuit diagram, find the equivalent resistance..."
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs"
                     />
                   </div>
 
                   {editingTest.languageMode === 'bilingual' && (
                     <div>
-                      <label className="font-bold text-blue-900 block mb-1">
+                      <label className="font-bold text-blue-900 block mb-1 text-xs">
                         প্রশ্ন অনুবাদ (বাংলায় - Optional/Bilingual)
                       </label>
                       <input
                         type="text"
                         value={newQTextBn}
                         onChange={(e) => setNewQTextBn(e.target.value)}
-                        placeholder="পিয়াজের মতে, কোন স্তরে শিশু..."
-                        className="w-full px-3 py-1.5 rounded-xl border border-blue-200 text-xs bg-blue-50/30"
+                        placeholder="প্রদত্ত সার্কিট চিত্রে সমতুল্য রোধ নির্ণয় করুন..."
+                        className="w-full px-3 py-2 rounded-xl border border-blue-200 text-xs bg-blue-50/30"
                       />
                     </div>
                   )}
+
+                  {/* Optional Diagram Attachment for this single question */}
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <ImageIcon className="w-4 h-4 text-[#0056b3]" />
+                      <span className="text-xs font-bold text-slate-700">Attach Question Diagram (Optional):</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {singleQDiagramPreview ? (
+                        <div className="flex items-center gap-2">
+                          <img
+                            src={singleQDiagramPreview}
+                            alt="Diagram preview"
+                            className="w-12 h-10 object-contain rounded border border-slate-300 bg-white"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSingleQDiagramFile(null);
+                              setSingleQDiagramPreview('');
+                              if (singleQDiagramInputRef.current) singleQDiagramInputRef.current.value = '';
+                            }}
+                            className="text-xs font-bold text-red-600 hover:underline cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-2xs">
+                          <Upload className="w-3.5 h-3.5 text-[#0056b3]" /> Select Diagram Image
+                          <input
+                            ref={singleQDiagramInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) {
+                                setSingleQDiagramFile(f);
+                                setSingleQDiagramPreview(URL.createObjectURL(f));
+                              }
+                            }}
+                            className="hidden"
+                          />
+                        </label>
+                      )}
+                    </div>
+                  </div>
 
                   <div className="grid grid-cols-2 gap-2">
                     <input
@@ -2977,10 +3164,177 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
 
                     <button
                       type="button"
+                      disabled={isUploadingDiagram}
                       onClick={handleAddSingleQuestion}
-                      className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer"
+                      className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer shadow-xs disabled:opacity-50"
                     >
-                      + Add Question
+                      {isUploadingDiagram ? 'Attaching Diagram...' : '+ Add Question'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Mode 3: Add Diagrams directly to Questions */}
+              {importMode === 'diagram' && (
+                <div className="space-y-4 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                    <div>
+                      <h4 className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                        <ImageIcon className="w-4 h-4 text-[#0056b3]" />
+                        <span>Attach Question Diagrams from Local Device</span>
+                      </h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Options are normal text. Diagrams attach strictly to the specific question statement.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/admin/mock-tests/${editingTest.id}/questions?tab=paste`)}
+                      className="px-3 py-1.5 rounded-lg bg-blue-50 text-[#0056b3] border border-blue-200 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      Open Full Diagram Studio <ExternalLink className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {editingTest.questions.length === 0 ? (
+                    <div className="p-6 text-center text-slate-500 text-xs">
+                      No questions in this test yet. Add questions via &quot;Paste Questions&quot; first, then attach diagrams here.
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                      {editingTest.questions.map((q, qIdx) => (
+                        <div
+                          key={q.id || qIdx}
+                          className="p-3 rounded-xl border border-slate-200 bg-slate-50/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                        >
+                          <div className="flex-1">
+                            <span className="font-bold text-[#0056b3] mr-2">Q{qIdx + 1}.</span>
+                            <span className="font-semibold text-slate-800 line-clamp-1">{q.question}</span>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            {q.imagePath ? (
+                              <div className="flex items-center gap-2">
+                                <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 font-bold text-[10px] inline-flex items-center gap-1">
+                                  <Check className="w-3 h-3 text-emerald-600" /> Diagram Attached
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleModalRemoveDiagram(qIdx)}
+                                  className="text-[11px] font-bold text-red-600 hover:underline cursor-pointer"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            ) : (
+                              <label className="px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-2xs">
+                                <Upload className="w-3.5 h-3.5 text-[#0056b3]" /> Attach Diagram
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={(e) => {
+                                    const f = e.target.files?.[0];
+                                    if (f) handleModalQuestionDiagramUpload(qIdx, f);
+                                  }}
+                                  className="hidden"
+                                />
+                              </label>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Mode 4: Two-Section Reading Comprehension / Passage Builder */}
+              {importMode === 'passage' && (
+                <div className="space-y-4 bg-white p-4 sm:p-5 rounded-2xl border border-purple-200 shadow-2xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-purple-100 pb-2.5">
+                    <div>
+                      <h4 className="text-xs font-black text-purple-900 flex items-center gap-1.5">
+                        <BookOpen className="w-4 h-4 text-purple-700" />
+                        <span>Two-Section Reading Comprehension Passage Builder</span>
+                      </h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Section 1: Full reading paragraph text. Section 2: Questions and options based on it.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModalPassageTitle('Reading Comprehension (Q.1 to Q.3)');
+                        setModalPassageBody(`Environmental sustainability is one of the most pressing challenges of the modern era. Over the last century, exponential industrial growth and urban expansion have led to unprecedented levels of resource depletion and carbon emissions.
+
+Scientists emphasize that conservation cannot remain a peripheral policy; it must be integrated into the core economic framework of every nation. By transitioning toward circular economies and renewable energy, societies can mitigate severe climate risks while generating sustainable economic growth.`);
+                        setModalPassageQsText(`1. According to the passage, what is described as one of the most pressing challenges of the modern era?
+(A) Space exploration
+(B) Environmental sustainability
+(C) Agricultural taxation
+(D) Classical literature
+Ans: B
+Explanation: The first sentence explicitly states that environmental sustainability is one of the most pressing challenges.
+
+2. What led to unprecedented levels of resource depletion according to paragraph 1?
+(A) Industrial growth and urban expansion
+(B) Foreign trade agreements
+(C) Scientific laboratories
+(D) Decreased consumer demand
+Ans: A
+Explanation: Paragraph 1 highlights exponential industrial growth and urban expansion.`);
+                        showToast('Sample Loaded', 'Sample passage and questions inserted into Section 1 & Section 2.', 'success');
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-600" /> Load Sample Passage
+                    </button>
+                  </div>
+
+                  {/* Section 1: Passage Paragraph */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-black text-purple-950 block">
+                      Section 1: Full Reading Paragraph / Comprehension Text *
+                    </label>
+                    <textarea
+                      rows={4}
+                      value={modalPassageBody}
+                      onChange={(e) => setModalPassageBody(e.target.value)}
+                      placeholder="Paste the whole paragraph of the reading comprehension passage here..."
+                      className="w-full p-3 rounded-xl border border-purple-200 font-sans text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 bg-purple-50/20"
+                    />
+                  </div>
+
+                  {/* Section 2: Questions based on Passage */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-black text-purple-950 block">
+                      Section 2: Questions &amp; Options linked to this passage *
+                    </label>
+                    <textarea
+                      rows={5}
+                      value={modalPassageQsText}
+                      onChange={(e) => setModalPassageQsText(e.target.value)}
+                      placeholder="1. Question linked to the passage...&#10;(A) Option A&#10;(B) Option B&#10;(C) Option C&#10;(D) Option D&#10;Ans: B&#10;Explanation: Refer to paragraph 1..."
+                      className="w-full p-3 rounded-xl border border-slate-200 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-[#0056b3] bg-white"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-purple-100">
+                    <button
+                      type="button"
+                      onClick={handleAddPassageInModal}
+                      className="px-5 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs cursor-pointer shadow-xs inline-flex items-center gap-1.5"
+                    >
+                      <PlusCircle className="w-4 h-4" /> Add Passage &amp; Questions to Test
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/admin/mock-tests/${editingTest.id}/questions?tab=passages`)}
+                      className="text-xs font-bold text-purple-700 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      Open Full Passage Studio <ExternalLink className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
@@ -3005,7 +3359,7 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                 <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 text-center text-slate-500">
                   <p className="font-bold text-xs">No questions loaded yet.</p>
                   <p className="text-[11px] text-slate-400 mt-0.5">
-                    Upload a PDF or paste question text above to populate this mock test.
+                    Paste question text, add single MCQs, or build passage questions above to populate this mock test.
                   </p>
                 </div>
               ) : (
@@ -3037,6 +3391,43 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                         </button>
                       </div>
 
+                      {/* Diagram or Passage indicators */}
+                      <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                        {q.imagePath ? (
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 rounded-full bg-blue-50 text-[#0056b3] border border-blue-200 text-[10px] font-bold inline-flex items-center gap-1">
+                              <ImageIcon className="w-3 h-3" /> Diagram Attached
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleModalRemoveDiagram(idx)}
+                              className="text-[10px] font-bold text-red-600 hover:underline cursor-pointer"
+                            >
+                              Remove Diagram
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="text-[11px] font-bold text-[#0056b3] hover:underline cursor-pointer inline-flex items-center gap-1">
+                            <Upload className="w-3 h-3" /> Attach Diagram
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (f) handleModalQuestionDiagramUpload(idx, f);
+                              }}
+                              className="hidden"
+                            />
+                          </label>
+                        )}
+
+                        {q.groupId && (
+                          <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-bold inline-flex items-center gap-1">
+                            <BookOpen className="w-3 h-3" /> Linked to Passage
+                          </span>
+                        )}
+                      </div>
+
                       {/* Options Grid with Clickable Correct Answer Selector */}
                       <div className="grid grid-cols-2 gap-1.5">
                         {q.options.map((opt, oIdx) => {
@@ -3047,16 +3438,14 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                               key={oIdx}
                               type="button"
                               onClick={() => handleUpdateQuestionCorrectOpt(q.id, oIdx)}
-                              className={`p-2 rounded-xl text-left border flex items-center gap-2 cursor-pointer transition-all ${
-                                isCorrect
+                              className={`p-2 rounded-xl text-left border flex items-center gap-2 cursor-pointer transition-all ${isCorrect
                                   ? 'bg-emerald-50 border-emerald-500 text-emerald-800 font-bold'
                                   : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
-                              }`}
+                                }`}
                             >
                               <span
-                                className={`w-5 h-5 rounded-full text-[10px] font-extrabold flex items-center justify-center shrink-0 ${
-                                  isCorrect ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700'
-                                }`}
+                                className={`w-5 h-5 rounded-full text-[10px] font-extrabold flex items-center justify-center shrink-0 ${isCorrect ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700'
+                                  }`}
                               >
                                 {String.fromCharCode(65 + oIdx)}
                               </span>

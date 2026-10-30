@@ -80,7 +80,16 @@ export default function AdminMockTestPreviewPage() {
       const data = await res.json();
       setTest(data.test || null);
       setQuestions(data.questions || []);
-      setQuestionGroups(data.questionGroups || []);
+      const mappedGroups = (data.questionGroups || []).map((g: any) => ({
+        ...g,
+        passageText: g.passageText || g.passage_text || '',
+        passage_text: g.passageText || g.passage_text || '',
+        imagePath: g.imagePath || g.image_path || null,
+        image_path: g.imagePath || g.image_path || null,
+        imageAlt: g.imageAlt || g.image_alt || null,
+        image_alt: g.imageAlt || g.image_alt || null,
+      }));
+      setQuestionGroups(mappedGroups);
       setTimeRemaining((data.test?.durationMinutes || data.test?.duration_minutes || 60) * 60);
     } catch (err: unknown) {
       // Fallback to local / context test so preview ALWAYS works
@@ -99,6 +108,16 @@ export default function AdminMockTestPreviewPage() {
           groupId: q.groupId || null,
         }));
         setQuestions(mapped);
+        const fallbackGroups = ((fallbackTest as any).questionGroups || []).map((g: any) => ({
+          ...g,
+          passageText: g.passageText || g.passage_text || '',
+          passage_text: g.passageText || g.passage_text || '',
+          imagePath: g.imagePath || g.image_path || null,
+          image_path: g.imagePath || g.image_path || null,
+          imageAlt: g.imageAlt || g.image_alt || null,
+          image_alt: g.imageAlt || g.image_alt || null,
+        }));
+        setQuestionGroups(fallbackGroups);
         setTimeRemaining((fallbackTest.durationMinutes || 60) * 60);
       } else {
         const msg = err instanceof Error ? err.message : 'Error fetching preview';
@@ -235,9 +254,17 @@ export default function AdminMockTestPreviewPage() {
   }
 
   const currentQ = questions[activeQIndex];
-  const linkedGroup = currentQ?.groupId
-    ? questionGroups.find((g) => g.id === currentQ.groupId)
+  let linkedGroup = currentQ?.groupId
+    ? questionGroups.find((g) => g.id === currentQ.groupId || String(g.id) === String(currentQ.groupId))
     : null;
+
+  // Smart fallback: If this test has comprehension passage groups, link properly
+  if (!linkedGroup && questionGroups.length === 1) {
+    linkedGroup = questionGroups[0];
+  } else if (!linkedGroup && questionGroups.length > 0 && currentQ) {
+    const matchByPos = questionGroups.find((g) => (g.position || 1) === (currentQ.groupId || 1));
+    linkedGroup = matchByPos || questionGroups[0];
+  }
 
   const langMode = test?.languageMode || test?.language_mode || 'english_only';
   const showBoth = langMode === 'bilingual' && langView === 'both';
@@ -552,33 +579,33 @@ export default function AdminMockTestPreviewPage() {
 
                   {/* Reading Comprehension Passage Section */}
                   {linkedGroup && (
-                    <div className="p-5 rounded-3xl bg-purple-50/60 border-2 border-purple-200 space-y-3.5 shadow-2xs">
-                      <div className="flex items-center justify-between gap-2 border-b border-purple-100 pb-2.5">
-                        <span className="text-xs font-black uppercase tracking-wider text-purple-900 flex items-center gap-2">
-                          <BookOpen className="w-4 h-4 text-purple-600" />
+                    <div className="p-5 sm:p-6 rounded-3xl bg-purple-50/70 border-2 border-purple-300 space-y-3.5 shadow-xs">
+                      <div className="flex items-center justify-between gap-2 border-b border-purple-200 pb-2.5">
+                        <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-purple-950 flex items-center gap-2">
+                          <BookOpen className="w-4 h-4 text-purple-700" />
                           <span>Reading Comprehension Passage</span>
                         </span>
-                        <span className="px-2.5 py-1 rounded-full bg-purple-100 text-purple-800 text-[11px] font-extrabold">
-                          {linkedGroup.imageAlt || `Passage Section`}
+                        <span className="px-3 py-1 rounded-full bg-purple-200/80 text-purple-950 text-[11px] font-extrabold border border-purple-300">
+                          {linkedGroup.imageAlt || linkedGroup.image_alt || `Passage Section`}
                         </span>
                       </div>
-                      {linkedGroup.passageText && (
-                        <div className="text-xs sm:text-sm text-slate-800 leading-relaxed max-h-80 overflow-y-auto pr-2 scrollbar-thin font-serif sm:font-sans whitespace-pre-line bg-white p-4 rounded-2xl border border-purple-100 shadow-2xs">
-                          <MathText text={linkedGroup.passageText} />
+                      {(linkedGroup.passageText || linkedGroup.passage_text) && (
+                        <div className="text-xs sm:text-sm text-slate-800 leading-relaxed max-h-80 overflow-y-auto pr-2 scrollbar-thin font-serif sm:font-sans whitespace-pre-line bg-white p-4 sm:p-5 rounded-2xl border border-purple-200 shadow-2xs">
+                          <MathText text={linkedGroup.passageText || linkedGroup.passage_text} />
                         </div>
                       )}
-                      {linkedGroup.imagePath && (
-                        <div className="mt-2 bg-white p-2 rounded-2xl border border-purple-100">
+                      {(linkedGroup.imagePath || linkedGroup.image_path) && (
+                        <div className="mt-2 bg-white p-2 rounded-2xl border border-purple-200">
                           <MockQuestionImage
-                            path={linkedGroup.imagePath}
-                            alt={linkedGroup.imageAlt || 'Passage diagram'}
+                            path={linkedGroup.imagePath || linkedGroup.image_path}
+                            alt={linkedGroup.imageAlt || linkedGroup.image_alt || 'Passage diagram'}
                             testId={testId}
                             type="group"
                             className="w-full max-h-72 object-contain"
                           />
                         </div>
                       )}
-                      <p className="text-[11px] text-purple-700 font-semibold flex items-center gap-1.5">
+                      <p className="text-xs text-purple-800 font-bold flex items-center gap-1.5 pt-1">
                         📖 <span>Read the passage above carefully before answering the question below:</span>
                       </p>
                     </div>

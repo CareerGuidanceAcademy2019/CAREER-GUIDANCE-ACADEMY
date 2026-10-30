@@ -680,6 +680,68 @@ export default function AdminMockTestQuestionsPage() {
     }
   };
 
+  // Auto-persist questions and groups to the server database
+  const persistQuestionsToServer = async (qs: ParsedMCQ[], grps: MockQuestionGroup[]) => {
+    try {
+      await fetch('/api/admin/mock-tests/questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          testId,
+          questionGroups: grps,
+          questions: qs.map((q, idx) => ({
+            id: q.id,
+            position: idx + 1,
+            questionText: q.question,
+            options: q.options,
+            correctOption: typeof q.correctOptionIndex === 'number' ? q.correctOptionIndex : 0,
+            explanation: q.explanation || '',
+            explanationImagePath: q.explanationImagePath || null,
+            explanationImageAlt: q.explanationImageAlt || null,
+            groupId: q.groupId || null,
+            imagePath: q.imagePath || null,
+            imageAlt: q.imageAlt || null,
+          })),
+        }),
+      });
+
+      if (typeof window !== 'undefined') {
+        try {
+          const stored = localStorage.getItem('cga_custom_tests');
+          if (stored) {
+            const list = JSON.parse(stored);
+            const idx = list.findIndex((t: any) => t.id === testId);
+            if (idx >= 0) {
+              list[idx].questions = qs.map((q, i) => ({
+                id: q.id,
+                position: i + 1,
+                question: q.question,
+                options: q.options,
+                correctOptionIndex: typeof q.correctOptionIndex === 'number' ? q.correctOptionIndex : 0,
+                explanation: q.explanation || '',
+                explanationImagePath: q.explanationImagePath || null,
+                explanationImageAlt: q.explanationImageAlt || null,
+                groupId: q.groupId || null,
+                imagePath: q.imagePath || null,
+                imageAlt: q.imageAlt || null,
+              }));
+              list[idx].questionGroups = grps;
+              list[idx].questionCount = qs.length;
+              localStorage.setItem('cga_custom_tests', JSON.stringify(list));
+            }
+          }
+        } catch {}
+      }
+    } catch {}
+  };
+
+  const handleGoToPreview = async () => {
+    if (questions.length > 0) {
+      await persistQuestionsToServer(questions, questionGroups);
+    }
+    router.push(`/admin/mock-tests/${testId}/preview`);
+  };
+
   // Human-Friendly Action: Parse pasted question text locally and attach selected diagram
   const handleAddQuestionWithDiagram = async () => {
     const trimmed = pastedText.trim();
@@ -769,13 +831,17 @@ export default function AdminMockTestQuestionsPage() {
       }
 
       // 5. Append or replace questions
+      let nextQuestions: ParsedMCQ[] = [];
+      const currentGrps = targetGroupId ? [...questionGroups] : questionGroups;
+
       if (importMode === 'append' && questions.length > 0) {
         const startIndex = questions.length;
         const renumbered = preparedQuestions.map((q, idx) => ({
           ...q,
           position: startIndex + idx + 1,
         }));
-        setQuestions((prev) => [...prev, ...renumbered]);
+        nextQuestions = [...questions, ...renumbered];
+        setQuestions(nextQuestions);
         setActiveQIndex(startIndex);
         showToast(
           'Question Added Successfully',
@@ -787,7 +853,8 @@ export default function AdminMockTestQuestionsPage() {
           ...q,
           position: idx + 1,
         }));
-        setQuestions(renumbered);
+        nextQuestions = renumbered;
+        setQuestions(nextQuestions);
         setActiveQIndex(0);
         showToast(
           'Question Added Successfully',
@@ -795,6 +862,9 @@ export default function AdminMockTestQuestionsPage() {
           'success'
         );
       }
+
+      // Auto-save immediately to server database
+      void persistQuestionsToServer(nextQuestions, currentGrps);
 
       // 6. Reset inputs ready for next question
       setPastedText('');
@@ -909,7 +979,8 @@ export default function AdminMockTestQuestionsPage() {
         imagePath: uploadedPassageImgPath,
         imageAlt: passageTitle.trim() || 'Comprehension Passage',
       };
-      setQuestionGroups((prev) => [...prev, newGroup]);
+      const nextGroups = [...questionGroups, newGroup];
+      setQuestionGroups(nextGroups);
 
       // 4. Link parsed questions to this passage group and append
       const startIndex = questions.length;
@@ -920,13 +991,17 @@ export default function AdminMockTestQuestionsPage() {
         groupId: newGrpId,
       }));
 
-      setQuestions((prev) => [...prev, ...linkedQuestions]);
+      const nextQuestions = [...questions, ...linkedQuestions];
+      setQuestions(nextQuestions);
       setActiveQIndex(startIndex);
 
-      // 5. Positive notification
+      // 5. Automatically save to server database so questions and passage are NEVER lost!
+      void persistQuestionsToServer(nextQuestions, nextGroups);
+
+      // 6. Positive notification
       showToast(
         'Passage & Questions Added',
-        `Added 1 passage with ${linkedQuestions.length} linked questions (Q${startIndex + 1}–Q${startIndex + linkedQuestions.length}).`,
+        `Successfully added and saved 1 passage with ${linkedQuestions.length} linked questions (Q${startIndex + 1}–Q${startIndex + linkedQuestions.length}).`,
         'success'
       );
 
@@ -1048,7 +1123,7 @@ export default function AdminMockTestQuestionsPage() {
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
-            onClick={() => router.push(`/admin/mock-tests/${testId}/preview`)}
+            onClick={handleGoToPreview}
             className="px-4 py-2.5 rounded-xl border border-blue-200 bg-blue-50 text-[#0056b3] hover:bg-blue-100 text-xs font-extrabold cursor-pointer inline-flex items-center gap-1.5"
           >
             <Eye className="w-4 h-4" /> Preview Test (CBT &amp; Checklist)
@@ -2056,7 +2131,7 @@ Explanation: The two 20 Ω parallel resistors yield 10 Ω equivalent resistance.
                   </button>
                   <button
                     type="button"
-                    onClick={() => router.push(`/admin/mock-tests/${testId}/preview`)}
+                    onClick={handleGoToPreview}
                     className="px-3.5 py-2.5 rounded-xl bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-2xs"
                   >
                     <Eye className="w-4 h-4 text-slate-600" /> Preview Test
@@ -2210,7 +2285,7 @@ Explanation: The two 20 Ω parallel resistors yield 10 Ω equivalent resistance.
                   </button>
                   <button
                     type="button"
-                    onClick={() => router.push(`/admin/mock-tests/${testId}/preview`)}
+                    onClick={handleGoToPreview}
                     className="px-4 py-2.5 rounded-xl bg-white hover:bg-emerald-100 text-emerald-900 border border-emerald-300 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-2xs"
                   >
                     <Eye className="w-4 h-4 text-emerald-700" /> Preview Test
@@ -2537,7 +2612,7 @@ Ans: A`}
                 </button>
                 <button
                   type="button"
-                  onClick={() => router.push(`/admin/mock-tests/${testId}/preview`)}
+                  onClick={handleGoToPreview}
                   className="px-3.5 py-2.5 rounded-xl bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-2xs"
                 >
                   <Eye className="w-4 h-4 text-slate-600" /> Preview Test (Student View)

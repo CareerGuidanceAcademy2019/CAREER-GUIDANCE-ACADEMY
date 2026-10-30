@@ -16,54 +16,111 @@ export async function GET(request: Request) {
 
   try {
     const supabaseAdmin = createAdminSupabase();
-    const { data, error } = await supabaseAdmin.rpc('get_admin_preview_test', {
-      p_test_id: testId,
-    });
 
-    if (error) {
-      const { data: testRow } = await supabaseAdmin
-        .from('mock_tests')
+    const { data: testRow } = await supabaseAdmin
+      .from('mock_tests')
+      .select('*')
+      .eq('id', testId)
+      .maybeSingle();
+
+    if (!testRow) {
+      return NextResponse.json({ error: 'Mock test not found.' }, { status: 404 });
+    }
+
+    const { data: dbQs } = await supabaseAdmin
+      .from('mock_questions')
+      .select('*')
+      .eq('test_id', testId)
+      .order('position', { ascending: true });
+
+    const { data: dbGroups } = await supabaseAdmin
+      .from('mock_question_groups')
+      .select('*')
+      .eq('test_id', testId)
+      .order('position', { ascending: true });
+
+    const qIds = (dbQs || []).map((q: any) => q.id);
+    let dbKeys: any[] = [];
+    if (qIds.length > 0) {
+      const { data: keysData } = await supabaseAdmin
+        .from('mock_question_keys')
         .select('*')
-        .eq('id', testId)
-        .maybeSingle();
+        .in('question_id', qIds);
+      dbKeys = keysData || [];
+    }
 
-      if (testRow) {
-        const rawQs = Array.isArray(testRow.questions) ? testRow.questions : [];
-        const mappedQs = rawQs.map((q: any, idx: number) => ({
-          id: q.id || `q-${idx}`,
-          position: idx + 1,
-          questionText: q.question || '',
+    const keyMap = new Map<string, any>();
+    for (const k of dbKeys) {
+      keyMap.set(k.question_id, k);
+    }
+
+    const mappedGroups = (dbGroups || []).map((g: any) => ({
+      id: g.id,
+      testId: g.test_id || testId,
+      position: g.position || 1,
+      passageText: g.passage_text || g.passageText || '',
+      passage_text: g.passage_text || g.passageText || '',
+      imagePath: g.image_path || g.imagePath || null,
+      image_path: g.image_path || g.imagePath || null,
+      imageAlt: g.image_alt || g.imageAlt || null,
+      image_alt: g.image_alt || g.imageAlt || null,
+    }));
+
+    let finalQs: any[] = [];
+    if (dbQs && dbQs.length > 0) {
+      finalQs = dbQs.map((q: any) => {
+        const k = keyMap.get(q.id);
+        return {
+          id: q.id,
+          position: q.position,
+          questionText: q.question_text || q.question || '',
           options: q.options || [],
-          questionTextBn: q.questionBn || null,
-          optionsBn: q.optionsBn || null,
-          correctOption: q.correctOptionIndex ?? 0,
-          explanation: q.explanation || '',
-          explanationBn: q.explanationBn || null,
-        }));
-
-        return NextResponse.json({
-          success: true,
-          test: {
-            id: testRow.id,
-            title: testRow.title,
-            durationMinutes: testRow.duration_minutes,
-            totalMarks: testRow.total_marks,
-            marksPerQuestion: testRow.marks_per_question,
-            negativeMarking: testRow.negative_marking,
-            status: testRow.status,
-            scheduledDate: testRow.scheduled_date,
-          },
-          questions: mappedQs,
-          questionGroups: [],
-        });
-      }
-
-      return NextResponse.json({ error: error.message }, { status: 500 });
+          questionTextBn: q.question_text_bn || null,
+          optionsBn: q.options_bn || null,
+          correctOption: k?.correct_option ?? 0,
+          explanation: k?.explanation || '',
+          explanationBn: k?.explanation_bn || null,
+          explanationImagePath: k?.explanation_image_path || null,
+          explanationImageAlt: k?.explanation_image_alt || null,
+          imagePath: q.image_path || null,
+          imageAlt: q.image_alt || null,
+          groupId: q.group_id || null,
+        };
+      });
+    } else {
+      const rawQs = Array.isArray(testRow.questions) ? testRow.questions : [];
+      finalQs = rawQs.map((q: any, idx: number) => ({
+        id: q.id || `q-${idx}`,
+        position: idx + 1,
+        questionText: q.question || q.questionText || '',
+        options: q.options || [],
+        questionTextBn: q.questionBn || null,
+        optionsBn: q.optionsBn || null,
+        correctOption: q.correctOptionIndex ?? q.correctOption ?? 0,
+        explanation: q.explanation || '',
+        explanationBn: q.explanationBn || null,
+        explanationImagePath: q.explanationImagePath || null,
+        explanationImageAlt: q.explanationImageAlt || null,
+        imagePath: q.imagePath || null,
+        imageAlt: q.imageAlt || null,
+        groupId: q.groupId || null,
+      }));
     }
 
     return NextResponse.json({
       success: true,
-      ...data,
+      test: {
+        id: testRow.id,
+        title: testRow.title,
+        durationMinutes: testRow.duration_minutes,
+        totalMarks: testRow.total_marks,
+        marksPerQuestion: testRow.marks_per_question,
+        negativeMarking: testRow.negative_marking,
+        status: testRow.status,
+        scheduledDate: testRow.scheduled_date,
+      },
+      questions: finalQs,
+      questionGroups: mappedGroups,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to fetch test questions';
@@ -241,11 +298,28 @@ export async function POST(request: Request) {
       }
     }
 
-    // 6. Update question_count on mock_tests
+    // 6. Update question_count and questions array on mock_tests
     await supabaseAdmin
       .from('mock_tests')
       .update({
         question_count: questions.length,
+        questions: questions.map((q: any, idx: number) => ({
+          id: q.id || `q-${idx}`,
+          position: idx + 1,
+          question: q.questionText || q.question || '',
+          options: q.options || [],
+          correctOptionIndex: typeof q.correctOption === 'number'
+            ? q.correctOption
+            : typeof q.correctOptionIndex === 'number'
+            ? q.correctOptionIndex
+            : 0,
+          explanation: q.explanation || '',
+          explanationImagePath: q.explanationImagePath || null,
+          explanationImageAlt: q.explanationImageAlt || null,
+          groupId: q.groupId || null,
+          imagePath: q.imagePath || null,
+          imageAlt: q.imageAlt || null,
+        })),
       })
       .eq('id', testId);
 

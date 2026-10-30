@@ -690,31 +690,42 @@ export default function StudentMockTestsPage() {
 
               {/* Reading Comprehension Passage Section */}
               {(() => {
-                const group = activeTest.questionGroups?.find((g: any) => g.id === currentQ.groupId);
+                let group = activeTest.questionGroups?.find((g: any) => g.id === currentQ.groupId || String(g.id) === String(currentQ.groupId));
+                if (!group && activeTest.questionGroups?.length === 1) {
+                  group = activeTest.questionGroups[0];
+                } else if (!group && activeTest.questionGroups && activeTest.questionGroups.length > 0) {
+                  const matchByPos = activeTest.questionGroups.find((g: any) => (g.position || 1) === (currentQ.groupId || 1));
+                  group = matchByPos || activeTest.questionGroups[0];
+                }
                 if (!group) return null;
+                const pText = group.passageText || group.passage_text;
+                const pImg = group.imagePath || group.image_path;
+                const pAlt = group.imageAlt || group.image_alt || 'Passage Section';
+                if (!pText && !pImg) return null;
+
                 return (
-                  <div className="p-5 rounded-3xl bg-purple-50/60 border-2 border-purple-200 space-y-3.5 shadow-2xs">
-                    <div className="flex items-center justify-between gap-2 border-b border-purple-100 pb-2.5">
-                      <span className="text-xs font-black uppercase tracking-wider text-purple-900 flex items-center gap-2">
-                        <BookOpen className="w-4 h-4 text-purple-600" />
+                  <div className="p-5 sm:p-6 rounded-3xl bg-purple-50/70 border-2 border-purple-300 space-y-3.5 shadow-xs">
+                    <div className="flex items-center justify-between gap-2 border-b border-purple-200 pb-2.5">
+                      <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-purple-950 flex items-center gap-2">
+                        <BookOpen className="w-4 h-4 text-purple-700" />
                         <span>Reading Comprehension Passage</span>
                       </span>
-                      <span className="px-2.5 py-1 rounded-full bg-purple-100 text-purple-800 text-[11px] font-extrabold">
-                        {group.imageAlt || `Passage Section`}
+                      <span className="px-3 py-1 rounded-full bg-purple-200/80 text-purple-950 text-[11px] font-extrabold border border-purple-300">
+                        {pAlt}
                       </span>
                     </div>
 
-                    {group.passageText && (
-                      <div className="text-xs sm:text-sm text-slate-800 leading-relaxed max-h-80 overflow-y-auto pr-2 scrollbar-thin font-serif sm:font-sans whitespace-pre-line bg-white p-4 rounded-2xl border border-purple-100 shadow-2xs">
-                        <MathText text={group.passageText} />
+                    {pText && (
+                      <div className="text-xs sm:text-sm text-slate-800 leading-relaxed max-h-80 overflow-y-auto pr-2 scrollbar-thin font-serif sm:font-sans whitespace-pre-line bg-white p-4 sm:p-5 rounded-2xl border border-purple-200 shadow-2xs">
+                        <MathText text={pText} />
                       </div>
                     )}
 
-                    {group.imagePath && (
-                      <div className="mt-2 bg-white p-2 rounded-2xl border border-purple-100">
+                    {pImg && (
+                      <div className="mt-2 bg-white p-2 rounded-2xl border border-purple-200">
                         <MockQuestionImage
-                          path={group.imagePath}
-                          alt={group.imageAlt || 'Passage diagram'}
+                          path={pImg}
+                          alt={pAlt}
                           testId={activeTest.id}
                           type="group"
                           className="w-full max-h-72 object-contain"
@@ -722,7 +733,7 @@ export default function StudentMockTestsPage() {
                       </div>
                     )}
 
-                    <p className="text-[11px] text-purple-700 font-semibold flex items-center gap-1.5">
+                    <p className="text-xs text-purple-800 font-bold flex items-center gap-1.5 pt-1">
                       📖 <span>Read the passage above carefully before answering the question below:</span>
                     </p>
                   </div>

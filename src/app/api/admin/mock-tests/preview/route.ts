@@ -48,6 +48,34 @@ export async function GET(request: Request) {
         .eq('test_id', testId)
         .order('position', { ascending: true });
 
+      const mappedGroups = (dbGroups || []).map((g: any) => ({
+        id: g.id,
+        testId: g.test_id || testId,
+        position: g.position || 1,
+        passageText: g.passage_text || g.passageText || '',
+        passage_text: g.passage_text || g.passageText || '',
+        imagePath: g.image_path || g.imagePath || null,
+        image_path: g.image_path || g.imagePath || null,
+        imageAlt: g.image_alt || g.imageAlt || null,
+        image_alt: g.image_alt || g.imageAlt || null,
+      }));
+
+      if (mappedGroups.length === 0 && Array.isArray((testRow as any).questionGroups)) {
+        mappedGroups.push(
+          ...(testRow as any).questionGroups.map((g: any) => ({
+            id: g.id,
+            testId: g.testId || testId,
+            position: g.position || 1,
+            passageText: g.passageText || g.passage_text || '',
+            passage_text: g.passageText || g.passage_text || '',
+            imagePath: g.imagePath || g.image_path || null,
+            image_path: g.imagePath || g.image_path || null,
+            imageAlt: g.imageAlt || g.image_alt || null,
+            image_alt: g.imageAlt || g.image_alt || null,
+          }))
+        );
+      }
+
       let finalQs: any[] = [];
       if (dbQs && dbQs.length > 0) {
         finalQs = dbQs.map((q: any) => ({
@@ -95,7 +123,7 @@ export async function GET(request: Request) {
           scheduledDate: testRow.scheduled_date,
         },
         questions: finalQs,
-        questionGroups: dbGroups || [],
+        questionGroups: mappedGroups,
       });
     }
 
@@ -105,7 +133,16 @@ export async function GET(request: Request) {
     });
 
     if (!rpcError && rpcData) {
-      return NextResponse.json({ success: true, ...rpcData });
+      const qGroups = (rpcData.questionGroups || []).map((g: any) => ({
+        ...g,
+        passageText: g.passageText || g.passage_text || '',
+        passage_text: g.passageText || g.passage_text || '',
+        imagePath: g.imagePath || g.image_path || null,
+        image_path: g.imagePath || g.image_path || null,
+        imageAlt: g.imageAlt || g.image_alt || null,
+        image_alt: g.imageAlt || g.image_alt || null,
+      }));
+      return NextResponse.json({ success: true, ...rpcData, questionGroups: qGroups });
     }
 
     return NextResponse.json({ error: 'Mock test not found' }, { status: 404 });
