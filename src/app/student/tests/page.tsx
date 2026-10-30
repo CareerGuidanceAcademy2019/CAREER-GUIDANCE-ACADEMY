@@ -403,7 +403,7 @@ export default function StudentMockTestsPage() {
           durationMinutes: data.durationMinutes || test.durationMinutes,
           totalMarks: data.totalMarks || test.totalMarks,
           negativeMarking: data.negativeMarking ?? test.negativeMarking,
-          questionGroups: data.questionGroups || [],
+          questionGroups: (data.questionGroups && data.questionGroups.length > 0) ? data.questionGroups : (test.questionGroups || []),
           questions: questionsToUse,
         });
         setCurrentQIndex(0);
@@ -688,31 +688,43 @@ export default function StudentMockTestsPage() {
                 </div>
               </div>
 
-              {/* Shared Passage Box (if linked) */}
+              {/* Reading Comprehension Passage Section */}
               {(() => {
                 const group = activeTest.questionGroups?.find((g: any) => g.id === currentQ.groupId);
                 if (!group) return null;
                 return (
-                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#0056b3] flex items-center gap-1.5">
-                      <Layers className="w-3.5 h-3.5" /> Shared Passage / Map / Table
-                    </span>
+                  <div className="p-5 rounded-3xl bg-purple-50/60 border-2 border-purple-200 space-y-3.5 shadow-2xs">
+                    <div className="flex items-center justify-between gap-2 border-b border-purple-100 pb-2.5">
+                      <span className="text-xs font-black uppercase tracking-wider text-purple-900 flex items-center gap-2">
+                        <BookOpen className="w-4 h-4 text-purple-600" />
+                        <span>Reading Comprehension Passage</span>
+                      </span>
+                      <span className="px-2.5 py-1 rounded-full bg-purple-100 text-purple-800 text-[11px] font-extrabold">
+                        {group.imageAlt || `Passage Section`}
+                      </span>
+                    </div>
+
                     {group.passageText && (
-                      <div className="text-xs sm:text-sm text-slate-800 leading-relaxed">
+                      <div className="text-xs sm:text-sm text-slate-800 leading-relaxed max-h-80 overflow-y-auto pr-2 scrollbar-thin font-serif sm:font-sans whitespace-pre-line bg-white p-4 rounded-2xl border border-purple-100 shadow-2xs">
                         <MathText text={group.passageText} />
                       </div>
                     )}
+
                     {group.imagePath && (
-                      <div className="mt-2">
+                      <div className="mt-2 bg-white p-2 rounded-2xl border border-purple-100">
                         <MockQuestionImage
                           path={group.imagePath}
-                          alt={group.imageAlt || 'Shared passage diagram'}
+                          alt={group.imageAlt || 'Passage diagram'}
                           testId={activeTest.id}
                           type="group"
-                          className="w-full max-h-72"
+                          className="w-full max-h-72 object-contain"
                         />
                       </div>
                     )}
+
+                    <p className="text-[11px] text-purple-700 font-semibold flex items-center gap-1.5">
+                      📖 <span>Read the passage above carefully before answering the question below:</span>
+                    </p>
                   </div>
                 );
               })()}

@@ -106,6 +106,16 @@ export default function AdminMockTestQuestionsPage() {
   const [showAdvancedPasteOptions, setShowAdvancedPasteOptions] = useState(false);
   const currentDiagramInputRef = useRef<HTMLInputElement>(null);
 
+  // Dedicated Two-Section Passage Builder state
+  const [passageTitle, setPassageTitle] = useState('');
+  const [passageBody, setPassageBody] = useState('');
+  const [passageQuestionsText, setPassageQuestionsText] = useState('');
+  const [passageDiagramFile, setPassageDiagramFile] = useState<File | null>(null);
+  const [passageDiagramPreview, setPassageDiagramPreview] = useState<string>('');
+  const [passageDiagramAlt, setPassageDiagramAlt] = useState<string>('');
+  const [isAddingPassage, setIsAddingPassage] = useState(false);
+  const passageDiagramInputRef = useRef<HTMLInputElement>(null);
+
   // File import state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedZip, setSelectedZip] = useState<File | null>(null);
@@ -803,6 +813,136 @@ export default function AdminMockTestQuestionsPage() {
     handleAddQuestionWithDiagram();
   };
 
+  // Passage Builder Handlers
+  const handleSelectPassageDiagram = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showToast('Invalid File', 'Please select an image file (PNG, JPG, WebP).', 'error');
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      showToast('File Too Large', 'Passage diagram must be under 8 MB.', 'error');
+      return;
+    }
+    setPassageDiagramFile(file);
+    const url = URL.createObjectURL(file);
+    setPassageDiagramPreview(url);
+    if (!passageDiagramAlt) {
+      setPassageDiagramAlt('Passage diagram / illustration');
+    }
+    showToast('Passage Diagram Ready', `${file.name} selected.`, 'info');
+  };
+
+  const handleClearPassageDiagram = () => {
+    if (passageDiagramPreview) {
+      try {
+        URL.revokeObjectURL(passageDiagramPreview);
+      } catch {}
+    }
+    setPassageDiagramFile(null);
+    setPassageDiagramPreview('');
+    setPassageDiagramAlt('');
+    if (passageDiagramInputRef.current) {
+      passageDiagramInputRef.current.value = '';
+    }
+  };
+
+  const handleAddPassageAndQuestions = async () => {
+    const pText = passageBody.trim();
+    if (!pText) {
+      showToast('Passage Text Required', 'Please enter the full paragraph text for Section 1.', 'error');
+      return;
+    }
+
+    const qText = passageQuestionsText.trim();
+    if (!qText) {
+      showToast('Questions Required', 'Please paste the questions for Section 2.', 'error');
+      return;
+    }
+
+    setIsAddingPassage(true);
+    try {
+      // 1. Parse questions locally (0ms)
+      const parsed = parseRawQuestionsText(qText);
+      if (!parsed || parsed.length === 0) {
+        showToast(
+          'Format Not Recognized',
+          'Could not parse questions. Please ensure each question includes numbered statement, options (A), (B), (C), (D) and Ans: ...',
+          'error'
+        );
+        setIsAddingPassage(false);
+        return;
+      }
+
+      // 2. Upload passage diagram if selected
+      let uploadedPassageImgPath: string | null = null;
+      if (passageDiagramFile) {
+        const form = new FormData();
+        form.append('file', passageDiagramFile);
+        form.append('testId', testId);
+        form.append('maxDimension', 'passage');
+        form.append('altText', passageDiagramAlt.trim() || 'Passage diagram');
+
+        const res = await fetch('/api/mock-tests/upload-image', {
+          method: 'POST',
+          body: form,
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Failed to upload passage diagram.');
+        }
+
+        const data = await res.json();
+        uploadedPassageImgPath = data.storagePath;
+        fetchStorageUsage();
+      }
+
+      // 3. Create new Passage Group
+      const newGrpId = `grp-${Date.now()}`;
+      const newGroup: MockQuestionGroup = {
+        id: newGrpId,
+        testId,
+        position: questionGroups.length + 1,
+        passageText: pText,
+        imagePath: uploadedPassageImgPath,
+        imageAlt: passageTitle.trim() || 'Comprehension Passage',
+      };
+      setQuestionGroups((prev) => [...prev, newGroup]);
+
+      // 4. Link parsed questions to this passage group and append
+      const startIndex = questions.length;
+      const linkedQuestions = parsed.map((q, idx) => ({
+        ...q,
+        id: `q-psg-${Date.now()}-${idx}`,
+        position: startIndex + idx + 1,
+        groupId: newGrpId,
+      }));
+
+      setQuestions((prev) => [...prev, ...linkedQuestions]);
+      setActiveQIndex(startIndex);
+
+      // 5. Positive notification
+      showToast(
+        'Passage & Questions Added',
+        `Added 1 passage with ${linkedQuestions.length} linked questions (Q${startIndex + 1}–Q${startIndex + linkedQuestions.length}).`,
+        'success'
+      );
+
+      // 6. Reset form
+      setPassageTitle('');
+      setPassageBody('');
+      setPassageQuestionsText('');
+      handleClearPassageDiagram();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to add passage and questions';
+      showToast('Passage Creation Error', msg, 'error');
+    } finally {
+      setIsAddingPassage(false);
+    }
+  };
+
   // Parse File Action (CSV/XLSX + ZIP)
   const handleParseFile = async () => {
     if (!selectedFile) return;
@@ -1027,7 +1167,7 @@ export default function AdminMockTestQuestionsPage() {
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
-          Shared Passages ({questionGroups.length})
+          Reading Comprehension / Passages ({questionGroups.length})
         </button>
       </div>
 
@@ -2146,154 +2286,349 @@ Explanation: The two 20 Ω parallel resistors yield 10 Ω equivalent resistance.
         </div>
       )}
 
-      {/* 6. SHARED PASSAGES TAB */}
+      {/* 6. TWO-SECTION READING COMPREHENSION / PASSAGE BUILDER */}
       {activeTab === 'passages' && (
-        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-4 pb-3 border-b border-slate-100">
-            <div>
-              <h2 className="text-base font-extrabold text-slate-900">Shared Passages &amp; Diagram Sets</h2>
-              <p className="text-xs text-slate-500">
-                Create a shared reading comprehension passage, data interpretation table, or map once and link multiple questions to it.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                const newId = `grp-${Date.now()}`;
-                setQuestionGroups((prev) => [
-                  ...prev,
-                  {
-                    id: newId,
-                    testId,
-                    position: prev.length + 1,
-                    passageText: 'Read the following passage and answer the questions below:',
-                    imagePath: null,
-                    imageAlt: 'Shared diagram',
-                  },
-                ]);
-                showToast('Passage Added', 'New shared passage group created.', 'success');
-              }}
-              className="px-4 py-2 rounded-xl bg-[#0056b3] hover:bg-blue-700 text-white text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
-            >
-              <Plus className="w-4 h-4" /> Add Shared Passage
-            </button>
+        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-8">
+          <div>
+            <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-purple-600" />
+              <span>Reading Comprehension &amp; Passage Question Builder</span>
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Two-Section Builder: Paste the full reading paragraph in Section 1, then paste all questions and options based on it in Section 2.
+            </p>
           </div>
 
-          {questionGroups.length === 0 ? (
-            <div className="p-8 text-center border-2 border-dashed border-slate-200 rounded-2xl text-xs text-slate-500">
-              No shared passages created yet. Click "Add Shared Passage" to group multiple questions under a common text or diagram.
+          {/* Sample Format Card */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-emerald-50/70 border-2 border-emerald-500 text-emerald-950 space-y-3 shadow-2xs">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs font-black uppercase tracking-wider text-emerald-900 flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-emerald-600" />
+                Sample Passage &amp; Question Format (Follow this format for Section 1 &amp; Section 2)
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setPassageTitle('Directions (Q.1 to Q.3): Read the following passage carefully and answer the questions below:');
+                  setPassageBody(`Environmental sustainability is one of the most pressing challenges of the modern era. Over the last century, exponential industrial growth and urban expansion have led to unprecedented levels of resource depletion and carbon emissions.
+
+Scientists emphasize that conservation cannot remain a peripheral policy; it must be integrated into the core economic framework of every nation. By transitioning toward circular economies and renewable energy, societies can mitigate severe climate risks while generating sustainable economic growth.`);
+                  setPassageQuestionsText(`1. According to the passage, what is described as one of the most pressing challenges of the modern era?
+(A) Space exploration
+(B) Environmental sustainability
+(C) Agricultural taxation
+(D) Classical literature
+Ans: B
+Explanation: The first sentence explicitly states that environmental sustainability is one of the most pressing challenges.
+
+2. What led to unprecedented levels of resource depletion according to paragraph 1?
+(A) Industrial growth and urban expansion
+(B) Foreign trade agreements
+(C) Scientific laboratories
+(D) Decreased consumer demand
+Ans: A
+Explanation: Paragraph 1 highlights exponential industrial growth and urban expansion.
+
+3. How can societies mitigate climate risks while generating growth?
+(A) By abandoning technology
+(B) By transitioning to circular economies and renewable energy
+(C) By increasing fossil fuel subsidies
+(D) By isolating local markets
+Ans: B
+Explanation: The concluding sentence emphasizes circular economies and renewable energy.`);
+                  showToast('Sample Loaded', 'Sample passage and questions inserted into Section 1 and Section 2.', 'success');
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black inline-flex items-center gap-1.5 cursor-pointer shadow-2xs transition-all"
+              >
+                <PlusCircle className="w-3.5 h-3.5" /> Insert Sample Passage &amp; Questions Template
+              </button>
             </div>
-          ) : (
-            <div className="space-y-6">
-              {questionGroups.map((group, grpIdx) => {
-                const linkedQuestions = questions.filter((q) => q.groupId === group.id);
 
-                return (
-                  <div key={group.id} className="p-6 rounded-2xl border border-slate-200 bg-slate-50/60 space-y-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <span className="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-2">
-                        <Layers className="w-4 h-4 text-[#0056b3]" />
-                        <span>Passage Group #{grpIdx + 1}</span>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-[#0056b3]">
-                          {linkedQuestions.length} Questions Linked
-                        </span>
-                      </span>
+            <p className="text-[11px] text-emerald-800 font-medium">
+              💡 <strong>How it works:</strong> In Section 1, paste the full reading paragraph. In Section 2, paste all questions and options for this passage. When you click &quot;Add Passage &amp; Questions&quot;, the questions are automatically linked to this passage so students will read the passage before answering.
+            </p>
+          </div>
 
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setImageTarget({ qIndex: 0, targetType: 'passage', passageId: group.id });
-                            setImageModalOpen(true);
-                          }}
-                          className="px-3 py-1.5 rounded-lg bg-blue-50 text-[#0056b3] hover:bg-blue-100 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
-                        >
-                          <Upload className="w-3.5 h-3.5" /> Attach / Replace Diagram
-                        </button>
+          {/* TWO SECTIONS GRID */}
+          <div className="space-y-6">
+            {/* SECTION 1: FULL PASSAGE SECTION */}
+            <div className="p-6 rounded-3xl bg-purple-50/40 border-2 border-purple-200 space-y-4">
+              <div className="flex items-center justify-between border-b border-purple-200 pb-3">
+                <span className="text-xs font-black uppercase tracking-wider text-purple-950 flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-purple-600 text-white inline-flex items-center justify-center text-xs font-black">1</span>
+                  Section 1: Full Paragraph of the Passage
+                </span>
+                <span className="text-[11px] text-purple-800 font-bold">
+                  Reading Material / Story / Case Study
+                </span>
+              </div>
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setQuestionGroups((prev) => prev.filter((g) => g.id !== group.id));
-                            // Unlink questions
-                            setQuestions((prev) =>
-                              prev.map((q) => (q.groupId === group.id ? { ...q, groupId: null } : q))
-                            );
-                          }}
-                          className="p-1.5 rounded-lg bg-red-50 text-[#dc2626] hover:bg-red-100 cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Passage Reference Header / Instructions
+                  </label>
+                  <input
+                    type="text"
+                    value={passageTitle}
+                    onChange={(e) => setPassageTitle(e.target.value)}
+                    placeholder="e.g. Directions (Q.1 to Q.5): Read the following passage carefully and answer the questions that follow:"
+                    className="w-full p-3 rounded-2xl border border-purple-200 bg-white text-xs font-bold text-slate-800 focus:border-purple-600 focus:ring-2 focus:ring-purple-100"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+                  <div className="lg:col-span-8 space-y-1.5">
+                    <label className="block text-xs font-bold text-slate-700">
+                      Full Passage Paragraph Text
+                    </label>
+                    <textarea
+                      rows={10}
+                      value={passageBody}
+                      onChange={(e) => setPassageBody(e.target.value)}
+                      placeholder="Paste the complete reading comprehension passage, story, article, or legal case text here..."
+                      className="w-full p-4 rounded-2xl border border-purple-200 bg-white font-serif sm:font-sans text-xs leading-relaxed focus:border-purple-600 focus:ring-2 focus:ring-purple-100"
+                    />
+                  </div>
+
+                  {/* Optional Passage Diagram Box */}
+                  <div className="lg:col-span-4 space-y-2">
+                    <label className="block text-xs font-bold text-slate-700">
+                      Passage Diagram / Map / Chart (Optional)
+                    </label>
+
+                    {!passageDiagramPreview ? (
+                      <div className="p-4 rounded-2xl border-2 border-dashed border-purple-200 bg-white hover:border-purple-400 text-center flex flex-col items-center justify-center min-h-[200px]">
+                        <ImageIcon className="w-7 h-7 text-purple-400 mb-2" />
+                        <p className="text-xs font-bold text-slate-700">No Passage Diagram</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Attach a shared image, chart, or map if needed.</p>
+                        <label className="mt-3 px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold cursor-pointer inline-flex items-center gap-1.5 shadow-2xs">
+                          <Upload className="w-3.5 h-3.5" /> Select Image
+                          <input
+                            type="file"
+                            ref={passageDiagramInputRef}
+                            accept="image/*"
+                            onChange={handleSelectPassageDiagram}
+                            className="hidden"
+                          />
+                        </label>
                       </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                        Passage Text (LaTeX &amp; Markdown Tables Supported)
-                      </label>
-                      <textarea
-                        rows={3}
-                        value={group.passageText || ''}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setQuestionGroups((prev) =>
-                            prev.map((g) => (g.id === group.id ? { ...g, passageText: val } : g))
-                          );
-                        }}
-                        className="w-full p-3 rounded-xl border border-slate-200 bg-white font-mono text-xs leading-relaxed"
-                      />
-                    </div>
-
-                    {group.imagePath && (
-                      <div className="bg-white p-3 rounded-xl border border-slate-200 inline-block">
-                        <MockQuestionImage
-                          path={group.imagePath}
-                          alt={group.imageAlt}
-                          testId={testId}
-                          type="group"
-                          className="w-48 h-32"
+                    ) : (
+                      <div className="p-3 rounded-2xl bg-white border border-purple-200 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-black text-purple-900 truncate">
+                            {passageDiagramFile?.name}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={handleClearPassageDiagram}
+                            className="text-red-600 hover:text-red-700 text-[11px] font-bold cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={passageDiagramPreview}
+                          alt="Passage diagram preview"
+                          className="max-h-32 w-auto mx-auto object-contain rounded-lg border border-purple-100"
+                        />
+                        <input
+                          type="text"
+                          value={passageDiagramAlt}
+                          onChange={(e) => setPassageDiagramAlt(e.target.value)}
+                          placeholder="Diagram label (optional)"
+                          className="w-full p-2 rounded-xl border border-purple-200 text-xs bg-purple-50/50"
                         />
                       </div>
                     )}
+                  </div>
+                </div>
+              </div>
+            </div>
 
-                    {/* Linked Questions Picker */}
-                    <div className="space-y-1.5 pt-2 border-t border-slate-200 text-xs">
-                      <span className="font-bold text-slate-700 block">Select Questions to Link:</span>
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {questions.map((q, qIdx) => {
-                          const isLinked = q.groupId === group.id;
-                          return (
-                            <button
-                              key={q.id || qIdx}
-                              type="button"
-                              onClick={() => {
-                                setQuestions((prev) => {
-                                  const copy = [...prev];
-                                  copy[qIdx] = {
-                                    ...copy[qIdx],
-                                    groupId: isLinked ? null : group.id,
-                                  };
-                                  return copy;
-                                });
-                              }}
-                              className={`px-2.5 py-1 rounded-lg border font-bold text-xs cursor-pointer transition-all ${
-                                isLinked
-                                  ? 'bg-[#0056b3] text-white border-[#0056b3]'
-                                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                              }`}
+            {/* SECTION 2: QUESTIONS REGARDING THE PASSAGE */}
+            <div className="p-6 rounded-3xl bg-blue-50/40 border-2 border-blue-200 space-y-4">
+              <div className="flex items-center justify-between border-b border-blue-200 pb-3">
+                <span className="text-xs font-black uppercase tracking-wider text-blue-950 flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-[#0056b3] text-white inline-flex items-center justify-center text-xs font-black">2</span>
+                  Section 2: Questions Regarding this Passage
+                </span>
+                <span className="text-[11px] text-blue-800 font-bold">
+                  Questions, Options (A, B, C, D) &amp; Answers
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-700">
+                  Paste All Questions for this Passage
+                </label>
+                <textarea
+                  rows={12}
+                  value={passageQuestionsText}
+                  onChange={(e) => setPassageQuestionsText(e.target.value)}
+                  placeholder={`1. According to the author, what was the primary cause of the change?
+(A) First option choice
+(B) Second option choice
+(C) Third option choice
+(D) Fourth option choice
+Ans: B
+Explanation: The answer is explained in paragraph 2.
+
+2. Which word in the passage means the same as "exponential"?
+(A) Rapid
+(B) Stagnant
+(C) Declining
+(D) Irrelevant
+Ans: A`}
+                  className="w-full p-4 rounded-2xl border border-blue-200 bg-white font-mono text-xs leading-relaxed focus:border-[#0056b3] focus:ring-2 focus:ring-blue-100 shadow-2xs"
+                />
+              </div>
+            </div>
+
+            {/* SUBMIT BUTTON FOR PASSAGE & QUESTIONS */}
+            <div>
+              <button
+                type="button"
+                disabled={isAddingPassage || !passageBody.trim() || !passageQuestionsText.trim()}
+                onClick={handleAddPassageAndQuestions}
+                className="w-full py-4 rounded-2xl bg-purple-700 hover:bg-purple-800 text-white text-sm font-black cursor-pointer inline-flex items-center justify-center gap-2.5 shadow-md disabled:opacity-50 transition-all hover:scale-[1.005]"
+              >
+                {isAddingPassage ? (
+                  <>
+                    <RefreshCw className="w-5 h-5 animate-spin" />
+                    <span>Processing Passage &amp; Linking Questions...</span>
+                  </>
+                ) : (
+                  <>
+                    <BookOpen className="w-5 h-5" />
+                    <span>+ Add Passage &amp; Linked Questions to Test</span>
+                  </>
+                )}
+              </button>
+              <p className="text-[11px] text-center text-slate-500 mt-2">
+                Creates the reading comprehension section, links all pasted questions to this passage, and adds them to the test immediately.
+              </p>
+            </div>
+          </div>
+
+          {/* LIST OF CONFIGURED PASSAGES IN THIS TEST */}
+          <div className="pt-6 border-t border-slate-200 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-purple-600" />
+                  <span>Passages in this Test ({questionGroups.length} Passages Configured)</span>
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Each passage is shown to students with its linked questions in the CBT exam.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={saving || questions.length === 0}
+                  onClick={handleApproveAndSave}
+                  className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black inline-flex items-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50 transition-all"
+                >
+                  {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Approve &amp; Save All to Database
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push(`/admin/mock-tests/${testId}/preview`)}
+                  className="px-3.5 py-2.5 rounded-xl bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                >
+                  <Eye className="w-4 h-4 text-slate-600" /> Preview Test (Student View)
+                </button>
+              </div>
+            </div>
+
+            {questionGroups.length === 0 ? (
+              <div className="p-8 text-center border-2 border-dashed border-slate-200 rounded-2xl text-xs text-slate-500">
+                No comprehension passages configured yet. Fill out Section 1 and Section 2 above to add a passage with its questions.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {questionGroups.map((group, grpIdx) => {
+                  const linked = questions.filter((q) => q.groupId === group.id);
+
+                  return (
+                    <div
+                      key={group.id}
+                      className="p-5 rounded-2xl border-2 border-purple-200 bg-purple-50/30 space-y-3.5"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-purple-100 pb-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-1 rounded-full bg-purple-700 text-white text-xs font-black">
+                            Passage #{grpIdx + 1}
+                          </span>
+                          <span className="text-xs font-bold text-purple-950">
+                            {group.imageAlt || 'Comprehension Passage'}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full bg-blue-100 text-[#0056b3] text-[10px] font-extrabold">
+                            {linked.length} Questions Linked
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setQuestionGroups((prev) => prev.filter((g) => g.id !== group.id));
+                              setQuestions((prev) =>
+                                prev.map((q) => (q.groupId === group.id ? { ...q, groupId: null } : q))
+                              );
+                              showToast('Passage Deleted', 'Passage removed and linked questions unlinked.', 'error');
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" /> Delete Passage
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Passage Preview */}
+                      <div className="bg-white p-3.5 rounded-xl border border-purple-100 text-xs text-slate-800 leading-relaxed max-h-36 overflow-y-auto whitespace-pre-line font-serif sm:font-sans">
+                        {group.passageText}
+                      </div>
+
+                      {group.imagePath && (
+                        <div className="bg-white p-2 rounded-xl border border-purple-100 inline-block">
+                          <MockQuestionImage
+                            path={group.imagePath}
+                            alt={group.imageAlt || 'Passage diagram'}
+                            testId={testId}
+                            type="group"
+                            className="w-48 h-28 object-contain"
+                          />
+                        </div>
+                      )}
+
+                      {/* Linked Questions List */}
+                      <div className="space-y-1.5 pt-1">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-slate-700">
+                          Linked Questions ({linked.length}):
+                        </span>
+                        <div className="flex flex-wrap gap-2">
+                          {linked.map((lq) => (
+                            <span
+                              key={lq.id}
+                              className="px-2.5 py-1 rounded-lg bg-white border border-purple-200 text-purple-900 text-xs font-bold inline-flex items-center gap-1 shadow-2xs"
                             >
-                              Q{qIdx + 1}
-                            </button>
-                          );
-                        })}
+                              Q{lq.position}
+                              {lq.imagePath && <ImageIcon className="w-3 h-3 text-emerald-600" />}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

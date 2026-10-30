@@ -35,6 +35,8 @@ import {
   Users,
   ShieldCheck,
   CheckCircle2,
+  Printer,
+  RefreshCw,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCga } from '@/context/CgaContext';
@@ -410,6 +412,9 @@ export default function AdminMockTestsPage() {
   const [selectedTestForRanks, setSelectedTestForRanks] = useState<string>(
     db.mockTests[0]?.id || ''
   );
+  const [rankSearchQuery, setRankSearchQuery] = useState('');
+  const [isExportingImage, setIsExportingImage] = useState(false);
+  const [printableRankModal, setPrintableRankModal] = useState(false);
 
   // Subject Question Posts state
   const [editingPost, setEditingPost] = useState<MockSubjectPost | null>(null);
@@ -873,9 +878,232 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
     });
   };
 
-  const rankListAttempts = db.testAttempts
-    .filter((a) => a.testId === selectedTestForRanks)
+  const selectedTestObj = db.mockTests.find((t) => t.id === selectedTestForRanks) || db.mockTests[0];
+
+  const rawRankAttempts = db.testAttempts
+    .filter((a) => a.testId === (selectedTestObj?.id || selectedTestForRanks))
     .sort((a, b) => b.score - a.score);
+
+  const filteredRankAttempts = rawRankAttempts.filter((att) => {
+    if (!rankSearchQuery.trim()) return true;
+    const q = rankSearchQuery.toLowerCase();
+    return (
+      (att.studentName || '').toLowerCase().includes(q) ||
+      (att.studentId && att.studentId.toLowerCase().includes(q))
+    );
+  });
+
+  const totalAppeared = rawRankAttempts.length;
+  const highestScore = totalAppeared > 0 ? Math.max(...rawRankAttempts.map((a) => a.score)) : 0;
+  const avgScore = totalAppeared > 0 ? (rawRankAttempts.reduce((sum, a) => sum + a.score, 0) / totalAppeared).toFixed(1) : '0';
+  const avgAccuracy = totalAppeared > 0 ? Math.round(rawRankAttempts.reduce((sum, a) => sum + (a.accuracy || 0), 0) / totalAppeared) : 0;
+  const totalMaxMarks = selectedTestObj?.totalMarks || rawRankAttempts[0]?.totalMarks || 30;
+
+  const downloadRankListImage = () => {
+    if (rawRankAttempts.length === 0) {
+      showToast('No Results', 'There are no student results to export for this test.', 'error');
+      return;
+    }
+    setIsExportingImage(true);
+
+    try {
+      const canvas = document.createElement('canvas');
+      const width = 1200;
+      const rowHeight = 44;
+      const headerHeight = 220;
+      const tableHeadHeight = 50;
+      const padding = 40;
+      const rowsToRender = rawRankAttempts.slice(0, 100);
+      const height = headerHeight + tableHeadHeight + rowsToRender.length * rowHeight + padding * 2 + 60;
+
+      canvas.width = width * 2;
+      canvas.height = height * 2;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Could not get canvas context');
+
+      ctx.scale(2, 2);
+
+      // Background
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+
+      // Top Navy Header Banner
+      const grad = ctx.createLinearGradient(0, 0, width, 0);
+      grad.addColorStop(0, '#0a0e2a');
+      grad.addColorStop(1, '#0056b3');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, width, 140);
+
+      // Academy Title
+      ctx.fillStyle = '#f59e0b';
+      ctx.font = 'bold 13px sans-serif';
+      ctx.fillText('CAREER GUIDANCE ACADEMY', padding, 40);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 24px sans-serif';
+      ctx.fillText('Official Merit & Batch Rank List', padding, 72);
+
+      ctx.fillStyle = '#93c5fd';
+      ctx.font = '13px sans-serif';
+      const testTitleText = selectedTestObj ? `${selectedTestObj.title} (${selectedTestObj.batchName || 'General Batch'})` : 'Mock Test Results';
+      ctx.fillText(testTitleText, padding, 100);
+
+      const dateStr = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 13px sans-serif';
+      ctx.fillText(`Published: ${dateStr}`, width - padding, 40);
+      ctx.font = '12px sans-serif';
+      ctx.fillStyle = '#bfdbfe';
+      ctx.fillText(`Total Candidates: ${totalAppeared}`, width - padding, 64);
+      ctx.fillText(`Max Marks: ${totalMaxMarks}`, width - padding, 88);
+      ctx.textAlign = 'left';
+
+      // Summary KPI bar
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(padding, 155, width - padding * 2, 50);
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(padding, 155, width - padding * 2, 50);
+
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillStyle = '#0f172a';
+      ctx.fillText(`Top Score: ${highestScore}/${totalMaxMarks}`, padding + 20, 185);
+      ctx.fillText(`Average Score: ${avgScore}`, padding + 220, 185);
+      ctx.fillText(`Average Accuracy: ${avgAccuracy}%`, padding + 420, 185);
+      ctx.fillText(`Appeared Candidates: ${totalAppeared}`, padding + 640, 185);
+
+      // Table Header Row
+      const tableTop = 220;
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(padding, tableTop, width - padding * 2, tableHeadHeight);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillText('RANK', padding + 20, tableTop + 30);
+      ctx.fillText('STUDENT NAME', padding + 130, tableTop + 30);
+      ctx.fillText('SCORE OBTAINED', padding + 480, tableTop + 30);
+      ctx.fillText('CORRECT / WRONG', padding + 670, tableTop + 30);
+      ctx.fillText('ACCURACY', padding + 860, tableTop + 30);
+      ctx.fillText('SUBMITTED DATE', padding + 980, tableTop + 30);
+
+      // Table Rows
+      let currentY = tableTop + tableHeadHeight;
+      rowsToRender.forEach((att, idx) => {
+        ctx.fillStyle = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
+        ctx.fillRect(padding, currentY, width - padding * 2, rowHeight);
+
+        ctx.strokeStyle = '#f1f5f9';
+        ctx.strokeRect(padding, currentY, width - padding * 2, rowHeight);
+
+        // Rank Badge
+        const rankNum = idx + 1;
+        if (rankNum === 1) {
+          ctx.fillStyle = '#f59e0b';
+          ctx.fillRect(padding + 16, currentY + 10, 68, 24);
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 11px sans-serif';
+          ctx.fillText(`★ Rank #1`, padding + 20, currentY + 26);
+        } else if (rankNum === 2) {
+          ctx.fillStyle = '#64748b';
+          ctx.fillRect(padding + 16, currentY + 10, 68, 24);
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 11px sans-serif';
+          ctx.fillText(`★ Rank #2`, padding + 20, currentY + 26);
+        } else if (rankNum === 3) {
+          ctx.fillStyle = '#b45309';
+          ctx.fillRect(padding + 16, currentY + 10, 68, 24);
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 11px sans-serif';
+          ctx.fillText(`★ Rank #3`, padding + 20, currentY + 26);
+        } else {
+          ctx.fillStyle = '#475569';
+          ctx.font = 'bold 12px sans-serif';
+          ctx.fillText(`Rank #${rankNum}`, padding + 20, currentY + 26);
+        }
+
+        // Student Name
+        ctx.fillStyle = '#0f172a';
+        ctx.font = 'bold 12px sans-serif';
+        const name = att.studentName || 'Student';
+        ctx.fillText(name.slice(0, 35), padding + 130, currentY + 26);
+
+        // Score
+        ctx.fillStyle = '#0056b3';
+        ctx.font = 'bold 13px sans-serif';
+        ctx.fillText(`${att.score} / ${att.totalMarks || totalMaxMarks}`, padding + 480, currentY + 26);
+
+        // Correct / Wrong
+        ctx.fillStyle = '#16a34a';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.fillText(`${att.correctCount} ✓`, padding + 670, currentY + 26);
+        ctx.fillStyle = '#dc2626';
+        ctx.fillText(` / ${att.wrongCount} ✗`, padding + 715, currentY + 26);
+
+        // Accuracy
+        ctx.fillStyle = '#334155';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.fillText(`${att.accuracy}%`, padding + 860, currentY + 26);
+
+        // Submitted
+        ctx.fillStyle = '#64748b';
+        ctx.font = '11px sans-serif';
+        const dateFormatted = (att.submittedAt || '').slice(0, 16);
+        ctx.fillText(dateFormatted, padding + 980, currentY + 26);
+
+        currentY += rowHeight;
+      });
+
+      // Footer
+      ctx.fillStyle = '#f1f5f9';
+      ctx.fillRect(padding, currentY + 15, width - padding * 2, 40);
+      ctx.fillStyle = '#64748b';
+      ctx.font = '11px sans-serif';
+      ctx.fillText('Official Examination Results • Career Guidance Academy Tripura • Verification Portal', padding + 20, currentY + 39);
+
+      // Download trigger
+      const link = document.createElement('a');
+      const cleanTitle = (selectedTestObj?.title || 'Mock_Test').replace(/[^a-zA-Z0-9_-]/g, '_');
+      link.download = `Merit_Rank_List_${cleanTitle}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+
+      showToast('Image Downloaded', 'Merit Rank List downloaded as high-resolution PNG image.', 'success');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to export image';
+      showToast('Export Error', msg, 'error');
+    } finally {
+      setIsExportingImage(false);
+    }
+  };
+
+  const downloadRankListCSV = () => {
+    if (rawRankAttempts.length === 0) {
+      showToast('No Results', 'There are no student results to export.', 'error');
+      return;
+    }
+    const headers = ['Rank', 'Student Name', 'Score', 'Total Marks', 'Correct', 'Wrong', 'Accuracy %', 'Submitted At'];
+    const rows = rawRankAttempts.map((att, idx) => [
+      idx + 1,
+      `"${(att.studentName || '').replace(/"/g, '""')}"`,
+      att.score,
+      att.totalMarks || totalMaxMarks,
+      att.correctCount,
+      att.wrongCount,
+      att.accuracy,
+      `"${att.submittedAt}"`,
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    const cleanTitle = (selectedTestObj?.title || 'Mock_Test').replace(/[^a-zA-Z0-9_-]/g, '_');
+    link.setAttribute('download', `Merit_Rank_List_${cleanTitle}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('CSV Downloaded', 'Rank list exported to CSV successfully.', 'success');
+  };
 
   return (
     <div className="space-y-8">
@@ -1349,73 +1577,369 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
             )}
 
           {/* Batch Rank List & Results Table */}
-          <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-2xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <h2 className="text-lg font-extrabold text-[#0a0e2a] flex items-center gap-2">
-                <Trophy className="w-5 h-5 text-[#ea580c]" /> Batch Results & Merit Rank List
-              </h2>
-              <select
-                value={selectedTestForRanks}
-                onChange={(e) => setSelectedTestForRanks(e.target.value)}
-                className="px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-bold bg-white"
-              >
-                {db.mockTests.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.title} ({t.batchName})
-                  </option>
-                ))}
-              </select>
+          <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-2xs space-y-6">
+            {/* Header Row */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+              <div>
+                <h2 className="text-lg font-extrabold text-[#0a0e2a] flex items-center gap-2">
+                  <Trophy className="w-5 h-5 text-[#ea580c]" />
+                  <span>Batch Results &amp; Merit Rank List</span>
+                  <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-[#0056b3] text-xs font-black">
+                    {totalAppeared} Candidates Appeared
+                  </span>
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Official student scores, merit ranks, accuracy, and instant image / page export for 100–150+ students.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={selectedTestForRanks}
+                  onChange={(e) => setSelectedTestForRanks(e.target.value)}
+                  className="px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold bg-white text-slate-800 shadow-2xs"
+                >
+                  {db.mockTests.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.title} ({t.batchName || 'General'})
+                    </option>
+                  ))}
+                </select>
+
+                {/* Export as Image Button */}
+                <button
+                  type="button"
+                  disabled={isExportingImage || totalAppeared === 0}
+                  onClick={downloadRankListImage}
+                  className="px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black inline-flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50 transition-all"
+                  title="Download rank list as a high-resolution PNG image"
+                >
+                  {isExportingImage ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
+                  Download as Image (PNG)
+                </button>
+
+                {/* Print / Download as Page Button */}
+                <button
+                  type="button"
+                  disabled={totalAppeared === 0}
+                  onClick={() => setPrintableRankModal(true)}
+                  className="px-3.5 py-2.5 rounded-xl bg-[#0056b3] hover:bg-blue-700 text-white text-xs font-black inline-flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50 transition-all"
+                  title="Open formatted A4 page to print or Save as PDF"
+                >
+                  <Printer className="w-4 h-4" />
+                  Print / Save as Page (PDF)
+                </button>
+
+                {/* Export as CSV Button */}
+                <button
+                  type="button"
+                  disabled={totalAppeared === 0}
+                  onClick={downloadRankListCSV}
+                  className="px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  title="Export records to CSV"
+                >
+                  <Download className="w-4 h-4" /> CSV
+                </button>
+              </div>
             </div>
 
-            {rankListAttempts.length === 0 ? (
-              <p className="text-xs text-slate-500 py-4">No student attempts recorded for this test yet.</p>
+            {/* Performance KPI Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+              <div className="p-4 rounded-2xl bg-blue-50/70 border border-blue-200">
+                <span className="text-[10px] font-black uppercase tracking-wider text-blue-700 block">
+                  Total Candidates
+                </span>
+                <p className="text-xl sm:text-2xl font-black text-blue-950 mt-1">
+                  {totalAppeared}
+                </p>
+                <span className="text-[11px] text-blue-600 font-medium">Submissions recorded</span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200">
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 block">
+                  Highest Score
+                </span>
+                <p className="text-xl sm:text-2xl font-black text-emerald-950 mt-1">
+                  {highestScore} <span className="text-xs font-normal text-emerald-700">/ {totalMaxMarks}</span>
+                </p>
+                <span className="text-[11px] text-emerald-600 font-medium">Top candidate marks</span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200">
+                <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 block">
+                  Average Score
+                </span>
+                <p className="text-xl sm:text-2xl font-black text-amber-950 mt-1">
+                  {avgScore} <span className="text-xs font-normal text-amber-700">/ {totalMaxMarks}</span>
+                </p>
+                <span className="text-[11px] text-amber-600 font-medium">Batch average</span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-purple-50/70 border border-purple-200">
+                <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 block">
+                  Average Accuracy
+                </span>
+                <p className="text-xl sm:text-2xl font-black text-purple-950 mt-1">
+                  {avgAccuracy}%
+                </p>
+                <span className="text-[11px] text-purple-600 font-medium">Correct answer ratio</span>
+              </div>
+            </div>
+
+            {/* Search Filter Bar */}
+            <div className="flex items-center justify-between gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={rankSearchQuery}
+                  onChange={(e) => setRankSearchQuery(e.target.value)}
+                  placeholder="Search student by name..."
+                  className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+              {rankSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setRankSearchQuery('')}
+                  className="text-xs font-bold text-slate-500 hover:text-slate-800 px-2 py-1"
+                >
+                  Clear Filter
+                </button>
+              )}
+            </div>
+
+            {totalAppeared === 0 ? (
+              <div className="p-10 text-center border-2 border-dashed border-slate-200 rounded-2xl space-y-2">
+                <Trophy className="w-10 h-10 text-slate-300 mx-auto" />
+                <p className="text-sm font-bold text-slate-700">No Student Attempts Recorded Yet</p>
+                <p className="text-xs text-slate-400 max-w-md mx-auto">
+                  When students take this mock test and submit their answers, their authoritative marks, merit ranks, and accuracy will appear here in real time.
+                </p>
+              </div>
+            ) : filteredRankAttempts.length === 0 ? (
+              <div className="p-8 text-center text-xs text-slate-500 border border-slate-200 rounded-2xl">
+                No students match &quot;{rankSearchQuery}&quot;. Try a different search term.
+              </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto rounded-2xl border border-slate-200">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
-                    <tr className="border-b border-slate-200 text-slate-400 uppercase">
-                      <th className="py-3 px-3">Batch Rank</th>
-                      <th className="py-3 px-3">Student Name</th>
-                      <th className="py-3 px-3">Score</th>
-                      <th className="py-3 px-3">Correct / Wrong</th>
-                      <th className="py-3 px-3">Accuracy</th>
-                      <th className="py-3 px-3">Submitted At</th>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-black uppercase tracking-wider text-[11px]">
+                      <th className="py-3.5 px-4">Merit Rank</th>
+                      <th className="py-3.5 px-4">Student Name</th>
+                      <th className="py-3.5 px-4">Total Obtained Marks</th>
+                      <th className="py-3.5 px-4">Correct / Wrong</th>
+                      <th className="py-3.5 px-4">Accuracy %</th>
+                      <th className="py-3.5 px-4">Submitted At</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {rankListAttempts.map((att, idx) => (
-                      <tr key={att.id} className="hover:bg-slate-50">
-                        <td className="py-3.5 px-3 whitespace-nowrap">
-                          <span className="px-2.5 py-1 rounded-full bg-amber-50 text-[#ea580c] border border-amber-200 font-extrabold whitespace-nowrap">
-                            Rank #{idx + 1}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-3 font-extrabold text-slate-900">
-                          {att.studentName}
-                        </td>
-                        <td className="py-3.5 px-3 font-extrabold text-[#0056b3] whitespace-nowrap">
-                          {att.score} / {att.totalMarks}
-                        </td>
-                        <td className="py-3.5 px-3 whitespace-nowrap">
-                          <span className="text-emerald-700 font-bold inline-flex items-center gap-1">
-                            {att.correctCount} <CustomCheckSvg className="w-3.5 h-3.5" />
-                          </span>{' '}
-                          /{' '}
-                          <span className="text-[#dc2626] font-bold inline-flex items-center gap-1">
-                            {att.wrongCount} <CustomCrossSvg className="w-3.5 h-3.5" />
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-3 font-bold whitespace-nowrap">{att.accuracy}%</td>
-                        <td className="py-3.5 px-3 text-slate-500 whitespace-nowrap">
-                          {att.submittedAt}
-                        </td>
-                      </tr>
-                    ))}
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {filteredRankAttempts.map((att, idx) => {
+                      const actualRank = rawRankAttempts.findIndex((x) => x.id === att.id) + 1;
+                      const isTop1 = actualRank === 1;
+                      const isTop2 = actualRank === 2;
+                      const isTop3 = actualRank === 3;
+
+                      return (
+                        <tr
+                          key={att.id}
+                          className={`hover:bg-slate-50 transition-colors ${
+                            isTop1 ? 'bg-amber-50/30' : isTop2 ? 'bg-slate-50/40' : isTop3 ? 'bg-orange-50/20' : ''
+                          }`}
+                        >
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            {isTop1 ? (
+                              <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-black text-xs inline-flex items-center gap-1 shadow-2xs">
+                                🥇 Rank #1
+                              </span>
+                            ) : isTop2 ? (
+                              <span className="px-3 py-1 rounded-full bg-slate-200 text-slate-800 border border-slate-300 font-black text-xs inline-flex items-center gap-1 shadow-2xs">
+                                🥈 Rank #2
+                              </span>
+                            ) : isTop3 ? (
+                              <span className="px-3 py-1 rounded-full bg-orange-100 text-orange-900 border border-orange-300 font-black text-xs inline-flex items-center gap-1 shadow-2xs">
+                                🥉 Rank #3
+                              </span>
+                            ) : (
+                              <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-bold text-xs">
+                                #{actualRank}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center gap-2.5">
+                              <span className="w-7 h-7 rounded-full bg-gradient-to-br from-[#0056b3] to-[#1e3a8a] text-white text-[11px] font-black inline-flex items-center justify-center shrink-0">
+                                {(att.studentName || 'S').slice(0, 1).toUpperCase()}
+                              </span>
+                              <span className="font-extrabold text-slate-900 text-xs">
+                                {att.studentName}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            <span className="text-sm font-black text-[#0056b3]">
+                              {att.score}
+                            </span>
+                            <span className="text-xs font-semibold text-slate-400"> / {att.totalMarks || totalMaxMarks}</span>
+                          </td>
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            <span className="text-emerald-700 font-bold inline-flex items-center gap-1">
+                              {att.correctCount} <CustomCheckSvg className="w-3.5 h-3.5 text-emerald-600" />
+                            </span>{' '}
+                            /{' '}
+                            <span className="text-red-600 font-bold inline-flex items-center gap-1">
+                              {att.wrongCount} <CustomCrossSvg className="w-3.5 h-3.5 text-red-500" />
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <div className="w-16 bg-slate-100 rounded-full h-2 overflow-hidden">
+                                <div
+                                  className={`h-full ${
+                                    att.accuracy >= 75
+                                      ? 'bg-emerald-500'
+                                      : att.accuracy >= 50
+                                      ? 'bg-blue-500'
+                                      : 'bg-amber-500'
+                                  }`}
+                                  style={{ width: `${Math.min(100, att.accuracy)}%` }}
+                                />
+                              </div>
+                              <span className="font-bold text-slate-700 text-xs">{att.accuracy}%</span>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-500 whitespace-nowrap text-[11px]">
+                            {att.submittedAt}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             )}
           </div>
+
+          {/* Printable Page Modal (Formatted for A4 Printing & Save as PDF) */}
+          {printableRankModal && (
+            <div className="fixed inset-0 z-[120] bg-black/70 flex items-center justify-center p-4 backdrop-blur-xs overflow-y-auto">
+              <div className="bg-white rounded-3xl max-w-4xl w-full p-6 sm:p-8 space-y-6 shadow-2xl border border-slate-200 my-8">
+                <div className="flex items-center justify-between pb-4 border-b border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <Printer className="w-5 h-5 text-[#0056b3]" />
+                    <h3 className="font-black text-base text-slate-900">
+                      Official Printable Rank List Page
+                    </h3>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      className="px-4 py-2 rounded-xl bg-[#0056b3] hover:bg-blue-700 text-white text-xs font-black inline-flex items-center gap-1.5 cursor-pointer shadow-sm"
+                    >
+                      <Printer className="w-4 h-4" /> Print / Save as PDF
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPrintableRankModal(false)}
+                      className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Print Sheet Document */}
+                <div className="p-6 sm:p-8 bg-white border border-slate-300 rounded-2xl shadow-xs space-y-6 print:p-0 print:border-none print:shadow-none">
+                  {/* Academy Header */}
+                  <div className="text-center pb-4 border-b-2 border-slate-800 space-y-1">
+                    <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-wider">
+                      CAREER GUIDANCE ACADEMY
+                    </h1>
+                    <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">
+                      Tripura Academic Examination &amp; Mock Test Verification Portal
+                    </p>
+                    <div className="pt-2">
+                      <span className="inline-block px-4 py-1 rounded-full bg-slate-900 text-white text-xs font-black uppercase tracking-wider">
+                        Official Merit &amp; Rank List
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Test Details */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+                    <div>
+                      <span className="text-[10px] text-slate-500 font-bold uppercase block">Examination</span>
+                      <p className="font-black text-slate-900 mt-0.5">{selectedTestObj?.title || 'Mock Test'}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-500 font-bold uppercase block">Batch / Target</span>
+                      <p className="font-black text-slate-900 mt-0.5">{selectedTestObj?.batchName || 'General Batch'}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-500 font-bold uppercase block">Total Candidates</span>
+                      <p className="font-black text-slate-900 mt-0.5">{totalAppeared}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-500 font-bold uppercase block">Max Marks</span>
+                      <p className="font-black text-slate-900 mt-0.5">{totalMaxMarks}</p>
+                    </div>
+                  </div>
+
+                  {/* Printable Table */}
+                  <table className="w-full text-left border-collapse text-xs border border-slate-300">
+                    <thead>
+                      <tr className="bg-slate-100 border-b border-slate-300 text-slate-700 font-black uppercase text-[10px]">
+                        <th className="py-2.5 px-3 border-r border-slate-300">Rank</th>
+                        <th className="py-2.5 px-3 border-r border-slate-300">Candidate Name</th>
+                        <th className="py-2.5 px-3 border-r border-slate-300">Marks Obtained</th>
+                        <th className="py-2.5 px-3 border-r border-slate-300">Correct / Wrong</th>
+                        <th className="py-2.5 px-3 border-r border-slate-300">Accuracy</th>
+                        <th className="py-2.5 px-3">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {rawRankAttempts.map((att, idx) => (
+                        <tr key={att.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                          <td className="py-2.5 px-3 font-black border-r border-slate-200">
+                            #{idx + 1}
+                          </td>
+                          <td className="py-2.5 px-3 font-bold text-slate-900 border-r border-slate-200">
+                            {att.studentName}
+                          </td>
+                          <td className="py-2.5 px-3 font-black text-slate-900 border-r border-slate-200">
+                            {att.score} / {att.totalMarks || totalMaxMarks}
+                          </td>
+                          <td className="py-2.5 px-3 border-r border-slate-200">
+                            {att.correctCount} / {att.wrongCount}
+                          </td>
+                          <td className="py-2.5 px-3 font-bold border-r border-slate-200">
+                            {att.accuracy}%
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-600 text-[11px]">
+                            {att.submittedAt}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  {/* Signature Section */}
+                  <div className="pt-8 flex items-center justify-between border-t border-slate-300 text-xs">
+                    <div>
+                      <p className="text-[11px] text-slate-500 font-medium">Verified by: Academic Examination Committee</p>
+                      <p className="font-bold text-slate-800 mt-0.5">Career Guidance Academy</p>
+                    </div>
+                    <div className="text-right">
+                      <div className="w-40 border-b border-slate-400 mb-1" />
+                      <p className="text-[11px] text-slate-500 font-bold uppercase">Authorized Signatory</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       );
     })()}

@@ -405,7 +405,30 @@ export async function POST(request: Request) {
       };
     });
 
-    // 6. Ensure in-progress attempt is initiated in mock_attempts
+    // 6. Retrieve Question Groups / Comprehension Passages
+    const { data: dbGroups } = await admin
+      .from('mock_question_groups')
+      .select('*')
+      .eq('test_id', testId)
+      .order('position', { ascending: true });
+
+    let rawGroups: any[] = [];
+    if (dbGroups && dbGroups.length > 0) {
+      rawGroups = dbGroups.map((g: any) => ({
+        id: g.id,
+        testId: g.test_id || testId,
+        position: g.position || 1,
+        passageText: g.passage_text || g.passageText || '',
+        imagePath: g.image_path || g.imagePath || null,
+        imageAlt: g.image_alt || g.imageAlt || null,
+      }));
+    } else if (Array.isArray(testRecord.questionGroups) && testRecord.questionGroups.length > 0) {
+      rawGroups = testRecord.questionGroups;
+    } else if (seedTest && Array.isArray((seedTest as any).questionGroups)) {
+      rawGroups = (seedTest as any).questionGroups;
+    }
+
+    // 7. Ensure in-progress attempt is initiated in mock_attempts
     let startedAt = new Date().toISOString();
     let savedAnswers: Record<string, number> = {};
     if (!isAdmin) {
@@ -446,7 +469,7 @@ export async function POST(request: Request) {
       serverNow: new Date().toISOString(),
       startedAt,
       savedAnswers,
-      questionGroups: [],
+      questionGroups: rawGroups,
       questions: sanitizedQuestions,
     });
   } catch (err: unknown) {
