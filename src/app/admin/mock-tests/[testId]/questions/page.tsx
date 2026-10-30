@@ -22,7 +22,6 @@ import {
   Check,
   X,
   Layers,
-  Crop,
   HardDrive,
   BookOpen,
   PlusCircle,
@@ -34,7 +33,7 @@ import { ParsedMCQ, generateMCQTemplateCsv, validateParsedQuestions } from '@/li
 import { MathText } from '@/components/ui/MathText';
 import { MockQuestionImage } from '@/components/mock-tests/MockQuestionImage';
 import { MockQuestionGroup, MockQuestionOption, getOptionText, getOptionImage } from '@/data/initialSeedData';
-import { PdfDiagramCropTool } from '@/components/admin/PdfDiagramCropTool';
+import { ManualQuestionBuilder } from '@/components/admin/ManualQuestionBuilder';
 
 export default function AdminMockTestQuestionsPage() {
   const params = useParams();
@@ -42,7 +41,7 @@ export default function AdminMockTestQuestionsPage() {
   const testId = params?.testId as string;
   const { showToast } = useCga();
 
-  const [activeTab, setActiveTab] = useState<'review' | 'paste' | 'pdf' | 'csv' | 'docx' | 'passages'>('review');
+  const [activeTab, setActiveTab] = useState<'review' | 'paste' | 'passageQ' | 'diagramQ' | 'csv' | 'passages'>('review');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testDetails, setTestDetails] = useState<any>(null);
@@ -341,61 +340,6 @@ export default function AdminMockTestQuestionsPage() {
     }
   };
 
-  const handleCropSave = async (blob: Blob, alt: string, targetType: 'question' | 'option' | 'passage') => {
-    try {
-      const form = new FormData();
-      form.append('file', blob, `crop_${Date.now()}.png`);
-      form.append('testId', testId);
-      form.append('maxDimension', targetType);
-      form.append('altText', alt);
-
-      const res = await fetch('/api/mock-tests/upload-image', {
-        method: 'POST',
-        body: form,
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Crop upload failed.');
-      }
-
-      const data = await res.json();
-
-      if (targetType === 'question') {
-        setQuestions((prev) => {
-          const next = [...prev];
-          next[activeQIndex] = {
-            ...next[activeQIndex],
-            imagePath: data.storagePath,
-            imageAlt: alt,
-          };
-          return next;
-        });
-        showToast('Diagram Cropped', `Diagram attached to Question ${questions[activeQIndex]?.position || ''}.`, 'success');
-        setTimeout(jumpToNextNeedsDiagram, 300);
-      } else if (targetType === 'passage') {
-        const newGrpId = `grp-${Date.now()}`;
-        setQuestionGroups((prev) => [
-          ...prev,
-          {
-            id: newGrpId,
-            testId,
-            position: prev.length + 1,
-            passageText: alt,
-            imagePath: data.storagePath,
-            imageAlt: alt,
-          },
-        ]);
-        showToast('Passage Created', 'Cropped diagram saved as new Shared Passage.', 'success');
-      }
-
-      fetchStorageUsage();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to save cropped diagram';
-      showToast('Crop Error', msg, 'error');
-    }
-  };
-
   // Delete All Questions Action
   const handleDeleteAllQuestions = async () => {
     setIsDeletingAll(true);
@@ -638,7 +582,7 @@ export default function AdminMockTestQuestionsPage() {
     }
   };
 
-  // Parse File Action (PDF, CSV+ZIP, DOCX)
+  // Parse File Action (CSV/XLSX + ZIP)
   const handleParseFile = async () => {
     if (!selectedFile) return;
     setIsParsing(true);
@@ -844,14 +788,14 @@ export default function AdminMockTestQuestionsPage() {
         </button>
         <button
           type="button"
-          onClick={() => setActiveTab('pdf')}
+          onClick={() => setActiveTab('passageQ')}
           className={`px-4 py-2 rounded-xl text-xs font-extrabold cursor-pointer transition-all ${
-            activeTab === 'pdf'
+            activeTab === 'passageQ'
               ? 'bg-[#0056b3] text-white shadow-xs'
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
-          PDF Import & Crop
+          Add Passage + Questions
         </button>
         <button
           type="button"
@@ -866,14 +810,14 @@ export default function AdminMockTestQuestionsPage() {
         </button>
         <button
           type="button"
-          onClick={() => setActiveTab('docx')}
+          onClick={() => setActiveTab('diagramQ')}
           className={`px-4 py-2 rounded-xl text-xs font-extrabold cursor-pointer transition-all ${
-            activeTab === 'docx'
+            activeTab === 'diagramQ'
               ? 'bg-[#0056b3] text-white shadow-xs'
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
-          DOCX Import
+          Add Diagram Question
         </button>
         <button
           type="button"
@@ -1714,44 +1658,22 @@ or
         </div>
       )}
 
-      {/* 4. DOCX TAB */}
-      {activeTab === 'docx' && (
-        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-6">
-          <div>
-            <h2 className="text-base font-extrabold text-slate-900">Word Document (.docx) Import</h2>
-            <p className="text-xs text-slate-500">
-              Extracts questions and automatically pairs embedded diagram images with their corresponding questions using Mammoth.
-            </p>
-          </div>
-
-          <div className="p-8 rounded-2xl border-2 border-dashed border-slate-300 text-center space-y-3">
-            <FileText className="w-8 h-8 text-[#0056b3] mx-auto" />
-            <p className="text-xs font-bold text-slate-700">Select Microsoft Word (.docx) File</p>
-            <input
-              type="file"
-              accept=".docx"
-              onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-              className="text-xs text-slate-600 block mx-auto"
-            />
-          </div>
-
-          <button
-            type="button"
-            disabled={isParsing || !selectedFile}
-            onClick={handleParseFile}
-            className="w-full py-3.5 rounded-xl bg-[#0056b3] hover:bg-blue-700 text-white text-xs font-extrabold cursor-pointer inline-flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            {isParsing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-            Extract Questions and Images from DOCX
-          </button>
-        </div>
-      )}
-
-      {/* 5. PDF CROP TAB */}
-      {activeTab === 'pdf' && (
-        <PdfDiagramCropTool
-          currentQuestionNumber={currentQ?.position || 1}
-          onSaveCroppedDiagram={handleCropSave}
+      {/* 4. MANUAL PASSAGE / DIAGRAM BUILDERS */}
+      {(activeTab === 'passageQ' || activeTab === 'diagramQ') && (
+        <ManualQuestionBuilder
+          key={activeTab}
+          mode={activeTab === 'passageQ' ? 'passage' : 'diagram'}
+          testId={testId}
+          existingCount={questions.length}
+          groupCount={questionGroups.length}
+          onError={(m) => showToast('Cannot Add', m, 'error')}
+          onAdd={(qs, grp) => {
+            if (grp) setQuestionGroups((prev) => [...prev, grp]);
+            setQuestions((prev) => [...prev, ...qs]);
+            setActiveQIndex(questions.length);
+            setActiveTab('review');
+            showToast('Added', `${qs.length} question(s) added${grp ? ' with passage' : ' with diagram'}. Review and Approve & Save to publish.`, 'success');
+          }}
         />
       )}
 

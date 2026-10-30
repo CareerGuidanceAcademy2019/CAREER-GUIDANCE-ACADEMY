@@ -48,6 +48,10 @@ export async function POST(request: Request) {
         const fileName = (file.name || '').toLowerCase();
         const buffer = Buffer.from(await file.arrayBuffer());
 
+        if (fileName.endsWith('.docx') || fileName.endsWith('.pdf')) {
+          return NextResponse.json({ error: 'PDF and DOCX imports are no longer supported. Use paste, CSV, or the manual passage/diagram builders.' }, { status: 415 });
+        }
+
         if (fileName.endsWith('.docx')) {
           method = 'docx';
           const docxRes = await extractQuestionsFromDocx(buffer, testId);
