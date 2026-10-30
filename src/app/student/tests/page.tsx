@@ -734,7 +734,7 @@ export default function StudentMockTestsPage() {
                     )}
 
                     <p className="text-xs text-purple-800 font-bold flex items-center gap-1.5 pt-1">
-                      📖 <span>Read the passage above carefully before answering the question below:</span>
+                      <BookOpen className="w-3.5 h-3.5 text-purple-700 shrink-0" /> <span>Read the passage above carefully before answering the question below:</span>
                     </p>
                   </div>
                 );

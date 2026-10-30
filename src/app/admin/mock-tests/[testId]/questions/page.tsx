@@ -32,6 +32,7 @@ import {
   ChevronDown,
   ChevronUp,
   Save,
+  Info,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
 import { ParsedMCQ, parseRawQuestionsText, generateMCQTemplateCsv, validateParsedQuestions } from '@/lib/mcqParser';
@@ -1854,8 +1855,9 @@ Explanation: ৪২তম সংবিধান সংশোধনী দ্ব�
               <p className="text-slate-500">Explanation: The two 20 Ω parallel resistors yield 10 Ω.</p>
             </div>
 
-            <p className="text-[11px] text-emerald-800 font-medium">
-              💡 <strong>Note on Diagrams:</strong> Options are always normal text. Diagrams attach strictly to the question statement (e.g., Q1). Once parsed, you can attach any diagram image directly beside that specific question below.
+            <p className="text-[11px] text-emerald-800 font-medium flex items-center gap-1.5">
+              <Info className="w-4 h-4 text-emerald-700 shrink-0" />
+              <span><strong>Note on Diagrams:</strong> Options are always normal text. Diagrams attach strictly to the question statement (e.g., Q1). Once parsed, you can attach any diagram image directly beside that specific question below.</span>
             </p>
           </div>
 
@@ -2419,8 +2421,9 @@ Explanation: The concluding sentence emphasizes circular economies and renewable
               </button>
             </div>
 
-            <p className="text-[11px] text-emerald-800 font-medium">
-              💡 <strong>How it works:</strong> In Section 1, paste the full reading paragraph. In Section 2, paste all questions and options for this passage. When you click &quot;Add Passage &amp; Questions&quot;, the questions are automatically linked to this passage so students will read the passage before answering.
+            <p className="text-[11px] text-emerald-800 font-medium flex items-center gap-1.5">
+              <Info className="w-4 h-4 text-emerald-700 shrink-0" />
+              <span><strong>How it works:</strong> In Section 1, paste the full reading paragraph. In Section 2, paste all questions and options for this passage. When you click &quot;Add Passage &amp; Questions&quot;, the questions are automatically linked to this passage so students will read the passage before answering.</span>
             </p>
           </div>
 

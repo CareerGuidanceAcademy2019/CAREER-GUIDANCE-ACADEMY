@@ -1009,7 +1009,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         studyMaterials: prev.studyMaterials.filter((m) => m.id !== id),
       }));
-      showToast('Study Material Deleted', 'PDF resource removed from the library.', 'error');
+      showToast('Study Material Deleted', 'PDF resource removed from the library.', 'success');
       void cgaService.deleteMaterial(id).then((res) => {
         if (!res.success) {
           showToast('Delete Failed', res.error || 'Could not delete material.', 'error');
@@ -1057,7 +1057,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
       }));
 
       // Negative action uses red
-      showToast('Mock Test Deleted', 'Test removed from the portal.', 'error');
+      showToast('Mock Test Deleted', 'Test removed from the portal.', 'success');
 
       // Execute cascade delete in background
       void cgaService.deleteTest(id).then((res) => {

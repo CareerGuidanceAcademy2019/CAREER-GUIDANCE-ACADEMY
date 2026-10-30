@@ -474,8 +474,8 @@ export default function AdminMockTestPreviewPage() {
                 <span>
                   {viewMode === 'admin' ? 'Admin Preview Mode (With Solutions & Hints)' : 'Student Live CBT View'}
                 </span>
-                <span className="bg-white/20 text-white px-2 py-0.5 rounded text-[10px] normal-case">
-                  Zero Score Rows Created
+                <span className="bg-white/20 text-white px-2 py-0.5 rounded text-[10px] font-medium tracking-normal">
+                  Simulation Mode
                 </span>
               </span>
               <h2 className="text-base sm:text-lg font-extrabold">{test?.title}</h2>
@@ -606,7 +606,7 @@ export default function AdminMockTestPreviewPage() {
                         </div>
                       )}
                       <p className="text-xs text-purple-800 font-bold flex items-center gap-1.5 pt-1">
-                        📖 <span>Read the passage above carefully before answering the question below:</span>
+                        <BookOpen className="w-3.5 h-3.5 text-purple-700 shrink-0" /> <span>Read the passage above carefully before answering the question below:</span>
                       </p>
                     </div>
                   )}

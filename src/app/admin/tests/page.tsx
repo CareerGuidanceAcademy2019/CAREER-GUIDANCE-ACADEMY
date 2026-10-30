@@ -38,6 +38,7 @@ import {
   Printer,
   PlusCircle,
   RefreshCw,
+  Award,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCga } from '@/context/CgaContext';
@@ -1169,19 +1170,19 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
           ctx.fillRect(padding + 16, currentY + 10, 68, 24);
           ctx.fillStyle = '#ffffff';
           ctx.font = 'bold 11px sans-serif';
-          ctx.fillText(`★ Rank #1`, padding + 20, currentY + 26);
+          ctx.fillText(`Rank #1`, padding + 22, currentY + 26);
         } else if (rankNum === 2) {
           ctx.fillStyle = '#64748b';
           ctx.fillRect(padding + 16, currentY + 10, 68, 24);
           ctx.fillStyle = '#ffffff';
           ctx.font = 'bold 11px sans-serif';
-          ctx.fillText(`★ Rank #2`, padding + 20, currentY + 26);
+          ctx.fillText(`Rank #2`, padding + 22, currentY + 26);
         } else if (rankNum === 3) {
           ctx.fillStyle = '#b45309';
           ctx.fillRect(padding + 16, currentY + 10, 68, 24);
           ctx.fillStyle = '#ffffff';
           ctx.font = 'bold 11px sans-serif';
-          ctx.fillText(`★ Rank #3`, padding + 20, currentY + 26);
+          ctx.fillText(`Rank #3`, padding + 22, currentY + 26);
         } else {
           ctx.fillStyle = '#475569';
           ctx.font = 'bold 12px sans-serif';
@@ -1202,9 +1203,9 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
         // Correct / Wrong
         ctx.fillStyle = '#16a34a';
         ctx.font = 'bold 12px sans-serif';
-        ctx.fillText(`${att.correctCount} ✓`, padding + 670, currentY + 26);
+        ctx.fillText(`${att.correctCount} Correct`, padding + 670, currentY + 26);
         ctx.fillStyle = '#dc2626';
-        ctx.fillText(` / ${att.wrongCount} ✗`, padding + 715, currentY + 26);
+        ctx.fillText(` / ${att.wrongCount} Wrong`, padding + 745, currentY + 26);
 
         // Accuracy
         ctx.fillStyle = '#334155';
@@ -1736,68 +1737,92 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
 
             {/* Batch Rank List & Results Table */}
             <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-2xs space-y-6">
-              {/* Header Row */}
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-                <div>
-                  <h2 className="text-lg font-extrabold text-[#0a0e2a] flex items-center gap-2">
-                    <Trophy className="w-5 h-5 text-[#ea580c]" />
-                    <span>Batch Results &amp; Merit Rank List</span>
-                    <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-[#0056b3] text-xs font-black">
-                      {totalAppeared} Candidates Appeared
+              {/* Clean Humanized Header & Controls */}
+              <div className="space-y-4 pb-5 border-b border-slate-100">
+                {/* Row 1: Title, Badge and Export Actions */}
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <span className="p-2.5 rounded-2xl bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
+                      <Trophy className="w-5 h-5 text-amber-600" />
                     </span>
-                  </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Official student scores, merit ranks, accuracy, and instant image / page export for 100–150+ students.
-                  </p>
+                    <div>
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
+                          Batch Results &amp; Merit Rank List
+                        </h2>
+                        <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-[#0056b3] border border-blue-200 text-xs font-semibold whitespace-nowrap">
+                          {totalAppeared} {totalAppeared === 1 ? 'Candidate' : 'Candidates'} Appeared
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Verified student scores, merit standings, and downloadable score records.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Export Actions */}
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      disabled={isExportingImage || totalAppeared === 0}
+                      onClick={downloadRankListImage}
+                      className="px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-40 transition-all"
+                      title="Download rank list as a high-resolution PNG image"
+                    >
+                      {isExportingImage ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
+                      <span>Download Image</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={totalAppeared === 0}
+                      onClick={() => setPrintableRankModal(true)}
+                      className="px-3.5 py-2.5 rounded-xl bg-[#0056b3] hover:bg-blue-700 text-white text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-40 transition-all"
+                      title="Open formatted A4 page to print or Save as PDF"
+                    >
+                      <Printer className="w-4 h-4" />
+                      <span>Print PDF</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={totalAppeared === 0}
+                      onClick={downloadRankListCSV}
+                      className="px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-40 transition-all"
+                      title="Export records to CSV"
+                    >
+                      <Download className="w-4 h-4" /> CSV
+                    </button>
+                  </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    value={selectedTestForRanks}
-                    onChange={(e) => setSelectedTestForRanks(e.target.value)}
-                    className="px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold bg-white text-slate-800 shadow-2xs"
-                  >
-                    {db.mockTests.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.title} ({t.batchName || 'General'})
-                      </option>
-                    ))}
-                  </select>
+                {/* Row 2: Test Selector & Candidate Search Filter */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-1 min-w-0">
+                    <span className="text-xs font-bold text-slate-700 shrink-0">Select Mock Test:</span>
+                    <select
+                      value={selectedTestForRanks}
+                      onChange={(e) => setSelectedTestForRanks(e.target.value)}
+                      className="w-full sm:max-w-xl px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-semibold bg-slate-50 hover:bg-white focus:bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0056b3] transition-colors truncate"
+                    >
+                      {db.mockTests.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.title} ({t.batchName || 'General'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                  {/* Export as Image Button */}
-                  <button
-                    type="button"
-                    disabled={isExportingImage || totalAppeared === 0}
-                    onClick={downloadRankListImage}
-                    className="px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black inline-flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50 transition-all"
-                    title="Download rank list as a high-resolution PNG image"
-                  >
-                    {isExportingImage ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
-                    Download as Image (PNG)
-                  </button>
-
-                  {/* Print / Download as Page Button */}
-                  <button
-                    type="button"
-                    disabled={totalAppeared === 0}
-                    onClick={() => setPrintableRankModal(true)}
-                    className="px-3.5 py-2.5 rounded-xl bg-[#0056b3] hover:bg-blue-700 text-white text-xs font-black inline-flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50 transition-all"
-                    title="Open formatted A4 page to print or Save as PDF"
-                  >
-                    <Printer className="w-4 h-4" />
-                    Print / Save as Page (PDF)
-                  </button>
-
-                  {/* Export as CSV Button */}
-                  <button
-                    type="button"
-                    disabled={totalAppeared === 0}
-                    onClick={downloadRankListCSV}
-                    className="px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                    title="Export records to CSV"
-                  >
-                    <Download className="w-4 h-4" /> CSV
-                  </button>
+                  <div className="relative w-full sm:w-64 shrink-0">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      value={rankSearchQuery}
+                      onChange={(e) => setRankSearchQuery(e.target.value)}
+                      placeholder="Search candidates by name..."
+                      className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -1844,29 +1869,6 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                 </div>
               </div>
 
-              {/* Search Filter Bar */}
-              <div className="flex items-center justify-between gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-200">
-                <div className="relative flex-1">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={rankSearchQuery}
-                    onChange={(e) => setRankSearchQuery(e.target.value)}
-                    placeholder="Search student by name..."
-                    className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                  />
-                </div>
-                {rankSearchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setRankSearchQuery('')}
-                    className="text-xs font-bold text-slate-500 hover:text-slate-800 px-2 py-1"
-                  >
-                    Clear Filter
-                  </button>
-                )}
-              </div>
-
               {totalAppeared === 0 ? (
                 <div className="p-10 text-center border-2 border-dashed border-slate-200 rounded-2xl space-y-2">
                   <Trophy className="w-10 h-10 text-slate-300 mx-auto" />
@@ -1907,16 +1909,16 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                           >
                             <td className="py-3.5 px-4 whitespace-nowrap">
                               {isTop1 ? (
-                                <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-black text-xs inline-flex items-center gap-1 shadow-2xs">
-                                  🥇 Rank #1
+                                <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 font-bold text-xs inline-flex items-center gap-1.5 shadow-2xs">
+                                  <Trophy className="w-3.5 h-3.5 text-amber-600 shrink-0" /> Rank #1
                                 </span>
                               ) : isTop2 ? (
-                                <span className="px-3 py-1 rounded-full bg-slate-200 text-slate-800 border border-slate-300 font-black text-xs inline-flex items-center gap-1 shadow-2xs">
-                                  🥈 Rank #2
+                                <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 border border-slate-200 font-bold text-xs inline-flex items-center gap-1.5 shadow-2xs">
+                                  <Award className="w-3.5 h-3.5 text-slate-600 shrink-0" /> Rank #2
                                 </span>
                               ) : isTop3 ? (
-                                <span className="px-3 py-1 rounded-full bg-orange-100 text-orange-900 border border-orange-300 font-black text-xs inline-flex items-center gap-1 shadow-2xs">
-                                  🥉 Rank #3
+                                <span className="px-2.5 py-1 rounded-lg bg-orange-50 text-orange-800 border border-orange-200 font-bold text-xs inline-flex items-center gap-1.5 shadow-2xs">
+                                  <Award className="w-3.5 h-3.5 text-orange-600 shrink-0" /> Rank #3
                                 </span>
                               ) : (
                                 <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-bold text-xs">
