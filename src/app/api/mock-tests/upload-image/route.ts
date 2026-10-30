@@ -7,7 +7,7 @@ import { checkRateLimit, createRateLimitResponse, getClientIp, RATE_LIMIT_RULES 
 const DEFAULT_STORAGE_LIMIT_BYTES = 1024 * 1024 * 1024; // 1 GB
 
 export async function POST(request: Request) {
-  const adminId = await requireAdmin();
+  const adminId = await requireAdmin(request);
   if (!adminId) {
     return NextResponse.json({ error: 'Unauthorized. Administrator access required.' }, { status: 403 });
   }

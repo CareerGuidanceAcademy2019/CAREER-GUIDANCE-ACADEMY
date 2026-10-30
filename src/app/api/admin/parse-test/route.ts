@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin, createAdminSupabase } from '@/lib/supabase/server';
-import { PDFParse } from 'pdf-parse';
 import { parseRawQuestionsText, validateParsedQuestions, ParsedMCQ } from '@/lib/mcqParser';
 import { safeExtractZipImages, processAndUploadZipImages } from '@/lib/zipImporter';
 import { extractQuestionsFromDocx } from '@/lib/docxImporter';
 import { checkRateLimit, createRateLimitResponse, getClientIp, RATE_LIMIT_RULES } from '@/lib/rateLimit';
 
 export async function POST(request: Request) {
-  const adminId = await requireAdmin();
+  const adminId = await requireAdmin(request);
   if (!adminId) {
     return NextResponse.json({ error: 'Unauthorized. Administrator access required.' }, { status: 403 });
   }
@@ -134,50 +133,6 @@ export async function POST(request: Request) {
           } else {
             extractedQuestions = parseRawQuestionsText(textContent, answerKeyParam || undefined);
           }
-        } else if (fileName.endsWith('.pdf')) {
-          method = 'pdf';
-          const parser = new PDFParse({ data: buffer });
-          let extractedText = '';
-
-          try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const textResult: any = await parser.getText();
-            if (typeof textResult === 'string') {
-              extractedText = textResult;
-            } else if (textResult && typeof textResult.text === 'string') {
-              extractedText = textResult.text;
-            } else if (textResult && Array.isArray(textResult.pages)) {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              extractedText = textResult.pages.map((p: any) => p.text || '').join('\n');
-            }
-          } finally {
-            await parser.destroy().catch(() => null);
-          }
-
-          // Check if extracted text is empty or garbled
-          const isGarbled = !extractedText || extractedText.trim().length < 50;
-          if (isGarbled) {
-            pageClassifications.push({ pageNumber: 1, method: 'ocr', confidence: 0.65 });
-            // Upload PDF temporarily for OCR / side-by-side review
-            const supabaseAdmin = createAdminSupabase();
-            const tempPdfPath = `temp-pdf/${testId}_${Date.now()}.pdf`;
-            await supabaseAdmin.storage.from('mock-question-papers').upload(tempPdfPath, buffer, {
-              contentType: 'application/pdf',
-              upsert: true,
-            });
-
-            return NextResponse.json({
-              success: true,
-              requiresOcr: true,
-              message: 'Scanned pages detected. Text layer is empty or garbled. Ready for OCR processing in review screen.',
-              tempPdfPath,
-              questions: [],
-              pageClassifications,
-            });
-          }
-
-          pageClassifications.push({ pageNumber: 1, method: 'text', confidence: 0.95 });
-          extractedQuestions = parseRawQuestionsText(extractedText, answerKeyParam || undefined);
         }
       }
 

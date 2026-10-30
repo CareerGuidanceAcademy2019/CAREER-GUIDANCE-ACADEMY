@@ -29,9 +29,12 @@ import {
   FileQuestion,
   Edit3,
   ClipboardCheck,
+  ChevronDown,
+  ChevronUp,
+  Save,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
-import { ParsedMCQ, generateMCQTemplateCsv, validateParsedQuestions } from '@/lib/mcqParser';
+import { ParsedMCQ, parseRawQuestionsText, generateMCQTemplateCsv, validateParsedQuestions } from '@/lib/mcqParser';
 import { MathText } from '@/components/ui/MathText';
 import { MockQuestionImage } from '@/components/mock-tests/MockQuestionImage';
 import { MockQuestionGroup, MockQuestionOption, getOptionText, getOptionImage } from '@/data/initialSeedData';
@@ -95,6 +98,14 @@ export default function AdminMockTestQuestionsPage() {
   const [pastedAnswerKey, setPastedAnswerKey] = useState('');
   const [isParsing, setIsParsing] = useState(false);
 
+  // Local diagram attachment for the question currently being entered
+  const [currentDiagramFile, setCurrentDiagramFile] = useState<File | null>(null);
+  const [currentDiagramPreview, setCurrentDiagramPreview] = useState<string>('');
+  const [currentDiagramAlt, setCurrentDiagramAlt] = useState<string>('');
+  const [isAddingQuestion, setIsAddingQuestion] = useState(false);
+  const [showAdvancedPasteOptions, setShowAdvancedPasteOptions] = useState(false);
+  const currentDiagramInputRef = useRef<HTMLInputElement>(null);
+
   // File import state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedZip, setSelectedZip] = useState<File | null>(null);
@@ -157,6 +168,9 @@ export default function AdminMockTestQuestionsPage() {
         }));
 
         setQuestions(mapped);
+        if (mapped.length === 0) {
+          setActiveTab('paste');
+        }
       }
     } catch {
       showToast('Error', 'Failed to fetch test questions.', 'error');
@@ -621,36 +635,172 @@ export default function AdminMockTestQuestionsPage() {
     setActiveTab('review');
   };
 
-  // Parse Text Action
-  const handleParseText = async () => {
-    if (!pastedText.trim()) return;
-    setIsParsing(true);
-    try {
-      const form = new FormData();
-      form.append('text', pastedText);
-      if (pastedAnswerKey.trim()) {
-        form.append('answerKey', pastedAnswerKey);
-      }
-      form.append('testId', testId);
-
-      const res = await fetch('/api/admin/parse-test', {
-        method: 'POST',
-        body: form,
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Parsing failed.');
-      }
-
-      const data = await res.json();
-      applyImportedQuestions(data.questions || [], 'Pasted text');
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to parse text';
-      showToast('Parsing Failed', msg, 'error');
-    } finally {
-      setIsParsing(false);
+  // Select local diagram for the question being created
+  const handleSelectCurrentDiagram = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showToast('Invalid File', 'Please select an image file (PNG, JPG, WebP).', 'error');
+      return;
     }
+    if (file.size > 8 * 1024 * 1024) {
+      showToast('File Too Large', 'Diagram image must be under 8 MB.', 'error');
+      return;
+    }
+    setCurrentDiagramFile(file);
+    const url = URL.createObjectURL(file);
+    setCurrentDiagramPreview(url);
+    if (!currentDiagramAlt) {
+      setCurrentDiagramAlt(`Diagram for question`);
+    }
+    showToast('Diagram Ready', `${file.name} selected. Click "Add Question to Test" below to add.`, 'info');
+  };
+
+  const handleClearCurrentDiagram = () => {
+    if (currentDiagramPreview) {
+      try {
+        URL.revokeObjectURL(currentDiagramPreview);
+      } catch {}
+    }
+    setCurrentDiagramFile(null);
+    setCurrentDiagramPreview('');
+    setCurrentDiagramAlt('');
+    if (currentDiagramInputRef.current) {
+      currentDiagramInputRef.current.value = '';
+    }
+  };
+
+  // Human-Friendly Action: Parse pasted question text locally and attach selected diagram
+  const handleAddQuestionWithDiagram = async () => {
+    const trimmed = pastedText.trim();
+    if (!trimmed) {
+      showToast('Question Text Required', 'Please paste the question statement and options.', 'error');
+      return;
+    }
+
+    setIsAddingQuestion(true);
+    try {
+      // 1. Direct local parse (0ms, zero server crash)
+      const parsed = parseRawQuestionsText(trimmed, pastedAnswerKey.trim() || undefined);
+      if (!parsed || parsed.length === 0) {
+        showToast(
+          'Format Not Recognized',
+          'Please ensure the question includes numbered question statement, options (A), (B), (C), (D) and Ans: ...',
+          'error'
+        );
+        setIsAddingQuestion(false);
+        return;
+      }
+
+      // 2. Upload attached diagram if present
+      let uploadedImagePath: string | null = null;
+      let uploadedImageAlt: string | null = null;
+
+      if (currentDiagramFile) {
+        const form = new FormData();
+        form.append('file', currentDiagramFile);
+        form.append('testId', testId);
+        form.append('maxDimension', 'question');
+        form.append('altText', currentDiagramAlt.trim() || `Diagram for question ${questions.length + 1}`);
+
+        const res = await fetch('/api/mock-tests/upload-image', {
+          method: 'POST',
+          body: form,
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Failed to upload question diagram image.');
+        }
+
+        const data = await res.json();
+        uploadedImagePath = data.storagePath;
+        uploadedImageAlt = currentDiagramAlt.trim() || `Diagram for question ${questions.length + 1}`;
+        fetchStorageUsage();
+      }
+
+      // 3. Attach uploaded diagram to the first parsed question
+      let preparedQuestions = parsed;
+      if (uploadedImagePath && preparedQuestions.length > 0) {
+        preparedQuestions = preparedQuestions.map((q, idx) => {
+          if (idx === 0) {
+            return {
+              ...q,
+              imagePath: uploadedImagePath,
+              imageAlt: uploadedImageAlt,
+              needsDiagram: false,
+            };
+          }
+          return q;
+        });
+      }
+
+      // 4. Handle comprehension passage grouping if enabled
+      let targetGroupId: string | null = null;
+      if (autoCreatePassage && importPassageText.trim()) {
+        const newGrpId = `grp-${Date.now()}`;
+        const newGroup: MockQuestionGroup = {
+          id: newGrpId,
+          testId,
+          position: questionGroups.length + 1,
+          passageText: importPassageText.trim(),
+          imagePath: null,
+          imageAlt: importPassageTitle.trim() || 'Comprehension Passage',
+        };
+        setQuestionGroups((prev) => [...prev, newGroup]);
+        targetGroupId = newGrpId;
+      }
+
+      if (targetGroupId) {
+        preparedQuestions = preparedQuestions.map((q) => ({
+          ...q,
+          groupId: targetGroupId,
+        }));
+      }
+
+      // 5. Append or replace questions
+      if (importMode === 'append' && questions.length > 0) {
+        const startIndex = questions.length;
+        const renumbered = preparedQuestions.map((q, idx) => ({
+          ...q,
+          position: startIndex + idx + 1,
+        }));
+        setQuestions((prev) => [...prev, ...renumbered]);
+        setActiveQIndex(startIndex);
+        showToast(
+          'Question Added Successfully',
+          `Added ${preparedQuestions.length} question(s) (Q${startIndex + 1}–Q${startIndex + preparedQuestions.length})${uploadedImagePath ? ' with attached diagram' : ''}.`,
+          'success'
+        );
+      } else {
+        const renumbered = preparedQuestions.map((q, idx) => ({
+          ...q,
+          position: idx + 1,
+        }));
+        setQuestions(renumbered);
+        setActiveQIndex(0);
+        showToast(
+          'Question Added Successfully',
+          `Loaded ${preparedQuestions.length} question(s)${uploadedImagePath ? ' with attached diagram' : ''}.`,
+          'success'
+        );
+      }
+
+      // 6. Reset inputs ready for next question
+      setPastedText('');
+      setPastedAnswerKey('');
+      handleClearCurrentDiagram();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to add question';
+      showToast('Error Adding Question', msg, 'error');
+    } finally {
+      setIsAddingQuestion(false);
+    }
+  };
+
+  // Fallback Parse Text Action
+  const handleParseText = async () => {
+    handleAddQuestionWithDiagram();
   };
 
   // Parse File Action (CSV/XLSX + ZIP)
@@ -1494,141 +1644,291 @@ Explanation: ৪২তম সংবিধান সংশোধনী দ্ব�
             </p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            <div className="lg:col-span-8 space-y-2">
-              <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-600">
-                Question Text &amp; Options
-              </label>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* Left Column: Question Text & Options Input */}
+            <div className="lg:col-span-7 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-black uppercase tracking-wider text-slate-700">
+                  1. Paste Question Statement, Options &amp; Answer
+                </label>
+                <span className="text-[11px] text-slate-500 font-semibold">
+                  Supports LaTeX math like \(\Omega\)
+                </span>
+              </div>
               <textarea
-                rows={14}
+                rows={13}
                 value={pastedText}
                 onChange={(e) => setPastedText(e.target.value)}
-                placeholder={`1. Look at the circuit diagram shown below. What is the equivalent resistance?
-(A) 5 Ω (B) 10 Ω (C) 15 Ω (D) 20 Ω
+                placeholder={`1. In the circuit diagram shown below, find the equivalent resistance between terminals A and B.
+(A) 5 Ω
+(B) 10 Ω
+(C) 15 Ω
+(D) 20 Ω
 Ans: B
-Explanation: The two resistors are in parallel.`}
-                className="w-full p-4 rounded-2xl border border-slate-200 font-mono text-xs leading-relaxed"
+Explanation: The two 20 Ω parallel resistors yield 10 Ω equivalent resistance.`}
+                className="w-full p-4 rounded-2xl border border-slate-300 font-mono text-xs leading-relaxed focus:border-[#0056b3] focus:ring-2 focus:ring-blue-100 bg-white shadow-2xs"
               />
             </div>
 
-            <div className="lg:col-span-4 space-y-4">
-              <div className="space-y-2">
-                <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-600">
-                  Optional Separate Answer Key Sheet
+            {/* Right Column: Dedicated Diagram Attachment from Local Device */}
+            <div className="lg:col-span-5 space-y-3">
+              <div>
+                <label className="block text-xs font-black uppercase tracking-wider text-slate-700">
+                  2. Attach Diagram for this Question (Optional)
                 </label>
-                <textarea
-                  rows={6}
-                  value={pastedAnswerKey}
-                  onChange={(e) => setPastedAnswerKey(e.target.value)}
-                  placeholder={`1-B, 2-D, 3-A, 4-C
-or
-1. B  2. D  3. A`}
-                  className="w-full p-3 rounded-2xl border border-slate-200 font-mono text-xs leading-relaxed"
-                />
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Select an image from your device. It attaches directly to this question.
+                </p>
               </div>
 
-              {/* Import Mode */}
-              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 text-xs">
-                <div>
-                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-700 block mb-1.5">
-                    Import Mode
+              {!currentDiagramPreview ? (
+                /* No diagram selected state */
+                <div className="p-6 rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/40 hover:bg-blue-50 hover:border-[#0056b3] text-center transition-all flex flex-col items-center justify-center min-h-[220px]">
+                  <div className="p-3 bg-white rounded-2xl border border-blue-200 shadow-2xs text-[#0056b3] mb-2.5">
+                    <ImageIcon className="w-8 h-8" />
+                  </div>
+                  <p className="text-xs font-black text-slate-800">
+                    No Diagram Attached Yet
+                  </p>
+                  <p className="text-[11px] text-slate-500 mt-0.5 max-w-[240px]">
+                    If this question has a diagram, table, or circuit, choose the image file from your device.
+                  </p>
+
+                  <label className="mt-4 px-4 py-2.5 rounded-xl bg-[#0056b3] hover:bg-blue-700 text-white text-xs font-extrabold inline-flex items-center gap-2 cursor-pointer shadow-sm transition-all hover:scale-[1.02]">
+                    <Upload className="w-4 h-4" /> Choose Diagram from Device
+                    <input
+                      type="file"
+                      ref={currentDiagramInputRef}
+                      accept="image/*"
+                      onChange={handleSelectCurrentDiagram}
+                      className="hidden"
+                    />
+                  </label>
+                  <span className="text-[10px] text-slate-400 mt-2 font-medium">
+                    PNG, JPG, JPEG, WebP (Max 8 MB)
                   </span>
-                  <div className="grid grid-cols-2 gap-2">
+                </div>
+              ) : (
+                /* Diagram selected with live preview state */
+                <div className="p-4 rounded-2xl border-2 border-emerald-500 bg-emerald-50/40 space-y-3 shadow-2xs animate-in fade-in duration-150">
+                  <div className="flex items-center justify-between gap-2 border-b border-emerald-200 pb-2">
+                    <span className="text-[11px] font-black text-emerald-900 inline-flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      Diagram Ready from Device
+                    </span>
+                    <span className="text-[10px] font-bold text-emerald-700 truncate max-w-[150px]">
+                      {currentDiagramFile?.name} ({(currentDiagramFile!.size / 1024).toFixed(0)} KB)
+                    </span>
+                  </div>
+
+                  <div className="bg-white p-2 rounded-xl border border-emerald-300 flex items-center justify-center">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={currentDiagramPreview}
+                      alt="Local diagram preview"
+                      className="max-h-40 w-auto object-contain rounded-lg shadow-2xs"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#0056b3] text-xs font-bold cursor-pointer inline-flex items-center gap-1.5 border border-blue-200 transition-all">
+                      <Upload className="w-3.5 h-3.5" /> Change Image
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleSelectCurrentDiagram}
+                        className="hidden"
+                      />
+                    </label>
+
                     <button
                       type="button"
-                      onClick={() => setImportMode('append')}
-                      className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
-                        importMode === 'append'
-                          ? 'bg-blue-50 border-[#0056b3] text-[#0056b3] font-bold shadow-xs'
-                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100 font-medium'
-                      }`}
+                      onClick={handleClearCurrentDiagram}
+                      className="px-3 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-[#dc2626] text-xs font-bold cursor-pointer inline-flex items-center gap-1.5 border border-red-200 transition-all"
                     >
-                      <span className="block font-extrabold text-[11px]">Append (Keep Qs)</span>
-                      <span className="text-[10px] text-slate-500">
-                        Add after {questions.length} existing Qs
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setImportMode('replace')}
-                      className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
-                        importMode === 'replace'
-                          ? 'bg-amber-50 border-amber-500 text-amber-900 font-bold shadow-xs'
-                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100 font-medium'
-                      }`}
-                    >
-                      <span className="block font-extrabold text-[11px]">Replace All</span>
-                      <span className="text-[10px] text-slate-500">Clear existing Qs first</span>
+                      <Trash2 className="w-3.5 h-3.5" /> Remove Diagram
                     </button>
                   </div>
-                </div>
 
-                {/* Comprehension Passage Grouping */}
-                <div className="pt-2 border-t border-slate-200/70 space-y-2">
-                  <label className="flex items-center gap-2 cursor-pointer font-extrabold text-purple-950">
+                  <div>
                     <input
-                      type="checkbox"
-                      checked={autoCreatePassage}
-                      onChange={(e) => setAutoCreatePassage(e.target.checked)}
-                      className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500"
+                      type="text"
+                      value={currentDiagramAlt}
+                      onChange={(e) => setCurrentDiagramAlt(e.target.value)}
+                      placeholder="Optional image description (e.g. Circuit diagram for Q1)"
+                      className="w-full p-2.5 rounded-xl border border-emerald-200 text-xs bg-white text-slate-800 placeholder:text-slate-400"
                     />
-                    <span>Group as Reading / Comprehension Passage</span>
-                  </label>
+                  </div>
+                </div>
+              )}
 
-                  {autoCreatePassage && (
-                    <div className="space-y-2 pt-1 animate-in fade-in duration-150">
-                      <input
-                        type="text"
-                        value={importPassageTitle}
-                        onChange={(e) => setImportPassageTitle(e.target.value)}
-                        placeholder="Passage Reference (e.g. Directions: Q.11–Q.20 Comprehension)"
-                        className="w-full p-2.5 rounded-xl border border-purple-200 text-xs font-semibold bg-white"
-                      />
+              {/* Advanced Options Toggle */}
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedPasteOptions(!showAdvancedPasteOptions)}
+                  className="text-xs font-bold text-slate-600 hover:text-slate-900 inline-flex items-center gap-1.5 cursor-pointer py-1"
+                >
+                  {showAdvancedPasteOptions ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  <span>Advanced Options (Answer Key Sheet, Passage, Import Mode)</span>
+                </button>
+
+                {showAdvancedPasteOptions && (
+                  <div className="mt-2 p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 text-xs animate-in fade-in duration-150">
+                    <div className="space-y-1.5">
+                      <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700">
+                        Optional Separate Answer Key Sheet
+                      </label>
                       <textarea
-                        rows={4}
-                        value={importPassageText}
-                        onChange={(e) => setImportPassageText(e.target.value)}
-                        placeholder="Paste or write the reading comprehension passage or case study text here..."
-                        className="w-full p-2.5 rounded-xl border border-purple-200 text-xs font-mono leading-relaxed bg-white"
+                        rows={3}
+                        value={pastedAnswerKey}
+                        onChange={(e) => setPastedAnswerKey(e.target.value)}
+                        placeholder={`1-B, 2-D, 3-A, 4-C`}
+                        className="w-full p-2.5 rounded-xl border border-slate-200 font-mono text-xs bg-white"
                       />
                     </div>
-                  )}
-                </div>
-              </div>
 
-              <button
-                type="button"
-                disabled={isParsing || !pastedText.trim()}
-                onClick={handleParseText}
-                className="w-full py-3.5 rounded-xl bg-[#0056b3] hover:bg-blue-700 text-white text-xs font-extrabold cursor-pointer inline-flex items-center justify-center gap-2 disabled:opacity-50 shadow-xs"
-              >
-                {isParsing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                {importMode === 'append' && questions.length > 0 ? 'Parse & Append to Test' : 'Parse Questions & Load'}
-              </button>
+                    <div>
+                      <span className="text-[11px] font-black uppercase tracking-wider text-slate-700 block mb-1">
+                        Import Mode
+                      </span>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setImportMode('append')}
+                          className={`p-2 rounded-xl border text-left cursor-pointer transition-all ${
+                            importMode === 'append'
+                              ? 'bg-blue-50 border-[#0056b3] text-[#0056b3] font-bold'
+                              : 'bg-white border-slate-200 text-slate-600'
+                          }`}
+                        >
+                          <span className="block font-bold text-[11px]">Append (Keep Existing)</span>
+                          <span className="text-[10px] text-slate-500">Current: {questions.length} Qs</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setImportMode('replace')}
+                          className={`p-2 rounded-xl border text-left cursor-pointer transition-all ${
+                            importMode === 'replace'
+                              ? 'bg-amber-50 border-amber-500 text-amber-900 font-bold'
+                              : 'bg-white border-slate-200 text-slate-600'
+                          }`}
+                        >
+                          <span className="block font-bold text-[11px]">Replace All</span>
+                          <span className="text-[10px] text-slate-500">Clears previous Qs</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-200 space-y-2">
+                      <label className="flex items-center gap-2 cursor-pointer font-bold text-purple-950">
+                        <input
+                          type="checkbox"
+                          checked={autoCreatePassage}
+                          onChange={(e) => setAutoCreatePassage(e.target.checked)}
+                          className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500"
+                        />
+                        <span>Group as Reading / Comprehension Passage</span>
+                      </label>
+
+                      {autoCreatePassage && (
+                        <div className="space-y-2 pt-1 animate-in fade-in duration-150">
+                          <input
+                            type="text"
+                            value={importPassageTitle}
+                            onChange={(e) => setImportPassageTitle(e.target.value)}
+                            placeholder="Passage Title (e.g. Comprehension Passage 1)"
+                            className="w-full p-2 rounded-xl border border-purple-200 text-xs bg-white"
+                          />
+                          <textarea
+                            rows={3}
+                            value={importPassageText}
+                            onChange={(e) => setImportPassageText(e.target.value)}
+                            placeholder="Paste passage text here..."
+                            className="w-full p-2 rounded-xl border border-purple-200 text-xs font-mono bg-white"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
+          </div>
+
+          {/* Large Action Button to Add / Upload Question */}
+          <div className="pt-2">
+            <button
+              type="button"
+              disabled={isAddingQuestion || !pastedText.trim()}
+              onClick={handleAddQuestionWithDiagram}
+              className={`w-full py-4 rounded-2xl text-white text-sm font-black cursor-pointer inline-flex items-center justify-center gap-2.5 shadow-md disabled:opacity-50 transition-all ${
+                currentDiagramFile
+                  ? 'bg-emerald-600 hover:bg-emerald-700 ring-2 ring-emerald-500/20'
+                  : 'bg-[#0056b3] hover:bg-blue-700'
+              }`}
+            >
+              {isAddingQuestion ? (
+                <>
+                  <RefreshCw className="w-5 h-5 animate-spin" />
+                  <span>Processing Question &amp; Attaching Diagram...</span>
+                </>
+              ) : currentDiagramFile ? (
+                <>
+                  <PlusCircle className="w-5 h-5" />
+                  <span>+ Add Question with Attached Diagram to Test</span>
+                </>
+              ) : (
+                <>
+                  <Plus className="w-5 h-5" />
+                  <span>+ Add Question to Test</span>
+                </>
+              )}
+            </button>
+            <p className="text-[11px] text-center text-slate-500 mt-2">
+              Parses the question text, uploads and links the diagram image (if attached), and adds the question to your test instantly.
+            </p>
           </div>
 
           {/* Questions & Diagram Attachment Section */}
           {questions.length > 0 && (
             <div className="pt-6 border-t border-slate-200 space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
                 <div>
                   <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                    <ImageIcon className="w-4 h-4 text-[#0056b3]" />
-                    <span>Questions &amp; Direct Diagram Attachment ({questions.length} Questions)</span>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Questions in this Test ({questions.length} Questions)</span>
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Options are normal text choices. For questions that need an image (e.g. Q1), click &quot;Attach Diagram&quot; directly beside the question.
+                    Options are normal text choices. For questions that need an image, you can attach or change diagrams right beside the question.
                   </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('review')}
-                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Eye className="w-4 h-4" /> Open Full Review Editor →
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={saving || questions.length === 0}
+                    onClick={handleApproveAndSave}
+                    className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black inline-flex items-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50 transition-all"
+                  >
+                    {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    Approve &amp; Save All Questions
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/admin/mock-tests/${testId}/preview`)}
+                    className="px-3.5 py-2.5 rounded-xl bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                  >
+                    <Eye className="w-4 h-4 text-slate-600" /> Preview Test
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('review')}
+                    className="px-3.5 py-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#0056b3] border border-blue-200 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    Full Review Editor →
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-3">
@@ -1745,6 +2045,37 @@ or
                     </div>
                   );
                 })}
+              </div>
+
+              {/* Bottom Save Bar for Convenience */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-emerald-50 border-2 border-emerald-500 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                <div>
+                  <p className="text-xs font-black text-emerald-900 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    All {questions.length} questions ready to save
+                  </p>
+                  <p className="text-[11px] text-emerald-700 mt-0.5">
+                    Click Approve &amp; Save to store all questions and diagram references in the database.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={handleApproveAndSave}
+                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black inline-flex items-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50 transition-all"
+                  >
+                    {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    Approve &amp; Save All Questions
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/admin/mock-tests/${testId}/preview`)}
+                    className="px-4 py-2.5 rounded-xl bg-white hover:bg-emerald-100 text-emerald-900 border border-emerald-300 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                  >
+                    <Eye className="w-4 h-4 text-emerald-700" /> Preview Test
+                  </button>
+                </div>
               </div>
             </div>
           )}
