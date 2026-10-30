@@ -1147,15 +1147,9 @@ export const cgaService = {
     const courseName = (id: string) => courses.find((c: Row) => c.id === id)?.name ?? '';
 
     const materialList = materials.map((m) => toMaterial(m, courseName(m.course_id)));
-    const courseList = courses.map((c: Row) =>
-      toCourse(
-        c,
-        facultyName(c.faculty_id),
-        materialList.filter((m) => m.courseId === c.id).map((m) => m.id)
-      )
-    );
     let localTests: MockTest[] = [];
     let localDeletedIds: string[] = [];
+    let localDeletedMaterialIds: string[] = [];
     let localAttempts: TestAttempt[] = [];
     if (typeof window !== 'undefined') {
       try {
@@ -1174,10 +1168,26 @@ export const cgaService = {
         }
         const dt = localStorage.getItem('cga_deleted_tests');
         if (dt) localDeletedIds = JSON.parse(dt);
+        const dmat = localStorage.getItem('cga_deleted_materials');
+        if (dmat) localDeletedMaterialIds = JSON.parse(dmat);
         const at = localStorage.getItem('cga_test_attempts');
         if (at) localAttempts = JSON.parse(at);
       } catch {}
     }
+
+    const baseMaterials = materialList.length > 0 ? materialList : INITIAL_SEED_DATA.studyMaterials;
+    const mergedMaterialsMap = new Map<string, StudyMaterial>();
+    baseMaterials.forEach((m) => mergedMaterialsMap.set(m.id, m));
+    localDeletedMaterialIds.forEach((id) => mergedMaterialsMap.delete(id));
+    const finalStudyMaterials = Array.from(mergedMaterialsMap.values());
+
+    const courseList = courses.map((c: Row) =>
+      toCourse(
+        c,
+        facultyName(c.faculty_id),
+        finalStudyMaterials.filter((m) => m.courseId === c.id).map((m) => m.id)
+      )
+    );
 
     const testListMaster = tests.map((t) => toTest(t, courseName(t.course_id || t.series_id), false, true));
     const baseMasterTests = testListMaster.length > 0 ? testListMaster : INITIAL_SEED_DATA.mockTests;
@@ -1445,7 +1455,7 @@ export const cgaService = {
         achievements.length > 0
           ? (achievements.map((a: Row) => ({ ...a, photo: a.photo ?? '' })) as Achievement[])
           : INITIAL_SEED_DATA.achievements,
-      studyMaterials: materialList.length > 0 ? materialList : INITIAL_SEED_DATA.studyMaterials,
+      studyMaterials: finalStudyMaterials,
       mockTests: finalMockTests,
       testAttempts,
       students,
@@ -2434,6 +2444,38 @@ export const cgaService = {
   },
 
   async upsertMaterial(m: StudyMaterial): Promise<ServiceResult> {
+    invalidateDbCache();
+    if (typeof window !== 'undefined') {
+      try {
+        const dmat = localStorage.getItem('cga_deleted_materials');
+        if (dmat) {
+          const list: string[] = JSON.parse(dmat);
+          const next = list.filter((x) => x !== m.id);
+          localStorage.setItem('cga_deleted_materials', JSON.stringify(next));
+        }
+      } catch {}
+    }
+
+    try {
+      let token: string | undefined;
+      try {
+        const s = (await this.client().auth.getSession()).data?.session;
+        token = s?.access_token;
+      } catch {}
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch('/api/admin/materials', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(m),
+      });
+      if (res.ok) {
+        invalidateDbCache();
+        return { success: true };
+      }
+    } catch {}
+
     const { error } = await this.client().from('study_materials').upsert({
       id: m.id,
       title: m.title,
@@ -2448,7 +2490,41 @@ export const cgaService = {
     });
     return error ? { success: false, error: msg(error, 'Save failed.') } : { success: true };
   },
-  async deleteMaterial(id: string) {
+  async deleteMaterial(id: string): Promise<ServiceResult> {
+    invalidateDbCache();
+    // 1. Immediately track as deleted locally so it never resurrects
+    if (typeof window !== 'undefined') {
+      try {
+        const dmat = localStorage.getItem('cga_deleted_materials');
+        const list: string[] = dmat ? JSON.parse(dmat) : [];
+        if (!list.includes(id)) {
+          list.push(id);
+          localStorage.setItem('cga_deleted_materials', JSON.stringify(list));
+        }
+      } catch {}
+    }
+
+    // 2. Cascade delete on the server via dedicated admin route
+    try {
+      let token: string | undefined;
+      try {
+        const s = (await this.client().auth.getSession()).data?.session;
+        token = s?.access_token;
+      } catch {}
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`/api/admin/materials?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers,
+      });
+      if (res.ok) {
+        invalidateDbCache();
+        return { success: true };
+      }
+    } catch {}
+
+    // 3. Fallback direct database delete
     const { error } = await this.client().from('study_materials').delete().eq('id', id);
     return error ? { success: false, error: msg(error, 'Delete failed.') } : { success: true };
   },

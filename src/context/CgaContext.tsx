@@ -1005,6 +1005,10 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
   );
   const deleteMaterial = useCallback(
     async (id: string) => {
+      setDb((prev) => ({
+        ...prev,
+        studyMaterials: prev.studyMaterials.filter((m) => m.id !== id),
+      }));
       await run(cgaService.deleteMaterial(id), {
         title: 'Study Material Deleted',
         message: 'PDF resource removed from the library.',
