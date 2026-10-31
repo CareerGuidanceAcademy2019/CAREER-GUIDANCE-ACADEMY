@@ -35,7 +35,13 @@ import {
   Info,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
-import { ParsedMCQ, parseRawQuestionsText, generateMCQTemplateCsv, validateParsedQuestions } from '@/lib/mcqParser';
+import {
+  ParsedMCQ,
+  parseRawQuestionsText,
+  generateMCQTemplateCsv,
+  validateParsedQuestions,
+  extractRichClipboardQuestionText,
+} from '@/lib/mcqParser';
 import { MathText } from '@/components/ui/MathText';
 import { MockQuestionImage } from '@/components/mock-tests/MockQuestionImage';
 import { MockQuestionGroup, MockQuestionOption, getOptionText, getOptionImage } from '@/data/initialSeedData';
@@ -2061,6 +2067,17 @@ Explanation: ৪২তম সংবিধান সংশোধনী দ্ব�
                 rows={13}
                 value={pastedText}
                 onChange={(e) => setPastedText(e.target.value)}
+                onPaste={(e) => {
+                  const html = e.clipboardData?.getData('text/html');
+                  const plain = e.clipboardData?.getData('text/plain') || '';
+                  if (html || plain) {
+                    const enriched = extractRichClipboardQuestionText(html || '', plain);
+                    if (enriched && enriched !== plain) {
+                      e.preventDefault();
+                      setPastedText(enriched);
+                    }
+                  }
+                }}
                 placeholder={`1. In the circuit diagram shown below, find the equivalent resistance between terminals A and B.
 (A) 5 Ω
 (B) 10 Ω
@@ -2404,21 +2421,22 @@ Explanation: The two 20 Ω parallel resistors yield 10 Ω equivalent resistance.
                             </span>
                           </div>
 
-                          <p className="text-xs font-semibold text-slate-800 line-clamp-2">
-                            {q.question || 'No question statement'}
-                          </p>
+                          <div className="text-xs font-semibold text-slate-800 leading-relaxed">
+                            <MathText text={q.question || 'No question statement'} />
+                          </div>
 
                           <div className="flex flex-wrap gap-2 text-[11px] text-slate-500">
                             {q.options.map((opt, oIdx) => (
                               <span
                                 key={oIdx}
-                                className={`px-2 py-0.5 rounded-lg border ${
+                                className={`px-2 py-0.5 rounded-lg border inline-flex items-center gap-1 ${
                                   q.correctOptionIndex === oIdx
                                     ? 'bg-emerald-100 border-emerald-300 text-emerald-900 font-bold'
                                     : 'bg-slate-50 border-slate-200 text-slate-600'
                                 }`}
                               >
-                                ({String.fromCharCode(65 + oIdx)}) {getOptionText(opt)}
+                                <span className="font-bold">({String.fromCharCode(65 + oIdx)})</span>
+                                <MathText text={getOptionText(opt)} isOption />
                               </span>
                             ))}
                           </div>
@@ -2787,6 +2805,17 @@ Explanation: The concluding sentence emphasizes circular economies and renewable
                   rows={12}
                   value={passageQuestionsText}
                   onChange={(e) => setPassageQuestionsText(e.target.value)}
+                  onPaste={(e) => {
+                    const html = e.clipboardData?.getData('text/html');
+                    const plain = e.clipboardData?.getData('text/plain') || '';
+                    if (html || plain) {
+                      const enriched = extractRichClipboardQuestionText(html || '', plain);
+                      if (enriched && enriched !== plain) {
+                        e.preventDefault();
+                        setPassageQuestionsText(enriched);
+                      }
+                    }
+                  }}
                   placeholder={`1. According to the author, what was the primary cause of the change?
 (A) First option choice
 (B) Second option choice
@@ -2942,7 +2971,9 @@ Ans: A`}
                             >
                               <div className="flex-1 min-w-0">
                                 <span className="font-black text-purple-900 mr-2">Q{lq.position}.</span>
-                                <span className="font-semibold text-slate-800">{lq.question}</span>
+                                <span className="font-semibold text-slate-800">
+                                  <MathText text={lq.question} />
+                                </span>
                                 <span className="ml-2 text-[11px] font-bold text-emerald-700">
                                   (Ans: {String.fromCharCode(65 + (lq.correctOptionIndex ?? 0))})
                                 </span>
@@ -3003,7 +3034,9 @@ Ans: A`}
                             Passage
                           </span>
                         )}
-                        <span className="font-semibold text-slate-800">{q.question}</span>
+                        <span className="font-semibold text-slate-800">
+                          <MathText text={q.question} />
+                        </span>
                       </div>
                       <button
                         type="button"

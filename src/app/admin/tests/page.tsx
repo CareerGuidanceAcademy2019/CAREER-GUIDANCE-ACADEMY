@@ -46,7 +46,8 @@ import { MockTest, MCQQuestion, MockSubjectPost, getOptionText } from '@/data/in
 import { MockSeries, MOCK_SERIES_INITIAL, getSubjectLanguageMode } from '@/data/mockSeriesSeedData';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { CustomCheckSvg, CustomCrossSvg } from '@/components/ui/CustomIcons';
-import { parseRawQuestionsText } from '@/lib/mcqParser';
+import { MathText } from '@/components/ui/MathText';
+import { parseRawQuestionsText, extractRichClipboardQuestionText } from '@/lib/mcqParser';
 import { MockTestStorageMeter } from '@/components/admin/MockTestStorageMeter';
 
 export interface MockSubjectItem {
@@ -3319,6 +3320,17 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                     rows={6}
                     value={pastedText}
                     onChange={(e) => setPastedText(e.target.value)}
+                    onPaste={(e) => {
+                      const html = e.clipboardData?.getData('text/html');
+                      const plain = e.clipboardData?.getData('text/plain') || '';
+                      if (html || plain) {
+                        const enriched = extractRichClipboardQuestionText(html || '', plain);
+                        if (enriched && enriched !== plain) {
+                          e.preventDefault();
+                          setPastedText(enriched);
+                        }
+                      }
+                    }}
                     placeholder="1. Question statement...&#10;(A) Option A&#10;(B) Option B&#10;(C) Option C&#10;(D) Option D&#10;Ans: A&#10;Explanation: Solution notes..."
                     className="w-full p-3.5 rounded-2xl border border-slate-200 bg-white font-mono text-xs focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
                   />
@@ -3654,6 +3666,17 @@ Explanation: Paragraph 1 highlights exponential industrial growth and urban expa
                       rows={5}
                       value={modalPassageQsText}
                       onChange={(e) => setModalPassageQsText(e.target.value)}
+                      onPaste={(e) => {
+                        const html = e.clipboardData?.getData('text/html');
+                        const plain = e.clipboardData?.getData('text/plain') || '';
+                        if (html || plain) {
+                          const enriched = extractRichClipboardQuestionText(html || '', plain);
+                          if (enriched && enriched !== plain) {
+                            e.preventDefault();
+                            setModalPassageQsText(enriched);
+                          }
+                        }
+                      }}
                       placeholder="1. Question linked to the passage...&#10;(A) Option A&#10;(B) Option B&#10;(C) Option C&#10;(D) Option D&#10;Ans: B&#10;Explanation: Refer to paragraph 1..."
                       className="w-full p-3 rounded-xl border border-slate-200 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-[#0056b3] bg-white"
                     />
@@ -3775,15 +3798,15 @@ Explanation: Paragraph 1 highlights exponential industrial growth and urban expa
                           }`}
                         >
                           <div className="flex items-start justify-between gap-3">
-                            <div className="flex-1 space-y-0.5">
-                              <p className="font-extrabold text-slate-900 text-xs">
+                            <div className="flex-1 space-y-1">
+                              <div className="font-extrabold text-slate-900 text-xs leading-relaxed">
                                 <span className="text-[#0056b3] font-bold mr-1.5">Q{idx + 1}.</span>
-                                {q.question}
-                              </p>
+                                <MathText text={q.question} />
+                              </div>
                               {q.questionBn && (
-                                <p className="text-[11px] font-semibold text-blue-900">
-                                  {q.questionBn}
-                                </p>
+                                <div className="text-[11px] font-semibold text-blue-900 leading-relaxed">
+                                  <MathText text={q.questionBn} />
+                                </div>
                               )}
                             </div>
                             <button
@@ -3857,11 +3880,13 @@ Explanation: Paragraph 1 highlights exponential industrial growth and urban expa
                                     {String.fromCharCode(65 + oIdx)}
                                   </span>
                                   <div className="truncate flex-1">
-                                    <span className="truncate block text-xs">{getOptionText(opt)}</span>
+                                    <div className="truncate block text-xs">
+                                      <MathText text={getOptionText(opt)} isOption />
+                                    </div>
                                     {optBn && (
-                                      <span className="truncate block text-[10px] text-slate-500">
-                                        {getOptionText(optBn)}
-                                      </span>
+                                      <div className="truncate block text-[10px] text-slate-500">
+                                        <MathText text={getOptionText(optBn)} isOption />
+                                      </div>
                                     )}
                                   </div>
                                 </button>

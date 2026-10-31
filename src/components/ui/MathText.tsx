@@ -103,13 +103,79 @@ function renderTableHtml(rows: string[][]): string {
 }
 
 /**
- * Converts KaTeX formulas ($...$ and $$...$$) and formats superscripts/subscripts.
+ * Normalizes Unicode mathematical alphanumeric characters (from MS Word Equation Editor)
+ * and converts algebraic fraction patterns like (a+b)/c or \frac{a+b}{c} into LaTeX $...$
+ * so KaTeX renders real vertical stacked fractions.
+ */
+function preprocessMathExpressions(input: string): string {
+  if (!input) return '';
+
+  // 1. Convert Unicode Mathematical Alphanumeric Symbols (U+1D400..U+1D7FF) from Word equations to standard letters/digits
+  let text = Array.from(input)
+    .map((ch) => {
+      const cp = ch.codePointAt(0) || 0;
+      // Mathematical Bold/Italic/Sans/Monospace कैपिटल & small letters
+      if (cp >= 0x1d400 && cp <= 0x1d6a3) {
+        const offsets: [number, number, number][] = [
+          [0x1d400, 0x1d419, 65], // Bold A-Z
+          [0x1d41a, 0x1d433, 97], // Bold a-z
+          [0x1d434, 0x1d44d, 65], // Italic A-Z
+          [0x1d44e, 0x1d467, 97], // Italic a-z
+          [0x1d468, 0x1d481, 65], // Bold Italic A-Z
+          [0x1d482, 0x1d49b, 97], // Bold Italic a-z
+          [0x1d5a0, 0x1d5b9, 65], // Sans A-Z
+          [0x1d5ba, 0x1d5d3, 97], // Sans a-z
+          [0x1d5d4, 0x1d5ed, 65], // Sans Bold A-Z
+          [0x1d5ee, 0x1d607, 97], // Sans Bold a-z
+          [0x1d608, 0x1d621, 65], // Sans Italic A-Z
+          [0x1d622, 0x1d63b, 97], // Sans Italic a-z
+        ];
+        for (const [start, end, base] of offsets) {
+          if (cp >= start && cp <= end) {
+            return String.fromCharCode(base + (cp - start));
+          }
+        }
+      }
+      if (cp === 0x210e) return 'h'; // Planck constant italic h used by Word for italic 'h'
+      return ch;
+    })
+    .join('');
+
+  // 2. Wrap bare \frac{...}{...} not already inside $...$ into $\frac{...}{...}$
+  text = text.replace(/(?<!\$)\\frac\{([^{}]+)\}\{([^{}]+)\}(?!\$)/g, '$\\frac{$1}{$2}$');
+
+  // 3. Convert parenthesized algebraic fractions outside $...$:
+  // e.g. (a+b)/c, (b+c)/a, (c+a)/b, (x+1)/(x-1), a/(b+c)
+  text = text.replace(
+    /\(([a-zA-Z0-9\+\-\s\^²³]{1,18})\)\s*\/\s*\(([a-zA-Z0-9\+\-\s\^²³]{1,18})\)/g,
+    '$\\frac{$1}{$2}$'
+  );
+  text = text.replace(
+    /\(([a-zA-Z0-9\+\-\s\^²³]{1,18})\)\s*\/\s*([a-zA-Z0-9\^²³]{1,8})(?![a-zA-Z0-9\/])/g,
+    '$\\frac{$1}{$2}$'
+  );
+  text = text.replace(
+    /(?<![a-zA-Z0-9\/])([a-zA-Z0-9\^²³]{1,8})\s*\/\s*\(([a-zA-Z0-9\+\-\s\^²³]{1,18})\)/g,
+    '$\\frac{$1}{$2}$'
+  );
+
+  // 4. Convert unparenthesized algebraic fractions in equations (e.g. a+b/c = b+c/a = c+a/b = k)
+  text = text.replace(
+    /(?<![a-zA-Z0-9\/\\$])([a-zA-Z0-9\^²³]{1,6}(?:[\+\-][a-zA-Z0-9\^²³]{1,6})+)\s*\/\s*([a-zA-Z0-9\^²³]{1,6})(?=\s*(?:[\=\+\-\,\)\?]|then|is|হয়|তবে|$))/gi,
+    '$\\frac{$1}{$2}$'
+  );
+
+  return text;
+}
+
+/**
+ * Converts KaTeX formulas ($...$ and $$...$$), formats superscripts/subscripts, and preserves line breaks.
  */
 function renderMathAndFormatting(rawText: string): string {
   if (!rawText) return '';
 
-  // 1. Process Markdown tables first
-  let content = parseMarkdownTables(rawText);
+  // 1. Preprocess Word Unicode math and algebraic fractions, then process Markdown tables
+  let content = parseMarkdownTables(preprocessMathExpressions(rawText));
 
   // 2. Process block math: $$ formula $$
   content = content.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => {
@@ -139,6 +205,9 @@ function renderMathAndFormatting(rawText: string): string {
   content = content.replace(/\^([0-9a-zA-Z+-]+)/g, '<sup>$1</sup>');
   // 5. Subscripts: e.g. H_2O or x_1 (outside tags)
   content = content.replace(/_([0-9a-zA-Z+-]+)/g, '<sub>$1</sub>');
+
+  // 6. Preserve exact line breaks (\n -> <br />) so multi-line questions never collapse into a single line
+  content = content.replace(/\n/g, '<br />');
 
   return content;
 }
