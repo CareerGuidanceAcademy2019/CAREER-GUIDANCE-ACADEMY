@@ -120,6 +120,16 @@ export function normalizeMathAndWordPaste(rawInput: string): string {
     '$\\frac{$1}{$2}$'
   );
 
+  // 5. Clean up mathematical ratios with spaces around colon: "3 : 1" -> "3:1", "1 : 1 : 2" -> "1:1:2"
+  // Normalize Unicode ratio (U+2236) and full-width colon (U+FF1A) to standard ASCII ':'
+  text = text.replace(/[\u2236\uFF1A]/g, ':');
+  // Normalize numeric ratios with spaces: "3 : 1" -> "3:1"
+  text = text.replace(/(?<=\d)[ \t]*:[ \t]*(?=\d)/g, ':');
+  // Normalize Bengali numeric ratios: "৩ : ১" -> "৩:১"
+  text = text.replace(/(?<=[\u09E6-\u09EF])[ \t]*:[ \t]*(?=[\u09E6-\u09EF])/g, ':');
+  // Normalize algebraic ratios: "a : b : c" -> "a:b:c"
+  text = text.replace(/(?<=\b[a-zA-Z])[ \t]*:[ \t]*(?=[a-zA-Z]\b)/g, ':');
+
   return text;
 }
 
@@ -285,12 +295,31 @@ export function parseSeparateAnswerKey(keyText: string): Record<number, number> 
   const map: Record<number, number> = {};
 
   // Matches formats: "1-B", "1:A", "1. (C)", "Q1: D", "1 | B"
+  // Ensures numeric ratios like "3:1" or "1:1:2" in text notes are NEVER matched as question-answer keys!
   const regex = /(?:Q(?:uestion)?\.?\s*)?(\d+)[\.\:\-\|\)\s]+(?:\()?\[?(?:Option\s*)?([A-Da-d1-4])\]?(?:\))?/g;
   let m: RegExpExecArray | null;
 
   while ((m = regex.exec(cleanText)) !== null) {
+    const rawMatch = m[0];
     const qNum = parseInt(m[1], 10);
-    const char = m[2].toUpperCase();
+    const ansChar = m[2];
+
+    // Mathematical Ratio Protection:
+    // If the answer is a numeric digit (1-4) and the separator is a bare colon without whitespace (e.g. "3:1", "1:1"),
+    // this is a mathematical ratio, NOT an answer key!
+    if (/^[1-4]$/.test(ansChar)) {
+      const isBareColon = rawMatch.includes(':') && !/q/i.test(rawMatch) && !/option/i.test(rawMatch) && !/\s+/.test(rawMatch);
+      if (isBareColon) {
+        continue;
+      }
+      // Also check if followed by another ratio term like ":2" in "1:1:2"
+      const afterMatch = cleanText.slice(m.index + rawMatch.length);
+      if (/^\s*:\s*\d+/.test(afterMatch)) {
+        continue;
+      }
+    }
+
+    const char = ansChar.toUpperCase();
     let idx = 0;
     if (char === 'A' || char === '1') idx = 0;
     else if (char === 'B' || char === '2') idx = 1;
@@ -302,13 +331,13 @@ export function parseSeparateAnswerKey(keyText: string): Record<number, number> 
   return map;
 }
 
-/** Maps an option label character (A-D, a-d, ক-ঘ) to option index 0..3 */
+/** Maps an option label character (A-D, a-d, 1-4, ক-ঘ) to option index 0..3 */
 function optionCharToIndex(ch: string): number {
   const c = ch.trim();
-  if (c === 'A' || c === 'a' || c === 'ক') return 0;
-  if (c === 'B' || c === 'b' || c === 'খ') return 1;
-  if (c === 'C' || c === 'c' || c === 'গ') return 2;
-  if (c === 'D' || c === 'd' || c === 'ঘ') return 3;
+  if (c === 'A' || c === 'a' || c === 'ক' || c === '1') return 0;
+  if (c === 'B' || c === 'b' || c === 'খ' || c === '2') return 1;
+  if (c === 'C' || c === 'c' || c === 'গ' || c === '3') return 2;
+  if (c === 'D' || c === 'd' || c === 'ঘ' || c === '4') return 3;
   return -1;
 }
 
@@ -319,22 +348,27 @@ interface OptionToken {
 }
 
 /**
- * Finds all valid option markers (a., b., c., d. / (A), (B), (C), (D) / ক., খ., গ., ঘ.)
- * without ever matching math ratios like a:b:c or 1:1:2.
+ * Finds all valid option markers (a., b., c., d. / (A), (B), (C), (D) / a:, b:, c:, d: / ক., খ., গ., ঘ.)
+ * without ever matching math ratios like a:b:c, 3:1, or 1:1:2.
  */
 function findOptionTokens(text: string): OptionToken[] {
+  // Option markers can be:
+  // - Parenthesized or bracketed: (A), [A], (A):, [A]:, (a), (a):, (1), (2), (3), (4)
+  // - Dotted/closed paren: A., A), a., a), ক., ক)
+  // - Colon-separated: A:, B:, a:, b:, ক: ONLY when followed by whitespace and NOT part of a ratio (not followed by digit or variable:col)
   const optMarkerRegex =
-    /(?:^|\n|[ \t]+)(?:\(\s*([A-Da-dক-ঘ])\s*\)|\[\s*([A-Da-dক-ঘ])\s*\]|([A-Da-dক-ঘ])[\.\)])(?:\s+|(?=[0-9\(\$\u0980-\u09FF]))/g;
+    /(?:^|\n|[ \t]+)(?:\(\s*([A-Da-dক-ঘ1-4])\s*\)[:\.]?|\[\s*([A-Da-dক-ঘ1-4])\s*\][:\.]?|([A-Da-dক-ঘ])[\.\)]|([A-Da-dক-ঘ]):(?!\d)(?![a-zA-Z0-9]\s*:))(?:\s+|(?=[0-9\(\$\u0980-\u09FF]))/g;
   const tokens: OptionToken[] = [];
   let m: RegExpExecArray | null;
   while ((m = optMarkerRegex.exec(text)) !== null) {
-    const rawChar = m[1] || m[2] || m[3] || '';
+    const rawChar = m[1] || m[2] || m[3] || m[4] || '';
     const optIdx = optionCharToIndex(rawChar);
     if (optIdx !== -1) {
       // If match started with \n or spaces, keep markerStart at the start of the delimiter (or \n)
       const leadingWsMatch = m[0].match(/^[\n \t]+/);
       const leadingLen = leadingWsMatch ? leadingWsMatch[0].length : 0;
-      // Only allow inline (non-newline) bare "a." if preceded by at least 2 spaces/tabs OR if after a previous option on the same line
+      // Bare (non-parenthesized) markers like "a." or "a:" require being at line-start or preceded by >= 2 spaces/tabs
+      // to avoid matching prose words like "is a." or equation ratios like "then a:b:c"
       const isNewlineStart = m.index === 0 || m[0].startsWith('\n');
       const isParenthesized = Boolean(m[1] || m[2]);
       if (!isNewlineStart && !isParenthesized) {
@@ -497,8 +531,9 @@ export function parseRawQuestionsText(rawText: string, separateKeyText?: string)
 
   // 2. Identify question boundaries
   // Matches: "24. If...", "Q24. ", "Question 24:", "Q.24 ", "(24) ", "24) " at start of line
+  // Note: uses :(?!\d) so that a numeric ratio like "\n3:1, its number of sides..." is never mistaken for question 3!
   const questionPattern =
-    /(?:^|\n)[ \t]*(?:Q(?:uestion)?\.?\s*(\d+)[\.\:\)\-]?\s*|\((\d+)\)\s*|(\d+)[\.\)](?:\s+|(?=[A-Za-z\u0980-\u09FF\(\$])))/gi;
+    /(?:^|\n)[ \t]*(?:Q(?:uestion)?\.?\s*(\d+)[\.\:\)\-]?\s*|\((\d+)\)\s*|(\d+)(?:[\.\)]|:(?!\d))(?:\s+|(?=[A-Za-z\u0980-\u09FF\(\$])))/gi;
 
   const indices: { start: number; qNum: number }[] = [];
   let m: RegExpExecArray | null;
@@ -581,7 +616,10 @@ export function parseRawQuestionsText(rawText: string, separateKeyText?: string)
 
     // Strip leading question number (e.g. "24. ", "Q24. ", "(24) ")
     body = body
-      .replace(/^[ \t]*(?:Q(?:uestion)?\.?\s*\d+[\.\:\)\-]?\s*|\(\d+\)\s*|\d+[\.\)](?:\s+|(?=[A-Za-z\u0980-\u09FF\(\$])))/i, '')
+      .replace(
+        /^[ \t]*(?:Q(?:uestion)?\.?\s*\d+[\.\:\)\-]?\s*|\(\d+\)\s*|\d+(?:[\.\)]|:(?!\d))(?:\s+|(?=[A-Za-z\u0980-\u09FF\(\$])))/i,
+        ''
+      )
       .trim();
 
     // Find ordered options (A, B, C, D / a, b, c, d / ক, খ, গ, ঘ) without matching ratios like a:b:c or 1:1:2
