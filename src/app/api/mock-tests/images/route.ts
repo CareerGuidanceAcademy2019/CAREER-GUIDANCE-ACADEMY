@@ -63,7 +63,7 @@ export async function GET(request: Request) {
   // Gate 1: Fetch the test details
   const { data: test, error: testErr } = await supabaseAdmin
     .from('mock_tests')
-    .select('id, series_id, course_id, status, window_start, window_end, show_solutions, questions, question_groups')
+    .select('id, series_id, course_id, status, window_start, window_end, show_solutions, questions')
     .eq('id', testId)
     .maybeSingle();
 
@@ -165,15 +165,6 @@ export async function GET(request: Request) {
       .eq('image_path', path)
       .maybeSingle();
     if (groupMatch) belongsToTest = true;
-  }
-
-  if (!belongsToTest && Array.isArray(test.question_groups)) {
-    for (const g of test.question_groups) {
-      if (g && (g.imagePath === path || g.image_path === path)) {
-        belongsToTest = true;
-        break;
-      }
-    }
   }
 
   if (!belongsToTest && Array.isArray(test.questions)) {
