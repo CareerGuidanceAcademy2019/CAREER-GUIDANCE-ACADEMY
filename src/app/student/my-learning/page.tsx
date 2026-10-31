@@ -21,6 +21,7 @@ import {
   UserCheck,
   AlertCircle,
   HelpCircle,
+  Eye,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
 import { MockTest, StudentEnrollment, FeePayment } from '@/data/initialSeedData';
@@ -635,8 +636,14 @@ export default function StudentMyLearningPage() {
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {filteredTests.map((test) => {
-                const pastAttempt = studentAttempts.find((a) => a.testId === test.id);
-                const isPublished = ['published', 'launched'].includes(String(test.status || '').toLowerCase());
+                const pastAttempts = studentAttempts.filter(
+                  (a) => a.testId === test.id && Boolean(a.submittedAt || (a as any).submitted_at)
+                );
+                const attemptsUsed = pastAttempts.length;
+                const maxAttempts = Number(test.attemptsAllowed || (test as any).attempts_allowed || 1);
+                const canRetake = attemptsUsed > 0 && attemptsUsed < maxAttempts;
+                const latestAttempt = pastAttempts[pastAttempts.length - 1] || studentAttempts.find((a) => a.testId === test.id);
+                const isPublished = ['published', 'launched', 'ready'].includes(String(test.status || '').toLowerCase());
                 const hasDriveLink = !!test.driveLink && test.driveLink.trim().length > 0;
 
                 return (
@@ -657,7 +664,7 @@ export default function StudentMyLearningPage() {
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold">
-                              <Lock className="w-3.5 h-3.5" /> Unpublished / Draft
+                              <Lock className="w-3.5 h-3.5" /> Not Published by Academy
                             </span>
                           )}
                         </div>
@@ -676,7 +683,7 @@ export default function StudentMyLearningPage() {
                       </div>
 
                       {/* Key Test Specs */}
-                      <div className="grid grid-cols-3 gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-100 text-center text-xs">
+                      <div className="grid grid-cols-4 gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-100 text-center text-xs">
                         <div>
                           <span className="text-slate-400 text-[10px] block">Duration</span>
                           <span className="font-extrabold text-slate-900">
@@ -693,6 +700,12 @@ export default function StudentMyLearningPage() {
                           <span className="text-slate-400 text-[10px] block">Questions</span>
                           <span className="font-extrabold text-slate-900">
                             {test.questions?.length || 0} MCQs
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 text-[10px] block">Attempts</span>
+                          <span className="font-extrabold text-blue-700">
+                            {maxAttempts} Allowed
                           </span>
                         </div>
                       </div>
@@ -715,29 +728,73 @@ export default function StudentMyLearningPage() {
                             <ClipboardCheck className="w-4 h-4 text-[#0056b3]" />
                             <span>1. Computer-Based Online Test (CBT)</span>
                           </span>
-                          {pastAttempt && (
+                          {latestAttempt && (
                             <span className="text-xs font-black text-emerald-700 bg-emerald-100/70 px-2.5 py-0.5 rounded-full">
-                              Score: {pastAttempt.score}/{pastAttempt.totalMarks} ({pastAttempt.accuracy}%)
+                              Score: {latestAttempt.score}/{latestAttempt.totalMarks} ({latestAttempt.accuracy}%)
                             </span>
                           )}
                         </div>
 
                         {isPublished ? (
                           <div className="space-y-2">
-                            <p className="text-xs text-slate-600">
-                              {pastAttempt
-                                ? 'Single Attempt Policy: You have already submitted this mock exam (1/1 attempts used). You can view your scorecard, question analysis, and complete solutions below.'
-                                : 'This test is live and ready. The launch window is open for enrolled students.'}
-                            </p>
-                            <button
-                              type="button"
-                              onClick={() => router.push(`/student/tests?testId=${test.id}`)}
-                              className="w-full py-2.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
-                            >
-                              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                              <span>{pastAttempt ? 'View Results & Solutions (Attempted 1/1)' : 'Appear for Test Now'}</span>
-                              <ArrowRight className="w-3.5 h-3.5" />
-                            </button>
+                            {attemptsUsed === 0 && (
+                              <>
+                                <p className="text-xs text-slate-600">
+                                  This mock test is live and ready. Enrolled candidates can appear now. ({maxAttempts} attempt{maxAttempts > 1 ? 's' : ''} permitted).
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => router.push(`/student/tests?testId=${test.id}`)}
+                                  className="w-full py-2.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+                                >
+                                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                                  <span>Appear for Test Now</span>
+                                  <ArrowRight className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            )}
+
+                            {canRetake && (
+                              <>
+                                <p className="text-xs text-slate-600">
+                                  You have used {attemptsUsed} of {maxAttempts} allowed attempt(s). You can retake this mock exam to improve your performance or review your previous scorecard.
+                                </p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => router.push(`/student/tests?testId=${test.id}&retake=true`)}
+                                    className="w-full py-2.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                                  >
+                                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                                    <span>Retake ({attemptsUsed + 1}/{maxAttempts})</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => router.push(`/student/tests?testId=${test.id}`)}
+                                    className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                                  >
+                                    <Eye className="w-3.5 h-3.5 text-slate-600" />
+                                    <span>Scorecard &amp; Solutions</span>
+                                  </button>
+                                </div>
+                              </>
+                            )}
+
+                            {attemptsUsed >= maxAttempts && attemptsUsed > 0 && (
+                              <>
+                                <p className="text-xs text-slate-600">
+                                  Attempt limit reached: All {maxAttempts} permitted attempt(s) have been completed. You can view your scorecard, question analysis, and complete solutions below.
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => router.push(`/student/tests?testId=${test.id}`)}
+                                  className="w-full py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  <span>View Results &amp; Solutions ({attemptsUsed}/{maxAttempts} Used)</span>
+                                </button>
+                              </>
+                            )}
                           </div>
                         ) : (
                           <div className="space-y-2">
@@ -750,7 +807,7 @@ export default function StudentMyLearningPage() {
                               className="w-full py-2.5 rounded-xl bg-slate-200 text-slate-400 text-xs font-bold cursor-not-allowed flex items-center justify-center gap-1.5"
                             >
                               <Lock className="w-3.5 h-3.5" />
-                              <span>Attempt Test (Unpublished - Launch Disabled)</span>
+                              <span>Not Published by Academy</span>
                             </button>
                           </div>
                         )}

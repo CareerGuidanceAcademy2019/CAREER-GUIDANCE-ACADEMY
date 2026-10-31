@@ -306,21 +306,70 @@ export default function StudentMockTestsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTest]);
 
+  // Real-time heartbeat effect: immediately eject candidate if test is unpublished by admin
+  useEffect(() => {
+    if (!activeTest?.id) return;
+
+    let isMounted = true;
+    const checkLiveStatus = async () => {
+      try {
+        const res = await fetch(`/api/mock-tests/status?id=${encodeURIComponent(activeTest.id)}`, {
+          cache: 'no-store',
+        });
+        if (!isMounted) return;
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          if (!data.isPublished || !data.isLive) {
+            ejectActiveTest('Test Session Expired', 'The administrator has unpublished or removed this test session. Your test window has expired immediately.');
+          }
+          return;
+        }
+        const data = await res.json();
+        if (!data.isPublished || !data.isLive) {
+          ejectActiveTest('Test Window Closed', 'The administrator has unpublished this test. No students are permitted to remain in an unpublished test window.');
+        }
+      } catch {
+        // Silently tolerate brief client network blips
+      }
+    };
+
+    const ejectActiveTest = (title: string, desc: string) => {
+      setActiveTest(null);
+      setSelectedAnswers({});
+      setMarkedForReview({});
+      setIsStartingTest(false);
+      showToast(title, desc, 'error');
+      if (typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, behavior: 'instant' });
+      }
+    };
+
+    // Heartbeat every 5 seconds
+    const interval = setInterval(checkLiveStatus, 5000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [activeTest?.id]);
+
   if (!currentStudent) return null;
 
   const startTest = async (test: any) => {
-    // 1. Strict Single Attempt Check: Candidates can appear for a mock test only once
-    const pastAttempt = myPastAttempts.find(
+    // 1. Attempts Allowed Check: Candidates can appear up to the configured limit
+    const pastSubmittedAttempts = myPastAttempts.filter(
       (a) => a.testId === test.id && Boolean(a.submittedAt || (a as any).submitted_at)
     );
-    if (pastAttempt) {
+    const maxAllowedAttempts = Number(test.attemptsAllowed || (test as any).attempts_allowed || 1);
+
+    if (pastSubmittedAttempts.length >= maxAllowedAttempts) {
       showToast(
-        'Single Attempt Policy',
-        'You have already appeared for this mock test. Each candidate is permitted only one attempt. Loading your detailed solutions and scorecard.',
+        'Attempt Limit Reached',
+        `You have already completed all ${maxAllowedAttempts} permitted attempt(s) for this mock test. Viewing your latest scorecard and detailed solutions.`,
         'info'
       );
       setIsStartingTest(false);
-      setCompletedAttempt(pastAttempt);
+      const latestAttempt = pastSubmittedAttempts[pastSubmittedAttempts.length - 1];
+      if (latestAttempt) setCompletedAttempt(latestAttempt);
       if (typeof window !== 'undefined') {
         window.scrollTo({ top: 0, behavior: 'instant' });
       }
@@ -459,18 +508,22 @@ export default function StudentMockTestsPage() {
   useEffect(() => {
     const testId = searchParams.get('testId');
     if (testId && !activeTest && !completedAttempt) {
-      // Check single attempt integrity first
-      const pastAttempt = myPastAttempts.find(
+      const match = db.mockTests.find((t) => t.id === testId);
+      const isMatchPublished = ['published', 'launched', 'ready'].includes((match?.status || '').toLowerCase());
+
+      const pastSubmittedAttempts = myPastAttempts.filter(
         (a) => a.testId === testId && Boolean(a.submittedAt || (a as any).submitted_at)
       );
-      if (pastAttempt) {
-        setCompletedAttempt(pastAttempt);
+      const maxAllowed = Number(match?.attemptsAllowed || (match as any)?.attempts_allowed || 1);
+
+      // If candidate has completed all allowed attempts and retake is not explicitly requested
+      if (pastSubmittedAttempts.length >= maxAllowed && pastSubmittedAttempts.length > 0) {
+        const latest = pastSubmittedAttempts[pastSubmittedAttempts.length - 1];
+        setCompletedAttempt(latest);
         setIsStartingTest(false);
         return;
       }
 
-      const match = db.mockTests.find((t) => t.id === testId);
-      const isMatchPublished = ['published', 'launched'].includes((match?.status || '').toLowerCase());
       if (match && isMatchPublished) {
         startTest(match);
       } else {
@@ -478,7 +531,7 @@ export default function StudentMockTestsPage() {
         if (match && !isMatchPublished) {
           showToast(
             'Test Not Launched Yet',
-            'This mock test is scheduled by the academy but not yet published. The attempt link will become active once published.',
+            'This mock test is scheduled by the academy but is currently unpublished. The attempt link will become active once published.',
             'info'
           );
         }
@@ -1775,8 +1828,12 @@ export default function StudentMockTestsPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {filtered.map((test) => {
                       const langMode = getTestLanguageMode(test);
-                      const existingAttempt = myPastAttempts.find((a) => a.testId === test.id);
+                      const testAttempts = myPastAttempts.filter(
+                        (a) => a.testId === test.id && Boolean(a.submittedAt || (a as any).submitted_at)
+                      );
+                      const latestAttempt = testAttempts[testAttempts.length - 1] || myPastAttempts.find((a) => a.testId === test.id);
                       const isTestEnrolled = isStudentEnrolledInTest(test);
+                      const maxAttempts = Number(test.attemptsAllowed || (test as any).attempts_allowed || 1);
 
                       return (
                         <div
@@ -1844,18 +1901,20 @@ export default function StudentMockTestsPage() {
                             <AppearTestButton
                               test={test}
                               isEnrolled={isTestEnrolled}
-                              attempt={existingAttempt ? {
-                                id: existingAttempt.id,
-                                score: existingAttempt.score,
-                                totalMarks: existingAttempt.totalMarks,
-                                accuracy: existingAttempt.accuracy,
-                                submittedAt: existingAttempt.submittedAt,
+                              attempt={latestAttempt ? {
+                                id: latestAttempt.id,
+                                score: latestAttempt.score,
+                                totalMarks: latestAttempt.totalMarks,
+                                accuracy: latestAttempt.accuracy,
+                                submittedAt: latestAttempt.submittedAt,
                               } : null}
+                              attemptCount={testAttempts.length}
+                              attemptsAllowed={maxAttempts}
                               onAppear={() => startTest(test)}
                               onEnrol={() => handleOpenSeriesCheckout(test.seriesId || selectedSeriesId)}
                               onViewSolutions={() => {
-                                if (existingAttempt) {
-                                  setCompletedAttempt(existingAttempt);
+                                if (latestAttempt) {
+                                  setCompletedAttempt(latestAttempt);
                                   if (typeof window !== 'undefined') {
                                     window.scrollTo({ top: 0, behavior: 'smooth' });
                                   }

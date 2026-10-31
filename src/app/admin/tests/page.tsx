@@ -39,6 +39,7 @@ import {
   PlusCircle,
   RefreshCw,
   Award,
+  RotateCcw,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCga } from '@/context/CgaContext';
@@ -501,6 +502,7 @@ export default function AdminMockTestsPage() {
       negativeMarking: 0,
       scheduledDate: new Date().toISOString().split('T')[0],
       status: 'Draft',
+      attemptsAllowed: 1,
       questions: [],
       questionGroups: [],
     });
@@ -1306,7 +1308,21 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
         status: nextStatus,
       },
       false,
-      nextStatus === 'Published' ? 'Test Launched Live!' : 'Test Set to Draft'
+      nextStatus === 'Published'
+        ? 'Test Launched Live! Enrolled candidates can now appear.'
+        : 'Test Unpublished: Any active candidate exam sessions are immediately expired.'
+    );
+  };
+
+  const handleUpdateAttemptsAllowed = async (test: MockTest, newAttempts: number) => {
+    const clamped = Math.max(1, newAttempts);
+    await saveMockTest(
+      {
+        ...test,
+        attemptsAllowed: clamped,
+      },
+      false,
+      `Attempts Allowed updated to ${clamped} for "${test.title}". Candidates can now appear up to ${clamped} time(s).`
     );
   };
 
@@ -1381,9 +1397,23 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
 
   const selectedTestObj = db.mockTests.find((t) => t.id === selectedTestForRanks) || db.mockTests[0];
 
-  const rawRankAttempts = db.testAttempts
-    .filter((a) => a.testId === (selectedTestObj?.id || selectedTestForRanks))
-    .sort((a, b) => b.score - a.score);
+  // Merit rank list: If candidate has multiple attempts, rank by their best score
+  const candidateBestAttemptsMap = new Map<string, (typeof db.testAttempts)[0]>();
+  for (const att of db.testAttempts.filter((a) => a.testId === (selectedTestObj?.id || selectedTestForRanks))) {
+    const key = att.studentId || att.studentName || att.id;
+    const prevBest = candidateBestAttemptsMap.get(key);
+    if (!prevBest) {
+      candidateBestAttemptsMap.set(key, att);
+    } else if (
+      att.score > prevBest.score ||
+      (att.score === prevBest.score && (att.timeTakenMinutes || 999) < (prevBest.timeTakenMinutes || 999))
+    ) {
+      candidateBestAttemptsMap.set(key, att);
+    }
+  }
+
+  const rawRankAttempts = Array.from(candidateBestAttemptsMap.values())
+    .sort((a, b) => b.score - a.score || (a.timeTakenMinutes || 0) - (b.timeTakenMinutes || 0));
 
   const filteredRankAttempts = rawRankAttempts.filter((att) => {
     if (!rankSearchQuery.trim()) return true;
@@ -1945,6 +1975,9 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                           <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold flex items-center gap-1">
                             <Lock className="w-2.5 h-2.5" /> Enrolled Students Only
                           </span>
+                          <span className="px-2 py-0.5 rounded-full bg-blue-50 text-[#0056b3] border border-blue-200 text-[10px] font-extrabold flex items-center gap-1">
+                            <RotateCcw className="w-2.5 h-2.5" /> {test.attemptsAllowed || 1} Attempt{((test.attemptsAllowed || 1) > 1) ? 's' : ''} Allowed
+                          </span>
                         </div>
 
                         {/* Language Mode Badge */}
@@ -1981,6 +2014,35 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                             className="w-full bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 font-semibold text-xs text-slate-800 cursor-pointer focus:ring-1 focus:ring-[#0056b3]"
                             title="Click to change the scheduled launch date"
                           />
+                        </div>
+
+                        {/* Admin Inline Attempts Allowed Manager */}
+                        <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-xs space-y-1.5">
+                          <div className="flex items-center justify-between text-slate-600 text-[11px]">
+                            <span className="font-bold flex items-center gap-1">
+                              <RotateCcw className="w-3.5 h-3.5 text-[#0056b3]" /> Attempts Allowed
+                            </span>
+                            <span className="text-[10px] text-blue-700 font-extrabold bg-blue-100/70 px-1.5 py-0.5 rounded">
+                              {test.attemptsAllowed || 1}x Allowed
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-4 gap-1">
+                            {[1, 2, 3, 5].map((cnt) => (
+                              <button
+                                key={cnt}
+                                type="button"
+                                onClick={() => void handleUpdateAttemptsAllowed(test, cnt)}
+                                className={`py-1 rounded-lg text-[10px] font-extrabold border transition-all cursor-pointer ${
+                                  (test.attemptsAllowed || 1) === cnt
+                                    ? 'bg-[#0056b3] text-white border-[#0056b3] shadow-2xs'
+                                    : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
+                                }`}
+                                title={`Set candidates to ${cnt} attempt(s)`}
+                              >
+                                {cnt}x
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       </div>
 
@@ -3204,7 +3266,7 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                 )}
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">Duration (Min)</label>
                   <input
@@ -3247,6 +3309,43 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                     }
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-semibold"
                   />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1 flex items-center justify-between">
+                    <span>Attempts Allowed *</span>
+                    <span className="text-[10px] text-blue-700 font-extrabold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                      {editingTest.attemptsAllowed || 1}x
+                    </span>
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={editingTest.attemptsAllowed || 1}
+                    onChange={(e) =>
+                      setEditingTest({
+                        ...editingTest,
+                        attemptsAllowed: Math.max(1, parseInt(e.target.value, 10) || 1),
+                      })
+                    }
+                    className="w-full px-3 py-2 rounded-xl border border-blue-200 bg-white font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
+                  />
+                  <div className="flex items-center gap-1 mt-1">
+                    {[1, 2, 3, 5].map((cnt) => (
+                      <button
+                        key={cnt}
+                        type="button"
+                        onClick={() => setEditingTest({ ...editingTest, attemptsAllowed: cnt })}
+                        className={`flex-1 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                          (editingTest.attemptsAllowed || 1) === cnt
+                            ? 'bg-[#0056b3] text-white border-[#0056b3]'
+                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {cnt}x
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>

@@ -63,15 +63,15 @@ export async function GET(request: Request) {
   // Gate 1: Fetch the test details
   const { data: test, error: testErr } = await supabaseAdmin
     .from('mock_tests')
-    .select('id, series_id, course_id, status, window_start, window_end, show_solutions')
+    .select('id, series_id, course_id, status, window_start, window_end, show_solutions, questions, question_groups')
     .eq('id', testId)
-    .single();
+    .maybeSingle();
 
   if (testErr || !test) {
     return NextResponse.json({ error: 'Mock test not found.' }, { status: 404 });
   }
 
-  // Gate 2: Enrolled in series or course
+  // Gate 2: Enrolled in series or course (or admin)
   let isEnrolled = false;
   if (test.series_id) {
     const { data: enr } = await supabaseAdmin
@@ -92,25 +92,51 @@ export async function GET(request: Request) {
     if (enrCourse) isEnrolled = true;
   }
 
+  // Fallback: Check if student has an existing mock attempt or test attempt
+  if (!isEnrolled) {
+    const { data: anyAttempt } = await supabaseAdmin
+      .from('mock_attempts')
+      .select('id')
+      .eq('test_id', testId)
+      .eq('student_id', studentUser.id)
+      .maybeSingle();
+    if (anyAttempt) isEnrolled = true;
+  }
+
   if (!isEnrolled) {
     return NextResponse.json({ error: 'Access forbidden. You are not enrolled in this mock test package.' }, { status: 403 });
   }
 
-  // Gate 3: Test window check (Postgres server time)
+  // Gate 3: Test status & window check
+  const statusLower = (test.status || '').toLowerCase();
+  const isLive = ['published', 'launched', 'ready'].includes(statusLower);
+  if (!isLive) {
+    return NextResponse.json({ error: 'Access denied: Test is currently in draft and not yet published.' }, { status: 403 });
+  }
+
   const now = new Date();
   const windowStart = test.window_start ? new Date(test.window_start) : null;
   const windowEnd = test.window_end ? new Date(test.window_end) : null;
 
-  // Gate 4: Student attempt state
+  if (windowStart && now < windowStart) {
+    return NextResponse.json({ error: 'Access denied: Test window has not started yet.' }, { status: 403 });
+  }
+  if (windowEnd && now > windowEnd) {
+    return NextResponse.json({ error: 'Access denied: Test window has expired.' }, { status: 403 });
+  }
+
+  // Gate 4: Student attempt state (Explanations require submission; questions/diagrams are open during test)
   const { data: attempt } = await supabaseAdmin
     .from('mock_attempts')
     .select('id, started_at, submitted_at')
     .eq('test_id', testId)
     .eq('student_id', studentUser.id)
+    .order('started_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (type === 'explanation') {
-    // Explanation images: served ONLY when solutions are allowed
+    // Explanation images: served ONLY when test is submitted and solutions are allowed
     if (!attempt || !attempt.submitted_at) {
       return NextResponse.json({ error: 'Access denied: You must submit the exam before viewing explanations.' }, { status: 403 });
     }
@@ -120,33 +146,56 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Access denied: Solutions are locked until the test window ends.' }, { status: 403 });
       }
     }
-    // If show_solutions === 'after_submit' and test is submitted, it is allowed!
-  } else {
-    // Regular question / group / option images:
-    // Window must be active
-    if (test.status !== 'launched' || !windowStart || !windowEnd || now < windowStart || now > windowEnd) {
-      return NextResponse.json({ error: 'Access denied: Test window is not currently open.' }, { status: 403 });
-    }
+  }
 
-    // Must have an active (unsubmitted) attempt
-    if (!attempt || attempt.submitted_at !== null) {
-      return NextResponse.json({ error: 'Access denied: No active in-progress attempt found for this test.' }, { status: 403 });
+  // Gate 5: Confirm image belongs to this test
+  let belongsToTest = false;
+
+  // Path prefix check: all diagrams uploaded for this test reside under `${testId}/...`
+  if (path.startsWith(testId + '/') || path.includes(`/${testId}/`) || path.includes(testId)) {
+    belongsToTest = true;
+  }
+
+  if (!belongsToTest) {
+    // Check mock_question_groups table
+    const { data: groupMatch } = await supabaseAdmin
+      .from('mock_question_groups')
+      .select('id')
+      .eq('test_id', testId)
+      .eq('image_path', path)
+      .maybeSingle();
+    if (groupMatch) belongsToTest = true;
+  }
+
+  if (!belongsToTest && Array.isArray(test.question_groups)) {
+    for (const g of test.question_groups) {
+      if (g && (g.imagePath === path || g.image_path === path)) {
+        belongsToTest = true;
+        break;
+      }
     }
   }
 
-  // Gate 5: Confirm image actually belongs to this test
-  // Check mock_question_groups
-  const { data: groupMatch } = await supabaseAdmin
-    .from('mock_question_groups')
-    .select('id')
-    .eq('test_id', testId)
-    .eq('image_path', path)
-    .maybeSingle();
-
-  let belongsToTest = Boolean(groupMatch);
+  if (!belongsToTest && Array.isArray(test.questions)) {
+    for (const q of test.questions) {
+      if (q && (q.imagePath === path || q.image_path === path || q.passageImagePath === path)) {
+        belongsToTest = true;
+        break;
+      }
+      if (Array.isArray(q?.options)) {
+        for (const opt of q.options) {
+          if (typeof opt === 'object' && opt !== null && (opt.image_path === path || opt.imagePath === path)) {
+            belongsToTest = true;
+            break;
+          }
+        }
+      }
+      if (belongsToTest) break;
+    }
+  }
 
   if (!belongsToTest) {
-    // Check mock_questions (image_path)
+    // Check mock_questions table
     const { data: qMatch } = await supabaseAdmin
       .from('mock_questions')
       .select('id, options, options_bn')
@@ -179,7 +228,6 @@ export async function GET(request: Request) {
       .eq('explanation_image_path', path);
 
     if (keyMatch && keyMatch.length > 0) {
-      // Ensure the question belongs to this test
       const qIds = keyMatch.map((k) => k.question_id);
       const { data: testQ } = await supabaseAdmin
         .from('mock_questions')

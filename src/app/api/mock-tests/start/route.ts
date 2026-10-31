@@ -228,10 +228,10 @@ export async function POST(request: Request) {
     const status = (testRecord.status || '').toLowerCase();
     const isLive = status === 'published' || status === 'launched' || status === 'ready';
     if (!isAdmin && !isLive) {
-      return NextResponse.json({ error: 'This mock test has not yet been launched live by administrators.' }, { status: 403 });
+      return NextResponse.json({ error: 'This mock test is currently unpublished or not yet launched live by administrators.' }, { status: 403 });
     }
 
-    // 2.5 Strict Single Attempt Enforcement: Each candidate can appear only once
+    // 2.5 Multi-Attempt Enforcement: Limit to configured attempts_allowed
     if (!isAdmin) {
       const [{ data: pastTestAttempts }, { data: pastMockAttempts }] = await Promise.all([
         admin
@@ -246,16 +246,19 @@ export async function POST(request: Request) {
           .eq('student_id', user.id),
       ]);
 
-      const hasSubmitted =
-        (pastTestAttempts || []).some((a: any) => a.submitted_at != null) ||
-        (pastMockAttempts || []).some((a: any) => a.submitted_at != null);
+      const submittedTestCount = (pastTestAttempts || []).filter((a: any) => a.submitted_at != null).length;
+      const submittedMockCount = (pastMockAttempts || []).filter((a: any) => a.submitted_at != null).length;
+      const totalSubmitted = Math.max(submittedTestCount, submittedMockCount);
+      const maxAllowed = Number((testRecord as any).attempts_allowed || (testRecord as any).attemptsAllowed || 1);
 
-      if (hasSubmitted) {
+      if (totalSubmitted >= maxAllowed) {
         return NextResponse.json(
           {
             error:
-              'Single Attempt Policy: You have already appeared for and submitted this mock test. Reattempts are not permitted. You can review your scorecard and solutions.',
+              `Attempt Limit Reached: You have completed all ${maxAllowed} permitted attempt(s) for this mock test. You can review your scorecard and solutions.`,
             alreadyAttempted: true,
+            attemptsUsed: totalSubmitted,
+            attemptsAllowed: maxAllowed,
           },
           { status: 403 }
         );
@@ -459,23 +462,37 @@ export async function POST(request: Request) {
     let startedAt = new Date().toISOString();
     let savedAnswers: Record<string, number> = {};
     if (!isAdmin) {
-      const { data: existingMockAtt } = await admin
+      // Look for an existing in-progress (unsubmitted) attempt
+      const { data: inProgressAtt } = await admin
         .from('mock_attempts')
-        .select('id, started_at, submitted_at, answers')
+        .select('id, started_at, submitted_at, answers, attempt_number')
         .eq('test_id', testId)
         .eq('student_id', user.id)
+        .is('submitted_at', null)
+        .order('started_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
 
-      if (existingMockAtt) {
-        startedAt = existingMockAtt.started_at || startedAt;
-        savedAnswers = (existingMockAtt.answers as Record<string, number>) || {};
+      if (inProgressAtt) {
+        startedAt = inProgressAtt.started_at || startedAt;
+        savedAnswers = (inProgressAtt.answers as Record<string, number>) || {};
       } else {
+        const { count: prevCount } = await admin
+          .from('mock_attempts')
+          .select('id', { count: 'exact', head: true })
+          .eq('test_id', testId)
+          .eq('student_id', user.id)
+          .not('submitted_at', 'is', null);
+
+        const nextAttemptNum = (prevCount || 0) + 1;
+
         const { data: newAtt } = await admin
           .from('mock_attempts')
           .insert({
             test_id: testId,
             student_id: user.id,
             started_at: startedAt,
+            attempt_number: nextAttemptNum,
             answers: {},
           })
           .select('id, started_at')

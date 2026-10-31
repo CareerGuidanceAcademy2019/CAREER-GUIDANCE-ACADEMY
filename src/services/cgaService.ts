@@ -324,6 +324,7 @@ const toTest = (r: Row, courseName: string, isStudent = false, hasSubmitted = fa
     negativeMarking: Number(r.negative_marking || 0),
     scheduledDate: r.scheduled_date || (r.window_start ? new Date(r.window_start).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]),
     status: normalizedStatus,
+    attemptsAllowed: Number(r.attempts_allowed || 1),
     subject: r.subject || r.subject_id || undefined,
     driveLink: r.drive_link ?? undefined,
     contentStatus: r.content_status ?? 'draft',
@@ -409,6 +410,7 @@ const toSeriesMockTest = (r: Row): SeriesMockTest => ({
   negativeMarking: Number(r.negative_marking ?? 0),
   durationMinutes: r.duration_minutes ?? 30,
   status: r.status,
+  attemptsAllowed: Number(r.attempts_allowed ?? 1),
   windowStart: r.window_start ?? null,
   windowEnd: r.window_end ?? null,
   windowHours: r.window_hours ? Number(r.window_hours) : null,
@@ -2381,18 +2383,25 @@ export const cgaService = {
     const session = await this.getSession().catch(() => null);
     const stuId = session?.userId || 'me';
 
-    // Strict Single Attempt Check: Any candidate can attempt a mock test only once
+    // Multi-Attempt Check: Check against configured attempts allowed
     if (typeof window !== 'undefined') {
       try {
         const existing = localStorage.getItem('cga_test_attempts');
         const arr: TestAttempt[] = existing ? JSON.parse(existing) : [];
-        const alreadySubmitted = arr.some(
+        const pastCount = arr.filter(
           (item) => item.testId === testId && (item.studentId === stuId || item.studentId === 'me') && Boolean(item.submittedAt)
-        );
-        if (alreadySubmitted) {
+        ).length;
+        
+        // Find configured attempts
+        const customTestsStr = localStorage.getItem('cga_custom_tests');
+        const customList: MockTest[] = customTestsStr ? JSON.parse(customTestsStr) : [];
+        const foundTest = customList.find((t) => t.id === testId);
+        const maxAttempts = foundTest?.attemptsAllowed || 1;
+
+        if (pastCount >= maxAttempts) {
           return {
             success: false,
-            error: 'Single Attempt Policy: You have already completed this mock test. Each candidate is permitted only one attempt.',
+            error: `Attempt Limit Reached: You have completed all ${maxAttempts} permitted attempt(s) for this mock test.`,
           };
         }
       } catch {}
@@ -2409,10 +2418,10 @@ export const cgaService = {
       });
       if (error) {
         const raw = error.message || '';
-        if (/already been submitted/i.test(raw)) {
+        if (/Maximum attempts reached/i.test(raw) || /already been submitted/i.test(raw)) {
           return {
             success: false,
-            error: 'Single Attempt Policy: You have already completed this mock test. Each candidate is permitted only one attempt.',
+            error: raw.includes('Maximum attempts') ? raw : 'Attempt Limit Reached: Maximum allowed attempts completed for this mock test.',
           };
         }
         if (/SESSION_REVOKED/i.test(raw)) {
@@ -2766,6 +2775,7 @@ export const cgaService = {
       negative_marking: t.negativeMarking || 0,
       scheduled_date: t.scheduledDate || '',
       status: t.status || 'Draft',
+      attempts_allowed: Number(t.attemptsAllowed || (t as any).attempts_allowed || 1),
       questions: t.questions || [],
       window_start: (t as any).windowStart ?? null,
       window_end: (t as any).windowEnd ?? null,

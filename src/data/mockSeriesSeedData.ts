@@ -34,6 +34,7 @@ export interface SeriesMockTest {
   negativeMarking: number;
   durationMinutes: number;
   status: 'draft' | 'ready' | 'launched' | 'closed';
+  attemptsAllowed?: number;
   scheduledDate?: string;
   languageMode?: 'english_only' | 'bengali_only' | 'bilingual';
   windowStart?: string | null;

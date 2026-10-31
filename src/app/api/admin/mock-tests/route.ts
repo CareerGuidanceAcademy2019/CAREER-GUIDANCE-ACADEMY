@@ -199,6 +199,7 @@ export async function POST(request: Request) {
       negative_marking: Number(t.negativeMarking || t.negative_marking || 0),
       scheduled_date: t.scheduledDate || t.scheduled_date || '',
       status: t.status || 'Draft',
+      attempts_allowed: Number(t.attemptsAllowed || t.attempts_allowed || 1),
       questions: qList,
       window_start: t.windowStart || t.window_start || null,
       window_end: t.windowEnd || t.window_end || null,

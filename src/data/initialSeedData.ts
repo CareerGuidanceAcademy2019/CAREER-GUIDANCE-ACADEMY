@@ -185,6 +185,7 @@ export interface MockTest {
   negativeMarking: number;
   scheduledDate: string;
   status: 'Published' | 'Draft';
+  attemptsAllowed?: number;
   questions: MCQQuestion[];
   questionGroups?: MockQuestionGroup[];
   contentStatus?: 'draft' | 'active' | 'expired' | 'purged';
