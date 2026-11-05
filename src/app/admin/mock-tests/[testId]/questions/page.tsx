@@ -2496,10 +2496,11 @@ Explanation: The two 20 Ω parallel resistors yield 10 Ω equivalent resistance.
                               setActiveQIndex(qIdx);
                               setActiveTab('review');
                             }}
-                            className="p-2 rounded-xl text-slate-400 hover:text-[#0056b3] hover:bg-blue-50 cursor-pointer"
-                            title="Edit this question in Review Screen"
+                            className="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#0056b3] border border-blue-200 text-xs font-bold inline-flex items-center gap-1 cursor-pointer transition-all shadow-2xs"
+                            title="Edit this question statement and options"
                           >
-                            <Edit3 className="w-4 h-4" />
+                            <Edit3 className="w-3.5 h-3.5" />
+                            <span>Edit</span>
                           </button>
 
                           <button
