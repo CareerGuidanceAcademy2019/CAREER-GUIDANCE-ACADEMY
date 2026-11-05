@@ -376,8 +376,8 @@ export async function POST(request: Request) {
     const jsonQs = Array.isArray(testRecord.questions) && testRecord.questions.length > 0
       ? testRecord.questions
       : seedTest && Array.isArray(seedTest.questions)
-      ? seedTest.questions
-      : [];
+        ? seedTest.questions
+        : [];
 
     for (const jq of jsonQs) {
       if (jq && jq.groupId && jq.passageText && !groupMap.has(jq.groupId)) {

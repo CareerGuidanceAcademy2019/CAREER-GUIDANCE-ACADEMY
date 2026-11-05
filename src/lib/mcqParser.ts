@@ -101,17 +101,39 @@ export function normalizeMathAndWordPaste(rawInput: string): string {
   text = text.replace(/(\$\\frac\{[^{}]+\}\{[^{}]+\}\$)[ \t]*\n[ \t]*=[ \t]*\n[ \t]*/g, '$1 = ');
 
   // 3. Convert parenthesized algebraic fractions like (a+b)/c, (b+c)/a, (c+a)/b into $\frac{a+b}{c}$
+  // Protect bilingual text and statement references like "(A) Both (1) and (3) / (1) এবং (3)" from being mangled into fractions!
   text = text.replace(
-    /\(([a-zA-Z0-9\+\-\s\^²³]{1,18})\)\s*\/\s*\(([a-zA-Z0-9\+\-\s\^²³]{1,18})\)/g,
-    '$\\frac{$1}{$2}$'
+    /\(([a-zA-Z0-9\+\-\*\s\^²³]{1,18})\)\s*\/\s*\(([a-zA-Z0-9\+\-\*\s\^²³]{1,18})\)/g,
+    (match, num, den) => {
+      const cleanNum = num.trim();
+      const cleanDen = den.trim();
+      const hasOperator = /[\+\-\*\^²³]/.test(cleanNum) || /[\+\-\*\^²³]/.test(cleanDen);
+      const hasAlgebraicVar = /[a-zA-Z]/.test(cleanNum) && /[a-zA-Z]/.test(cleanDen);
+      if (!hasOperator && !hasAlgebraicVar) return match;
+      return `$\\frac{${cleanNum}}{${cleanDen}}$`;
+    }
   );
   text = text.replace(
-    /\(([a-zA-Z0-9\+\-\s\^²³]{1,18})\)\s*\/\s*([a-zA-Z0-9\^²³]{1,8})(?![a-zA-Z0-9\/])/g,
-    '$\\frac{$1}{$2}$'
+    /\(([a-zA-Z0-9\+\-\*\s\^²³]{1,18})\)\s*\/\s*([a-zA-Z0-9\^²³]{1,8})(?![a-zA-Z0-9\/])/g,
+    (match, num, den) => {
+      const cleanNum = num.trim();
+      const cleanDen = den.trim();
+      const hasOperator = /[\+\-\*\^²³]/.test(cleanNum) || /[\+\-\*\^²³]/.test(cleanDen);
+      const hasAlgebraicVar = /[a-zA-Z]/.test(cleanNum) && /[a-zA-Z]/.test(cleanDen);
+      if (!hasOperator && !hasAlgebraicVar) return match;
+      return `$\\frac{${cleanNum}}{${cleanDen}}$`;
+    }
   );
   text = text.replace(
-    /(?<![a-zA-Z0-9\/])([a-zA-Z0-9\^²³]{1,8})\s*\/\s*\(([a-zA-Z0-9\+\-\s\^²³]{1,18})\)/g,
-    '$\\frac{$1}{$2}$'
+    /(?<![a-zA-Z0-9\/])([a-zA-Z0-9\^²³]{1,8})\s*\/\s*\(([a-zA-Z0-9\+\-\*\s\^²³]{1,18})\)/g,
+    (match, num, den) => {
+      const cleanNum = num.trim();
+      const cleanDen = den.trim();
+      const hasOperator = /[\+\-\*\^²³]/.test(cleanNum) || /[\+\-\*\^²³]/.test(cleanDen);
+      const hasAlgebraicVar = /[a-zA-Z]/.test(cleanNum) && /[a-zA-Z]/.test(cleanDen);
+      if (!hasOperator && !hasAlgebraicVar) return match;
+      return `$\\frac{${cleanNum}}{${cleanDen}}$`;
+    }
   );
 
   // 4. Convert unparenthesized algebraic fractions in equations (e.g. a+b/c = b+c/a = c+a/b = k)
@@ -349,15 +371,19 @@ interface OptionToken {
 
 /**
  * Finds all valid option markers (a., b., c., d. / (A), (B), (C), (D) / a:, b:, c:, d: / ক., খ., গ., ঘ.)
- * without ever matching math ratios like a:b:c, 3:1, or 1:1:2.
+ * without ever matching math ratios like a:b:c, 3:1, or 1:1:2, and without matching statements/prose references.
  */
-function findOptionTokens(text: string): OptionToken[] {
-  // Option markers can be:
-  // - Parenthesized or bracketed: (A), [A], (A):, [A]:, (a), (a):, (1), (2), (3), (4)
-  // - Dotted/closed paren: A., A), a., a), ক., ক)
-  // - Colon-separated: A:, B:, a:, b:, ক: ONLY when followed by whitespace and NOT part of a ratio (not followed by digit or variable:col)
-  const optMarkerRegex =
-    /(?:^|\n|[ \t]+)(?:\(\s*([A-Da-dক-ঘ1-4])\s*\)[:\.]?|\[\s*([A-Da-dক-ঘ1-4])\s*\][:\.]?|([A-Da-dক-ঘ])[\.\)]|([A-Da-dক-ঘ]):(?!\d)(?![a-zA-Z0-9]\s*:))(?:\s+|(?=[0-9\(\$\u0980-\u09FF]))/g;
+function findOptionTokens(text: string, forceLetterOnly: boolean = false): OptionToken[] {
+  // If text uses letter-based option markers (A-D, a-d, ক-ঘ), NEVER match digits (1-4) as option markers!
+  // This prevents statements or options like "(A) Both (1) and (3) / (1) এবং (3)" from breaking options.
+  const hasLetterOptions =
+    forceLetterOnly ||
+    /(?:^|\n|[ \t]{2,})(?:\(\s*[A-Da-dক-ঘ]\s*\)|\[\s*[A-Da-dক-ঘ]\s*\]|[A-Da-dক-ঘ][\.\)\:])/.test(text);
+
+  const optMarkerRegex = hasLetterOptions
+    ? /(?:^|\n|[ \t]+)(?:\(\s*([A-Da-dক-ঘ])\s*\)[:\.]?|\[\s*([A-Da-dক-ঘ])\s*\][:\.]?|([A-Da-dক-ঘ])[\.\)]|([A-Da-dক-ঘ]):(?!\d)(?![a-zA-Z0-9]\s*:))(?:\s+|(?=[0-9\(\$\u0980-\u09FF]))/g
+    : /(?:^|\n)\s*(?:\(\s*([1-4])\s*\)[:\.]?|\[\s*([1-4])\s*\][:\.]?)(?:\s+|(?=[0-9\(\$\u0980-\u09FF]))/g;
+
   const tokens: OptionToken[] = [];
   let m: RegExpExecArray | null;
   while ((m = optMarkerRegex.exec(text)) !== null) {
@@ -440,8 +466,8 @@ function selectOrderedOptionSequence(tokens: OptionToken[]): OptionToken[] | nul
 /**
  * Splits a text block if it contains multiple back-to-back questions (multiple A-B-C-D option sets).
  */
-function splitChunkWithMultipleOptionSets(chunkText: string, startQNum: number): { text: string; qNum: number }[] {
-  const tokens = findOptionTokens(chunkText);
+function splitChunkWithMultipleOptionSets(chunkText: string, startQNum: number, forceLetterOnly: boolean = false): { text: string; qNum: number }[] {
+  const tokens = findOptionTokens(chunkText, forceLetterOnly);
   // Find all complete 0 -> 1 -> 2 -> 3 sequences in forward order
   const sequences: OptionToken[][] = [];
   let cursor = 0;
@@ -529,18 +555,44 @@ export function parseRawQuestionsText(rawText: string, separateKeyText?: string)
     }
   }
 
+  // Check if text has letter-based options (A-D, a-d, ক-ঘ) globally
+  const globalHasLetterOptions = /(?:^|\n|[ \t]{2,})(?:\(\s*[A-Da-dক-ঘ]\s*\)|\[\s*[A-Da-dক-ঘ]\s*\]|[A-Da-dক-ঘ][\.\)\:])/.test(text);
+
   // 2. Identify question boundaries
-  // Matches: "24. If...", "Q24. ", "Question 24:", "Q.24 ", "(24) ", "24) " at start of line
+  // Matches: "24. If...", "Q24. ", "Q. ", "Question 24:", "Question: ", "### Q24. ", "### 24. ", "(24) ", "24) " at start of line
   // Note: uses :(?!\d) so that a numeric ratio like "\n3:1, its number of sides..." is never mistaken for question 3!
   const questionPattern =
-    /(?:^|\n)[ \t]*(?:Q(?:uestion)?\.?\s*(\d+)[\.\:\)\-]?\s*|\((\d+)\)\s*|(\d+)(?:[\.\)]|:(?!\d))(?:\s+|(?=[A-Za-z\u0980-\u09FF\(\$])))/gi;
+    /(?:^|\n)[ \t]*(?:#{1,6}\s*)?(?:(?:Q(?:uestion)?\.?\s*(\d+)?[\.\:\)\-]?|\((\d+)\)|(\d+)(?:[\.\)]|:(?!\d)))\s*)/gi;
 
-  const indices: { start: number; qNum: number }[] = [];
+  const rawIndices: { start: number; qNum: number; isExplicitQ: boolean }[] = [];
   let m: RegExpExecArray | null;
   while ((m = questionPattern.exec(text)) !== null) {
-    const num = parseInt(m[1] || m[2] || m[3], 10) || indices.length + 1;
+    const isExplicitQ = /q/i.test(m[0]) || /#{1,6}/.test(m[0]);
+    const num = parseInt(m[1] || m[2] || m[3], 10) || rawIndices.length + 1;
     const actualStart = m.index + (m[0].startsWith('\n') ? 1 : 0);
-    indices.push({ start: actualStart, qNum: num });
+    rawIndices.push({ start: actualStart, qNum: num, isExplicitQ });
+  }
+
+  // Filter raw indices: A bare number index (e.g. 1., 2.) is only accepted as a question boundary
+  // if either it is explicit (e.g. Q1, Q., ###), or if the previous question already had its options!
+  // If a segment between index i and i+1 has NO options and next is also a bare number,
+  // they belong together as list items of the same question!
+  const indices: { start: number; qNum: number }[] = [];
+  for (let i = 0; i < rawIndices.length; i++) {
+    const cur = rawIndices[i];
+    if (i === 0) {
+      indices.push(cur);
+      continue;
+    }
+
+    const prevTrue = indices[indices.length - 1];
+    const between = text.slice(prevTrue.start, cur.start);
+    const tokens = findOptionTokens(between, globalHasLetterOptions);
+    const prevHadOptions = Boolean(selectOrderedOptionSequence(tokens));
+
+    if (cur.isExplicitQ || prevHadOptions) {
+      indices.push(cur);
+    }
   }
 
   const rawChunks: { text: string; qNum: number }[] = [];
@@ -551,13 +603,13 @@ export function parseRawQuestionsText(rawText: string, separateKeyText?: string)
       const nextStart = i < indices.length - 1 ? indices[i + 1].start : text.length;
       const chunkText = text.slice(cur.start, nextStart).trim();
       if (chunkText.length > 5) {
-        const subChunks = splitChunkWithMultipleOptionSets(chunkText, cur.qNum);
+        const subChunks = splitChunkWithMultipleOptionSets(chunkText, cur.qNum, globalHasLetterOptions);
         rawChunks.push(...subChunks);
       }
     }
   } else {
     // If no explicit question numbers, split by multi-option sets or double line breaks
-    const multiSplit = splitChunkWithMultipleOptionSets(text, 1);
+    const multiSplit = splitChunkWithMultipleOptionSets(text, 1, globalHasLetterOptions);
     if (multiSplit.length > 1) {
       rawChunks.push(...multiSplit);
     } else {
@@ -614,16 +666,16 @@ export function parseRawQuestionsText(rawText: string, separateKeyText?: string)
       body = body.replace(expMatch[0], '');
     }
 
-    // Strip leading question number (e.g. "24. ", "Q24. ", "(24) ")
+    // Strip leading question number (e.g. "### Q29. ", "24. ", "Q24. ", "Q. ", "(24) ")
     body = body
       .replace(
-        /^[ \t]*(?:Q(?:uestion)?\.?\s*\d+[\.\:\)\-]?\s*|\(\d+\)\s*|\d+(?:[\.\)]|:(?!\d))(?:\s+|(?=[A-Za-z\u0980-\u09FF\(\$])))/i,
+        /^[ \t]*(?:#{1,6}\s*)?(?:Q(?:uestion)?\.?\s*\d*[\.\:\)\-]?\s*|\(\d+\)\s*|\d+(?:[\.\)]|:(?!\d))(?:\s+|(?=[A-Za-z\u0980-\u09FF\(\$])))/i,
         ''
       )
       .trim();
 
     // Find ordered options (A, B, C, D / a, b, c, d / ক, খ, গ, ঘ) without matching ratios like a:b:c or 1:1:2
-    const tokens = findOptionTokens(body);
+    const tokens = findOptionTokens(body, globalHasLetterOptions);
     const selectedTokens = selectOrderedOptionSequence(tokens);
 
     let extractedOptions: string[] = [];

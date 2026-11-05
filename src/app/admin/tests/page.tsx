@@ -460,6 +460,29 @@ export default function AdminMockTestsPage() {
   const [explanation, setExplanation] = useState('');
   const [explanationBn, setExplanationBn] = useState('');
 
+  // Edit Question Modal State
+  const [editingQuestionModalOpen, setEditingQuestionModalOpen] = useState(false);
+  const [editingQuestionState, setEditingQuestionState] = useState<{
+    index: number;
+    id: string;
+    question: string;
+    questionBn: string;
+    optA: string;
+    optB: string;
+    optC: string;
+    optD: string;
+    optABn: string;
+    optBBn: string;
+    optCBn: string;
+    optDBn: string;
+    correctOptionIndex: number;
+    explanation: string;
+    explanationBn: string;
+    imagePath?: string | null;
+    imageAlt?: string | null;
+  } | null>(null);
+  const [isEditingQuestionDiagramUploading, setIsEditingQuestionDiagramUploading] = useState(false);
+
   // Target Access Scope for Create/Edit Modal:
   // 'mock_series_only' = Standalone mock series package only
   // 'course_only' = Specific classroom or online batch only
@@ -1229,6 +1252,109 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
       questions: filtered,
       totalMarks: filtered.length * editingTest.marksPerQuestion,
     });
+  };
+
+  const handleOpenEditQuestionModal = (q: MCQQuestion, idx: number) => {
+    setEditingQuestionState({
+      index: idx,
+      id: q.id,
+      question: q.question || '',
+      questionBn: q.questionBn || '',
+      optA: getOptionText(q.options[0]) || '',
+      optB: getOptionText(q.options[1]) || '',
+      optC: getOptionText(q.options[2]) || '',
+      optD: getOptionText(q.options[3]) || '',
+      optABn: q.optionsBn?.[0] ? getOptionText(q.optionsBn[0]) : '',
+      optBBn: q.optionsBn?.[1] ? getOptionText(q.optionsBn[1]) : '',
+      optCBn: q.optionsBn?.[2] ? getOptionText(q.optionsBn[2]) : '',
+      optDBn: q.optionsBn?.[3] ? getOptionText(q.optionsBn[3]) : '',
+      correctOptionIndex: q.correctOptionIndex ?? 0,
+      explanation: q.explanation || '',
+      explanationBn: q.explanationBn || '',
+      imagePath: q.imagePath || null,
+      imageAlt: q.imageAlt || null,
+    });
+    setEditingQuestionModalOpen(true);
+  };
+
+  const handleSaveEditedQuestion = () => {
+    if (!editingTest || !editingQuestionState) return;
+    if (!editingQuestionState.question.trim() || !editingQuestionState.optA.trim() || !editingQuestionState.optB.trim()) {
+      showToast('Validation Error', 'Question text and Options A & B are required.', 'error');
+      return;
+    }
+    const isEngOnly = editingTest.languageMode === 'english_only';
+    const nextQs = [...editingTest.questions];
+    nextQs[editingQuestionState.index] = {
+      ...nextQs[editingQuestionState.index],
+      question: editingQuestionState.question.trim(),
+      questionBn: isEngOnly ? undefined : (editingQuestionState.questionBn.trim() || undefined),
+      options: [
+        editingQuestionState.optA.trim(),
+        editingQuestionState.optB.trim(),
+        editingQuestionState.optC.trim() || 'Option C',
+        editingQuestionState.optD.trim() || 'Option D',
+      ],
+      optionsBn: isEngOnly
+        ? undefined
+        : editingQuestionState.optABn.trim() || editingQuestionState.optBBn.trim()
+          ? [
+              editingQuestionState.optABn.trim() || editingQuestionState.optA.trim(),
+              editingQuestionState.optBBn.trim() || editingQuestionState.optB.trim(),
+              editingQuestionState.optCBn.trim() || editingQuestionState.optC.trim(),
+              editingQuestionState.optDBn.trim() || editingQuestionState.optD.trim(),
+            ]
+          : undefined,
+      correctOptionIndex: editingQuestionState.correctOptionIndex,
+      explanation: editingQuestionState.explanation.trim() || 'Refer to C.G.A classroom notes and model solutions.',
+      explanationBn: isEngOnly ? undefined : (editingQuestionState.explanationBn.trim() || undefined),
+      imagePath: editingQuestionState.imagePath,
+      imageAlt: editingQuestionState.imageAlt,
+    };
+    setEditingTest({
+      ...editingTest,
+      questions: nextQs,
+    });
+    setEditingQuestionModalOpen(false);
+    setEditingQuestionState(null);
+    showToast('Question Updated', `Question ${editingQuestionState.index + 1} updated successfully.`, 'success');
+  };
+
+  const handleUploadEditQuestionDiagram = async (file: File) => {
+    if (!file || !editingQuestionState) return;
+    if (!file.type.startsWith('image/')) {
+      showToast('Invalid File', 'Please select an image file (PNG, JPG, WebP).', 'error');
+      return;
+    }
+    setIsEditingQuestionDiagramUploading(true);
+    try {
+      const compressedFile = await compressDiagramFileBeforeUpload(file);
+      const form = new FormData();
+      form.append('file', compressedFile);
+      form.append('testId', editingTest?.id || 'manual-builder');
+      form.append('qIndex', String(editingQuestionState.index));
+      form.append('targetType', 'question');
+      const res = await fetch('/api/mock-tests/upload-image', { method: 'POST', body: form });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to upload diagram');
+      }
+      setEditingQuestionState((prev) =>
+        prev
+          ? {
+              ...prev,
+              imagePath: data.storagePath,
+              imageAlt: `Diagram for Q${prev.index + 1}`,
+            }
+          : null
+      );
+      showToast('Diagram Uploaded', 'Diagram successfully attached to question.', 'success');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Upload failed';
+      showToast('Upload Error', msg, 'error');
+    } finally {
+      setIsEditingQuestionDiagramUploading(false);
+    }
   };
 
   const handleUpdateQuestionCorrectOpt = (qId: string, optIndex: number) => {
@@ -3908,14 +4034,24 @@ Explanation: Paragraph 1 highlights exponential industrial growth and urban expa
                                 </div>
                               )}
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveQuestion(q.id)}
-                              className="p-1 rounded-lg text-slate-400 hover:text-[#dc2626] hover:bg-red-50 cursor-pointer"
-                              title="Remove Question"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditQuestionModal(q, idx)}
+                                className="p-1 rounded-lg text-slate-400 hover:text-[#0056b3] hover:bg-blue-50 cursor-pointer transition-colors"
+                                title="Edit Question"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveQuestion(q.id)}
+                                className="p-1 rounded-lg text-slate-400 hover:text-[#dc2626] hover:bg-red-50 cursor-pointer transition-colors"
+                                title="Remove Question"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
 
                           {/* Diagram or Passage indicators */}
@@ -4281,6 +4417,313 @@ Explanation: Paragraph 1 highlights exponential industrial growth and urban expa
         }}
         onCancel={() => setDeletePostTarget(null)}
       />
+
+      {/* Edit Question Modal */}
+      {editingQuestionModalOpen && editingQuestionState && editingTest && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden my-auto">
+            {/* Modal Header */}
+            <div className="cga-gradient-hero text-white p-5 flex items-center justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20">
+                  <Edit2 className="w-5 h-5 text-amber-300" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black">
+                    Edit Question Q{editingQuestionState.index + 1}
+                  </h3>
+                  <p className="text-xs text-blue-100 font-medium">
+                    Modify question stem, options, diagrams, and correct answer
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingQuestionModalOpen(false);
+                  setEditingQuestionState(null);
+                }}
+                className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white cursor-pointer transition-colors"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 sm:p-6 space-y-5 overflow-y-auto flex-1 text-xs text-slate-800">
+              {/* Question Text (English) */}
+              <div className="space-y-1.5">
+                <label className="font-extrabold text-slate-700 block">
+                  Question Stem (English) *
+                </label>
+                <textarea
+                  rows={4}
+                  value={editingQuestionState.question}
+                  onChange={(e) =>
+                    setEditingQuestionState({ ...editingQuestionState, question: e.target.value })
+                  }
+                  placeholder="Enter or modify the question stem..."
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#0056b3]/20 focus:border-[#0056b3] text-xs font-medium leading-relaxed"
+                />
+              </div>
+
+              {/* Question Text (Bengali) */}
+              {editingTest.languageMode !== 'english_only' && (
+                <div className="space-y-1.5">
+                  <label className="font-extrabold text-blue-900 block">
+                    Question Stem (Bengali Translation)
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={editingQuestionState.questionBn}
+                    onChange={(e) =>
+                      setEditingQuestionState({ ...editingQuestionState, questionBn: e.target.value })
+                    }
+                    placeholder="বাংলা প্রশ্ন লিখুন বা এডিট করুন..."
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-blue-200 bg-blue-50/20 focus:outline-none focus:ring-2 focus:ring-[#0056b3]/20 focus:border-[#0056b3] text-xs font-medium leading-relaxed"
+                  />
+                </div>
+              )}
+
+              {/* Diagram Attachment */}
+              <div className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50/70 space-y-2">
+                <span className="font-extrabold text-slate-700 block text-xs">
+                  Question Diagram / Formula Figure
+                </span>
+                {editingQuestionState.imagePath ? (
+                  <div className="flex items-center justify-between gap-3 bg-white p-2.5 rounded-xl border border-emerald-200">
+                    <div className="flex items-center gap-2.5">
+                      <img
+                        src={editingQuestionState.imagePath}
+                        alt="Question Diagram"
+                        className="w-20 h-14 object-contain rounded-lg border border-slate-200 bg-slate-50"
+                      />
+                      <span className="text-[11px] font-bold text-emerald-800">
+                        Diagram Attached
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditingQuestionState({
+                          ...editingQuestionState,
+                          imagePath: null,
+                          imageAlt: null,
+                        })
+                      }
+                      className="px-2.5 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-[#dc2626] font-bold text-[11px] cursor-pointer"
+                    >
+                      Remove Diagram
+                    </button>
+                  </div>
+                ) : (
+                  <label className="px-3.5 py-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-2xs">
+                    <Upload className="w-3.5 h-3.5 text-[#0056b3]" />
+                    <span>{isEditingQuestionDiagramUploading ? 'Compressing & Uploading...' : 'Upload Question Diagram (PNG, JPG, WebP)'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      disabled={isEditingQuestionDiagramUploading}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) void handleUploadEditQuestionDiagram(f);
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+              </div>
+
+              {/* Options Section */}
+              <div className="space-y-3">
+                <span className="font-extrabold text-slate-700 block">
+                  Multiple-Choice Options (A, B, C, D)
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Option A */}
+                  <div className="space-y-1 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
+                    <span className="font-black text-[#0056b3] text-xs">Option A *</span>
+                    <input
+                      type="text"
+                      value={editingQuestionState.optA}
+                      onChange={(e) =>
+                        setEditingQuestionState({ ...editingQuestionState, optA: e.target.value })
+                      }
+                      placeholder="Option A (English)"
+                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-medium"
+                    />
+                    {editingTest.languageMode !== 'english_only' && (
+                      <input
+                        type="text"
+                        value={editingQuestionState.optABn}
+                        onChange={(e) =>
+                          setEditingQuestionState({ ...editingQuestionState, optABn: e.target.value })
+                        }
+                        placeholder="Option A (Bengali)"
+                        className="w-full px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50/30 text-xs font-medium"
+                      />
+                    )}
+                  </div>
+
+                  {/* Option B */}
+                  <div className="space-y-1 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
+                    <span className="font-black text-[#0056b3] text-xs">Option B *</span>
+                    <input
+                      type="text"
+                      value={editingQuestionState.optB}
+                      onChange={(e) =>
+                        setEditingQuestionState({ ...editingQuestionState, optB: e.target.value })
+                      }
+                      placeholder="Option B (English)"
+                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-medium"
+                    />
+                    {editingTest.languageMode !== 'english_only' && (
+                      <input
+                        type="text"
+                        value={editingQuestionState.optBBn}
+                        onChange={(e) =>
+                          setEditingQuestionState({ ...editingQuestionState, optBBn: e.target.value })
+                        }
+                        placeholder="Option B (Bengali)"
+                        className="w-full px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50/30 text-xs font-medium"
+                      />
+                    )}
+                  </div>
+
+                  {/* Option C */}
+                  <div className="space-y-1 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
+                    <span className="font-black text-[#0056b3] text-xs">Option C</span>
+                    <input
+                      type="text"
+                      value={editingQuestionState.optC}
+                      onChange={(e) =>
+                        setEditingQuestionState({ ...editingQuestionState, optC: e.target.value })
+                      }
+                      placeholder="Option C (English)"
+                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-medium"
+                    />
+                    {editingTest.languageMode !== 'english_only' && (
+                      <input
+                        type="text"
+                        value={editingQuestionState.optCBn}
+                        onChange={(e) =>
+                          setEditingQuestionState({ ...editingQuestionState, optCBn: e.target.value })
+                        }
+                        placeholder="Option C (Bengali)"
+                        className="w-full px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50/30 text-xs font-medium"
+                      />
+                    )}
+                  </div>
+
+                  {/* Option D */}
+                  <div className="space-y-1 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
+                    <span className="font-black text-[#0056b3] text-xs">Option D</span>
+                    <input
+                      type="text"
+                      value={editingQuestionState.optD}
+                      onChange={(e) =>
+                        setEditingQuestionState({ ...editingQuestionState, optD: e.target.value })
+                      }
+                      placeholder="Option D (English)"
+                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-medium"
+                    />
+                    {editingTest.languageMode !== 'english_only' && (
+                      <input
+                        type="text"
+                        value={editingQuestionState.optDBn}
+                        onChange={(e) =>
+                          setEditingQuestionState({ ...editingQuestionState, optDBn: e.target.value })
+                        }
+                        placeholder="Option D (Bengali)"
+                        className="w-full px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50/30 text-xs font-medium"
+                      />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Correct Option Selector */}
+              <div className="space-y-2">
+                <span className="font-extrabold text-slate-700 block">
+                  Select Correct Answer *
+                </span>
+                <div className="grid grid-cols-4 gap-2">
+                  {[0, 1, 2, 3].map((idx) => {
+                    const char = String.fromCharCode(65 + idx);
+                    const isSelected = editingQuestionState.correctOptionIndex === idx;
+                    return (
+                      <button
+                        key={char}
+                        type="button"
+                        onClick={() =>
+                          setEditingQuestionState({
+                            ...editingQuestionState,
+                            correctOptionIndex: idx,
+                          })
+                        }
+                        className={`py-2 px-3 rounded-xl border-2 text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                          isSelected
+                            ? 'bg-emerald-500 text-white border-emerald-600 shadow-xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        {isSelected && <Check className="w-3.5 h-3.5" />}
+                        <span>Option {char}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Explanation / Solution */}
+              <div className="space-y-1.5">
+                <label className="font-extrabold text-slate-700 block">
+                  Explanation / Model Solution
+                </label>
+                <textarea
+                  rows={2}
+                  value={editingQuestionState.explanation}
+                  onChange={(e) =>
+                    setEditingQuestionState({
+                      ...editingQuestionState,
+                      explanation: e.target.value,
+                    })
+                  }
+                  placeholder="Refer to C.G.A model solutions..."
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#0056b3]/20 focus:border-[#0056b3] text-xs font-medium"
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingQuestionModalOpen(false);
+                  setEditingQuestionState(null);
+                }}
+                className="px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEditedQuestion}
+                className="px-5 py-2.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white font-black text-xs cursor-pointer shadow-md inline-flex items-center gap-1.5"
+              >
+                <Save className="w-3.5 h-3.5" /> Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

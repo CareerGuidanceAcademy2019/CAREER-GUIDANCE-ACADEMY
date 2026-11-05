@@ -20,6 +20,9 @@ import {
   FileText,
   AlertTriangle,
   X,
+  Upload,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
 import { PAYMENT_SETTINGS, PaymentSettingsRecord } from '@/config/paymentSettings';
@@ -36,6 +39,14 @@ export default function AdminPaymentSettingsPage() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
+
+  // Add / Update QR Code Modal State
+  const [qrModalOpen, setQrModalOpen] = useState(false);
+  const [qrTarget, setQrTarget] = useState<'primary' | 'backup'>('primary');
+  const [qrUpiId, setQrUpiId] = useState('');
+  const [qrLabel, setQrLabel] = useState('');
+  const [qrPreview, setQrPreview] = useState<string | null>(null);
+  const [qrError, setQrError] = useState('');
 
   // Fetch current payment settings
   const fetchSettings = async () => {
@@ -56,6 +67,10 @@ export default function AdminPaymentSettingsPage() {
           payeeName: data.payee_name || PAYMENT_SETTINGS.payeeName,
           upiId: data.upi_id || PAYMENT_SETTINGS.upiId,
           upiIdBackup: data.upi_id_backup || '',
+          qrImageUrl: data.qr_image_url || localStorage.getItem('cga_active_qr_image') || PAYMENT_SETTINGS.qrImageUrl,
+          qrImageUrlBackup: data.qr_image_url_backup || localStorage.getItem('cga_backup_qr_image') || null,
+          qrLabel: data.qr_label || 'Primary Institute QR',
+          qrLabelBackup: data.qr_label_backup || 'Secondary / Alternate QR',
           bankTransferEnabled: data.bank_transfer_enabled ?? true,
           bankAccountHolder: data.bank_account_holder || PAYMENT_SETTINGS.bankAccountHolder,
           bankName: data.bank_name || PAYMENT_SETTINGS.bankName,
@@ -97,6 +112,130 @@ export default function AdminPaymentSettingsPage() {
     );
   };
 
+  const handleOpenAddQrModal = (target: 'primary' | 'backup') => {
+    setQrTarget(target);
+    setQrUpiId(target === 'primary' ? settings.upiId : (settings.upiIdBackup || ''));
+    setQrLabel(
+      target === 'primary'
+        ? (settings.qrLabel || 'Primary Institute QR')
+        : (settings.qrLabelBackup || 'Secondary / Alternate QR (Limit Failover)')
+    );
+    setQrPreview(
+      target === 'primary'
+        ? (settings.qrImageUrl || '/cga-upi-qr.jpg')
+        : (settings.qrImageUrlBackup || null)
+    );
+    setQrError('');
+    setQrModalOpen(true);
+  };
+
+  const handleQrFileSelected = (file: File) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setQrError('Please select a valid image file (PNG, JPG, WebP).');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setQrError('QR image file size must be less than 5 MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setQrPreview(e.target?.result as string);
+      setQrError('');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveQrFromModal = async () => {
+    if (!qrPreview) {
+      setQrError('Please upload a QR code image file.');
+      return;
+    }
+    if (!qrUpiId.trim()) {
+      setQrError('Please enter the UPI ID for this QR code.');
+      return;
+    }
+
+    const updatedSettings: PaymentSettingsRecord = {
+      ...settings,
+      ...(qrTarget === 'primary'
+        ? {
+            qrImageUrl: qrPreview,
+            upiId: qrUpiId.trim(),
+            qrLabel: qrLabel.trim() || 'Primary Institute QR',
+          }
+        : {
+            qrImageUrlBackup: qrPreview,
+            upiIdBackup: qrUpiId.trim(),
+            qrLabelBackup: qrLabel.trim() || 'Secondary / Alternate QR',
+          }),
+    };
+
+    setSettings(updatedSettings);
+    setQrModalOpen(false);
+
+    try {
+      const { createClient } = await import('@/lib/supabase/client');
+      const sb = createClient();
+      await sb
+        .from('payment_settings')
+        .update({
+          upi_id: updatedSettings.upiId,
+          upi_id_backup: updatedSettings.upiIdBackup || null,
+          qr_image_url: updatedSettings.qrImageUrl || '/cga-upi-qr.jpg',
+          qr_image_url_backup: updatedSettings.qrImageUrlBackup || null,
+          qr_label: updatedSettings.qrLabel || 'Primary Institute QR',
+          qr_label_backup: updatedSettings.qrLabelBackup || 'Secondary / Alternate QR',
+        })
+        .eq('id', 1);
+
+      localStorage.setItem('cga_active_qr_image', updatedSettings.qrImageUrl || '/cga-upi-qr.jpg');
+      if (updatedSettings.qrImageUrlBackup) {
+        localStorage.setItem('cga_backup_qr_image', updatedSettings.qrImageUrlBackup);
+      }
+      localStorage.setItem('cga_payment_settings', JSON.stringify(updatedSettings));
+
+      showToast(
+        'QR Code Updated',
+        qrTarget === 'primary'
+          ? 'New primary QR code activated! Students can now pay using this QR.'
+          : 'New secondary / backup QR code added! Students can switch to it when limits are reached.',
+        'success'
+      );
+    } catch {
+      localStorage.setItem('cga_active_qr_image', updatedSettings.qrImageUrl || '/cga-upi-qr.jpg');
+      if (updatedSettings.qrImageUrlBackup) {
+        localStorage.setItem('cga_backup_qr_image', updatedSettings.qrImageUrlBackup);
+      }
+      localStorage.setItem('cga_payment_settings', JSON.stringify(updatedSettings));
+      showToast('QR Code Saved Locally', 'QR code saved to browser storage. Click "Save All Configuration" to sync.', 'info');
+    }
+  };
+
+  const handleRemoveBackupQr = async () => {
+    const updated: PaymentSettingsRecord = {
+      ...settings,
+      qrImageUrlBackup: null,
+      upiIdBackup: '',
+    };
+    setSettings(updated);
+    try {
+      const { createClient } = await import('@/lib/supabase/client');
+      const sb = createClient();
+      await sb
+        .from('payment_settings')
+        .update({
+          qr_image_url_backup: null,
+          upi_id_backup: null,
+        })
+        .eq('id', 1);
+      localStorage.removeItem('cga_backup_qr_image');
+      localStorage.setItem('cga_payment_settings', JSON.stringify(updated));
+      showToast('Alternate QR Removed', 'Secondary QR code has been removed.', 'info');
+    } catch {}
+  };
+
   const handleSaveClick = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -122,6 +261,10 @@ export default function AdminPaymentSettingsPage() {
         payee_name: settings.payeeName,
         upi_id: settings.upiId,
         upi_id_backup: settings.upiIdBackup || null,
+        qr_image_url: settings.qrImageUrl || '/cga-upi-qr.jpg',
+        qr_image_url_backup: settings.qrImageUrlBackup || null,
+        qr_label: settings.qrLabel || 'Primary Institute QR',
+        qr_label_backup: settings.qrLabelBackup || 'Secondary / Alternate QR',
         bank_transfer_enabled: settings.bankTransferEnabled,
         bank_account_holder: settings.bankAccountHolder,
         bank_name: settings.bankName,
@@ -158,6 +301,14 @@ export default function AdminPaymentSettingsPage() {
           throw error;
         }
       }
+
+      localStorage.setItem('cga_active_qr_image', settings.qrImageUrl || '/cga-upi-qr.jpg');
+      if (settings.qrImageUrlBackup) {
+        localStorage.setItem('cga_backup_qr_image', settings.qrImageUrlBackup);
+      } else {
+        localStorage.removeItem('cga_backup_qr_image');
+      }
+      localStorage.setItem('cga_payment_settings', JSON.stringify(settings));
 
       showToast('Settings Saved', 'Bank & UPI payment configuration updated successfully.', 'success');
       setInitialSettings({ ...settings });
@@ -267,6 +418,137 @@ export default function AdminPaymentSettingsPage() {
                 placeholder="Leave blank if none"
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0056b3]/20 focus:border-[#0056b3]"
               />
+            </div>
+          </div>
+
+          {/* UPI QR Code Management & Limit Failover */}
+          <div className="pt-6 border-t border-slate-100 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                  <QrCode className="w-4 h-4 text-[#0056b3]" />
+                  <span>UPI QR Code Management &amp; Daily Limit Protection</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Manage active QR codes shown to students during course &amp; mock test enrollment. When personal UPI limits are reached, secondary QR codes prevent enrollment failures.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleOpenAddQrModal('primary')}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-black cursor-pointer shadow-sm transition-all shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add / Replace QR Code
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Primary Active QR Card */}
+              <div className="p-4 rounded-2xl border-2 border-blue-200 bg-blue-50/30 flex flex-col justify-between space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <span className="px-2 py-0.5 rounded-full bg-blue-100 text-[#0056b3] text-[10px] font-black uppercase tracking-wider">
+                      Primary Active QR
+                    </span>
+                    <h4 className="font-extrabold text-xs text-slate-900 mt-1">
+                      {settings.qrLabel || 'Primary Institute QR'}
+                    </h4>
+                    <p className="text-[11px] font-mono text-slate-600 mt-0.5">
+                      UPI ID: <strong>{settings.upiId}</strong>
+                    </p>
+                  </div>
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-100 shrink-0 mt-1" title="Active" />
+                </div>
+
+                <div className="flex items-center justify-center p-3 bg-white rounded-xl border border-slate-200 shadow-2xs">
+                  <img
+                    src={settings.qrImageUrl || '/cga-upi-qr.jpg'}
+                    alt="Primary UPI QR Code"
+                    className="w-36 h-36 object-contain rounded-lg"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleOpenAddQrModal('primary')}
+                  className="w-full py-2 px-3 rounded-xl bg-white hover:bg-blue-50 border border-blue-200 text-[#0056b3] font-bold text-xs cursor-pointer inline-flex items-center justify-center gap-1.5 transition-all"
+                >
+                  <Upload className="w-3.5 h-3.5" /> Replace Primary QR
+                </button>
+              </div>
+
+              {/* Secondary / Alternate QR Card */}
+              <div className={`p-4 rounded-2xl border-2 flex flex-col justify-between space-y-3 ${
+                settings.qrImageUrlBackup
+                  ? 'border-purple-200 bg-purple-50/30'
+                  : 'border-dashed border-slate-200 bg-slate-50/50'
+              }`}>
+                {settings.qrImageUrlBackup ? (
+                  <>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-900 text-[10px] font-black uppercase tracking-wider">
+                          Secondary / Alternate QR
+                        </span>
+                        <h4 className="font-extrabold text-xs text-slate-900 mt-1">
+                          {settings.qrLabelBackup || 'Secondary / Alternate QR'}
+                        </h4>
+                        <p className="text-[11px] font-mono text-slate-600 mt-0.5">
+                          UPI ID: <strong>{settings.upiIdBackup || 'Not specified'}</strong>
+                        </p>
+                      </div>
+                      <span className="w-2.5 h-2.5 rounded-full bg-purple-500 ring-4 ring-purple-100 shrink-0 mt-1" title="Alternate Active" />
+                    </div>
+
+                    <div className="flex items-center justify-center p-3 bg-white rounded-xl border border-slate-200 shadow-2xs">
+                      <img
+                        src={settings.qrImageUrlBackup}
+                        alt="Secondary UPI QR Code"
+                        className="w-36 h-36 object-contain rounded-lg"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenAddQrModal('backup')}
+                        className="flex-1 py-2 px-3 rounded-xl bg-white hover:bg-purple-50 border border-purple-200 text-purple-900 font-bold text-xs cursor-pointer inline-flex items-center justify-center gap-1.5 transition-all"
+                      >
+                        <Upload className="w-3.5 h-3.5" /> Replace
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleRemoveBackupQr}
+                        className="p-2 rounded-xl bg-red-50 hover:bg-red-100 text-[#dc2626] border border-red-200 text-xs font-bold cursor-pointer transition-all"
+                        title="Remove Alternate QR"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="my-auto py-6 text-center space-y-3">
+                    <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                      <QrCode className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="font-extrabold text-xs text-slate-800">
+                        No Alternate QR Code Configured
+                      </h4>
+                      <p className="text-[11px] text-slate-500 max-w-xs mx-auto mt-0.5">
+                        Add a secondary QR from another UPI account (e.g. PhonePe/Paytm/SBI) so students can pay when primary QR hits daily bank transaction limit.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenAddQrModal('backup')}
+                      className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs cursor-pointer inline-flex items-center gap-1.5 shadow-sm transition-all"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> + Add Alternate QR Code
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -509,6 +791,168 @@ export default function AdminPaymentSettingsPage() {
           </button>
         </div>
       </form>
+
+      {/* Add / Update QR Code Modal */}
+      {qrModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 space-y-5 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-blue-50 text-[#0056b3] flex items-center justify-center">
+                  <QrCode className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">
+                    {qrTarget === 'primary' ? 'Add / Replace Primary QR' : 'Add Alternate Failover QR'}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    {qrTarget === 'primary'
+                      ? 'Active QR code scanned by students during enrollment'
+                      : 'Students switch to this QR when daily limits are reached'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQrModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Target Role Selector */}
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700 block">QR Role &amp; Priority</label>
+              <div className="flex rounded-xl bg-slate-100 p-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQrTarget('primary');
+                    setQrUpiId(settings.upiId);
+                    setQrLabel(settings.qrLabel || 'Primary Institute QR');
+                  }}
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    qrTarget === 'primary' ? 'bg-white text-[#0056b3] shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Primary Active QR
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQrTarget('backup');
+                    setQrUpiId(settings.upiIdBackup || '');
+                    setQrLabel(settings.qrLabelBackup || 'Secondary / Alternate QR');
+                  }}
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    qrTarget === 'backup' ? 'bg-white text-purple-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Alternate QR (Limit Failover)
+                </button>
+              </div>
+            </div>
+
+            {/* QR Image Upload & Preview */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-700 block">
+                QR Code Image File (PNG, JPG, WebP) *
+              </label>
+              <div className="flex items-center gap-4 p-3 rounded-2xl border border-slate-200 bg-slate-50">
+                {qrPreview ? (
+                  <img
+                    src={qrPreview}
+                    alt="Uploaded QR Code Preview"
+                    className="w-24 h-24 object-contain rounded-xl border border-slate-300 bg-white shadow-2xs shrink-0"
+                  />
+                ) : (
+                  <div className="w-24 h-24 rounded-xl border-2 border-dashed border-slate-300 bg-white flex items-center justify-center text-slate-400 shrink-0">
+                    <QrCode className="w-8 h-8" />
+                  </div>
+                )}
+                <div className="space-y-1.5 flex-1">
+                  <label className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-2xs">
+                    <Upload className="w-3.5 h-3.5 text-[#0056b3]" />
+                    <span>{qrPreview ? 'Change QR Image' : 'Select QR Image File'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handleQrFileSelected(f);
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                  <p className="text-[10px] text-slate-500">
+                    Upload your official Google Pay, PhonePe, Paytm or Bank QR code image screenshot.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Corresponding UPI ID */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 block">
+                Associated UPI ID (VPA) *
+              </label>
+              <input
+                type="text"
+                required
+                value={qrUpiId}
+                onChange={(e) => setQrUpiId(e.target.value.trim())}
+                placeholder="e.g. popighosh40@okicici or careerguidance@sbi"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0056b3]/20 focus:border-[#0056b3]"
+              />
+              <span className="text-[10px] text-slate-400">
+                Must match the account behind this QR code for verification.
+              </span>
+            </div>
+
+            {/* QR Label */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 block">
+                QR Display Label
+              </label>
+              <input
+                type="text"
+                value={qrLabel}
+                onChange={(e) => setQrLabel(e.target.value)}
+                placeholder="e.g. Google Pay Institute QR, PhonePe Alternate QR"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 focus:outline-none"
+              />
+            </div>
+
+            {qrError && (
+              <p className="text-[11px] font-bold text-rose-600 flex items-center gap-1">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {qrError}
+              </p>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setQrModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveQrFromModal}
+                className="px-5 py-2.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white font-black text-xs cursor-pointer shadow-md inline-flex items-center gap-1.5"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" /> Save &amp; Activate QR
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ==================== RE-AUTHENTICATION PASSWORD MODAL ==================== */}
       {showPasswordModal && (

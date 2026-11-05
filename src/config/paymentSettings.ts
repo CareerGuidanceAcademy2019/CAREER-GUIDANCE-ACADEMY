@@ -26,6 +26,10 @@ export interface PaymentSettingsRecord {
   refundPolicyText: string;
   paymentInstructionsExtra: string;
   updatedAt?: string;
+  qrImageUrl?: string | null;
+  qrImageUrlBackup?: string | null;
+  qrLabel?: string | null;
+  qrLabelBackup?: string | null;
 }
 
 export const PAYMENT_SETTINGS: PaymentSettingsRecord = {
@@ -51,6 +55,10 @@ export const PAYMENT_SETTINGS: PaymentSettingsRecord = {
   ],
   refundPolicyText: 'contract to office with evidance and reason for refund related queries',
   paymentInstructionsExtra: 'Approval will be verify within 24 hrs',
+  qrImageUrl: '/cga-upi-qr.jpg',
+  qrImageUrlBackup: null,
+  qrLabel: 'Primary Institute QR',
+  qrLabelBackup: 'Secondary / Alternate QR',
 };
 
 export type PaymentSettingsType = PaymentSettingsRecord;
@@ -94,10 +102,27 @@ export function getUpiQrCodeUrl(upiUrl: string, size = 300): string {
 }
 
 /**
- * Returns the path to the official institute Google Pay QR image if available.
+ * Returns the path/URL to the active official institute QR image.
  */
-export function getOfficialQrCodeAsset(): string {
-  return '/cga-upi-qr.jpg';
+export function getOfficialQrCodeAsset(customSettings?: Partial<PaymentSettingsRecord>): string {
+  if (customSettings?.qrImageUrl) return customSettings.qrImageUrl;
+  if (typeof window !== 'undefined') {
+    const cached = localStorage.getItem('cga_active_qr_image');
+    if (cached) return cached;
+  }
+  return PAYMENT_SETTINGS.qrImageUrl || '/cga-upi-qr.jpg';
+}
+
+/**
+ * Returns the backup / alternate institute QR image (if added when daily limit is reached).
+ */
+export function getBackupQrCodeAsset(customSettings?: Partial<PaymentSettingsRecord>): string | null {
+  if (customSettings?.qrImageUrlBackup) return customSettings.qrImageUrlBackup;
+  if (typeof window !== 'undefined') {
+    const cached = localStorage.getItem('cga_backup_qr_image');
+    if (cached) return cached;
+  }
+  return PAYMENT_SETTINGS.qrImageUrlBackup || null;
 }
 
 /**

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   CreditCard,
@@ -19,7 +19,13 @@ import {
   ArrowRight,
   Sparkles,
 } from 'lucide-react';
-import { PAYMENT_SETTINGS, buildUpiDeepLink, getUpiQrCodeUrl } from '@/config/paymentSettings';
+import {
+  PAYMENT_SETTINGS,
+  PaymentSettingsRecord,
+  buildUpiDeepLink,
+  getUpiQrCodeUrl,
+  getOfficialQrCodeAsset,
+} from '@/config/paymentSettings';
 
 export interface PaymentTarget {
   courseId: string;
@@ -53,6 +59,57 @@ export function UpiPaymentModal({
   const [tab, setTab] = useState<'upi' | 'bank'>('upi');
   const [step, setStep] = useState<'pay' | 'proof' | 'success'>('pay');
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [qrType, setQrType] = useState<'official' | 'dynamic'>('official');
+
+  const [settings, setSettings] = useState<PaymentSettingsRecord>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('cga_payment_settings');
+        if (cached) return { ...PAYMENT_SETTINGS, ...JSON.parse(cached) };
+      } catch {}
+    }
+    return PAYMENT_SETTINGS;
+  });
+
+  const [activeQrChoice, setActiveQrChoice] = useState<'primary' | 'backup'>('primary');
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadPaymentSettings() {
+      try {
+        const { createClient } = await import('@/lib/supabase/client');
+        const sb = createClient();
+        const { data } = await sb.from('payment_settings').select('*').eq('id', 1).maybeSingle();
+        if (data && isMounted) {
+          const s: PaymentSettingsRecord = {
+            ...PAYMENT_SETTINGS,
+            payeeName: data.payee_name || PAYMENT_SETTINGS.payeeName,
+            upiId: data.upi_id || PAYMENT_SETTINGS.upiId,
+            upiIdBackup: data.upi_id_backup || null,
+            qrImageUrl: data.qr_image_url || localStorage.getItem('cga_active_qr_image') || PAYMENT_SETTINGS.qrImageUrl,
+            qrImageUrlBackup: data.qr_image_url_backup || localStorage.getItem('cga_backup_qr_image') || null,
+            qrLabel: data.qr_label || 'Primary Institute QR',
+            qrLabelBackup: data.qr_label_backup || 'Secondary / Alternate QR',
+            bankTransferEnabled: data.bank_transfer_enabled ?? true,
+            bankAccountHolder: data.bank_account_holder || PAYMENT_SETTINGS.bankAccountHolder,
+            bankName: data.bank_name || PAYMENT_SETTINGS.bankName,
+            bankAccountNumber: data.bank_account_number || PAYMENT_SETTINGS.bankAccountNumber,
+            bankIfsc: data.bank_ifsc || PAYMENT_SETTINGS.bankIfsc,
+            supportPhone: data.support_phone || PAYMENT_SETTINGS.supportPhone,
+            supportEmail: data.support_email || PAYMENT_SETTINGS.supportEmail,
+          };
+          setSettings(s);
+          localStorage.setItem('cga_payment_settings', JSON.stringify(s));
+          if (s.qrImageUrl) localStorage.setItem('cga_active_qr_image', s.qrImageUrl);
+          if (s.qrImageUrlBackup) localStorage.setItem('cga_backup_qr_image', s.qrImageUrlBackup);
+        }
+      } catch {}
+    }
+    loadPaymentSettings();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Verification form state
   const [utr, setUtr] = useState('');
@@ -65,9 +122,23 @@ export function UpiPaymentModal({
 
   if (!target) return null;
 
+  const effectiveUpiId =
+    activeQrChoice === 'backup' && settings.upiIdBackup
+      ? settings.upiIdBackup
+      : settings.upiId;
+
+  const effectiveQrImage =
+    activeQrChoice === 'backup' && settings.qrImageUrlBackup
+      ? settings.qrImageUrlBackup
+      : settings.qrImageUrl || getOfficialQrCodeAsset(settings);
+
   const upiDeepLink = buildUpiDeepLink({
     amount: target.amount,
     note: `${target.courseName.slice(0, 30)} - ${target.studentCode || 'CGA Student'}`,
+    customSettings: {
+      upiId: effectiveUpiId,
+      payeeName: settings.payeeName,
+    },
   });
 
   const qrCodeUrl = getUpiQrCodeUrl(upiDeepLink, 320);
@@ -230,22 +301,85 @@ export function UpiPaymentModal({
 
                   {/* QR Code Section */}
                   <div className="p-4 rounded-2xl border border-slate-200 bg-white flex flex-col items-center text-center space-y-3">
-                    <span className="text-xs font-extrabold text-slate-800">
-                      Or Scan Dynamic QR Code with Any Phone UPI App:
-                    </span>
+                    {/* Limit Protection / Multiple QR Switcher */}
+                    {settings.qrImageUrlBackup && (
+                      <div className="w-full p-3 rounded-2xl bg-amber-50/90 border border-amber-300 text-left space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-extrabold text-amber-950 flex items-center gap-1.5">
+                            <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
+                            <span>Select QR Code:</span>
+                          </span>
+                          <span className="text-[10px] font-bold text-amber-800 bg-amber-200/80 px-2 py-0.5 rounded-full">
+                            Limit Protection
+                          </span>
+                        </div>
+                        <div className="flex rounded-xl bg-white p-1 border border-amber-200 shadow-2xs">
+                          <button
+                            type="button"
+                            onClick={() => setActiveQrChoice('primary')}
+                            className={`flex-1 py-1.5 px-2 rounded-lg font-bold text-xs cursor-pointer transition-all ${
+                              activeQrChoice === 'primary'
+                                ? 'bg-[#0056b3] text-white shadow-xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            QR 1 ({settings.qrLabel || 'Primary'})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActiveQrChoice('backup')}
+                            className={`flex-1 py-1.5 px-2 rounded-lg font-bold text-xs cursor-pointer transition-all ${
+                              activeQrChoice === 'backup'
+                                ? 'bg-purple-700 text-white shadow-xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            QR 2 ({settings.qrLabelBackup || 'Alternate'})
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-amber-900 leading-tight">
+                          💡 <strong>Showing &quot;Limit reached&quot; error in your UPI app?</strong> Switch to <strong>QR 2</strong> above to complete your enrollment without daily banking limits.
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between w-full max-w-xs">
+                      <span className="text-xs font-bold text-slate-700">Scan QR Code:</span>
+                      <div className="flex items-center gap-1 text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => setQrType('official')}
+                          className={`px-2 py-0.5 rounded font-bold cursor-pointer transition-all ${
+                            qrType === 'official' ? 'bg-[#0056b3] text-white' : 'bg-slate-200 text-slate-700'
+                          }`}
+                        >
+                          {activeQrChoice === 'backup' ? 'Alternate QR' : 'Official QR'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setQrType('dynamic')}
+                          className={`px-2 py-0.5 rounded font-bold cursor-pointer transition-all ${
+                            qrType === 'dynamic' ? 'bg-[#0056b3] text-white' : 'bg-slate-200 text-slate-700'
+                          }`}
+                        >
+                          Dynamic Amount
+                        </button>
+                      </div>
+                    </div>
+
                     <div className="p-3 rounded-2xl bg-white border-2 border-[#0056b3]/25 shadow-sm inline-block">
                       <img
-                        src={qrCodeUrl}
+                        src={qrType === 'official' ? effectiveQrImage : qrCodeUrl}
                         alt="CGA Official UPI QR Code"
                         className="w-48 h-48 sm:w-52 sm:h-52 object-contain rounded-lg"
                       />
                     </div>
                     <div className="flex items-center gap-2 bg-slate-50 px-3.5 py-1.5 rounded-xl border border-slate-200 text-xs">
                       <span className="text-slate-500 font-semibold">Payee UPI ID:</span>
-                      <strong className="text-[#0a0e2a] font-mono">{PAYMENT_SETTINGS.upiId}</strong>
+                      <strong className="text-[#0a0e2a] font-mono">{effectiveUpiId}</strong>
                       <button
                         type="button"
-                        onClick={() => copyToClipboard(PAYMENT_SETTINGS.upiId, 'upi')}
+                        onClick={() => copyToClipboard(effectiveUpiId, 'upi')}
                         className="text-[#0056b3] hover:underline flex items-center gap-0.5 font-bold cursor-pointer ml-1"
                       >
                         {copiedField === 'upi' ? (
@@ -260,7 +394,7 @@ export function UpiPaymentModal({
                       </button>
                     </div>
                     <p className="text-[11px] text-slate-500">
-                      Verified Payee: <strong>{PAYMENT_SETTINGS.payeeName}</strong>
+                      Verified Payee: <strong>{settings.payeeName}</strong>
                     </p>
                   </div>
                 </div>
@@ -269,7 +403,7 @@ export function UpiPaymentModal({
                 <div className="space-y-3 text-xs">
                   <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200 space-y-2">
                     <span className="text-[11px] font-extrabold text-amber-900 uppercase tracking-wide block">
-                      State Bank of India (SBI) Direct Transfer
+                      Direct Bank Transfer (NEFT / IMPS / RTGS)
                     </span>
                     <p className="text-slate-700 leading-relaxed">
                       Transfer fees directly using NetBanking, IMPS, NEFT, or RTGS to the official academy account:
@@ -280,14 +414,14 @@ export function UpiPaymentModal({
                     <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
                       <span className="text-[11px] text-slate-500 block">Bank &amp; Branch</span>
                       <strong className="text-slate-900 text-xs sm:text-sm block mt-0.5">
-                        {PAYMENT_SETTINGS.bankName}
+                        {settings.bankName}
                       </strong>
                     </div>
 
                     <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
                       <span className="text-[11px] text-slate-500 block">Account Holder Name</span>
                       <strong className="text-slate-900 text-xs sm:text-sm block mt-0.5">
-                        {PAYMENT_SETTINGS.bankAccountHolder}
+                        {settings.bankAccountHolder}
                       </strong>
                     </div>
 
@@ -295,12 +429,12 @@ export function UpiPaymentModal({
                       <div>
                         <span className="text-[11px] text-slate-500 block">Account Number</span>
                         <strong className="text-slate-900 font-mono text-sm block mt-0.5">
-                          {PAYMENT_SETTINGS.bankAccountNumber}
+                          {settings.bankAccountNumber}
                         </strong>
                       </div>
                       <button
                         type="button"
-                        onClick={() => copyToClipboard(PAYMENT_SETTINGS.bankAccountNumber, 'acc')}
+                        onClick={() => copyToClipboard(settings.bankAccountNumber, 'acc')}
                         className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-300 text-[11px] font-bold text-[#0056b3] hover:bg-slate-100 cursor-pointer"
                       >
                         {copiedField === 'acc' ? 'Copied!' : 'Copy'}
@@ -311,12 +445,12 @@ export function UpiPaymentModal({
                       <div>
                         <span className="text-[11px] text-slate-500 block">IFSC Code</span>
                         <strong className="text-slate-900 font-mono text-sm block mt-0.5">
-                          {PAYMENT_SETTINGS.bankIfsc}
+                          {settings.bankIfsc}
                         </strong>
                       </div>
                       <button
                         type="button"
-                        onClick={() => copyToClipboard(PAYMENT_SETTINGS.bankIfsc, 'ifsc')}
+                        onClick={() => copyToClipboard(settings.bankIfsc, 'ifsc')}
                         className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-300 text-[11px] font-bold text-[#0056b3] hover:bg-slate-100 cursor-pointer"
                       >
                         {copiedField === 'ifsc' ? 'Copied!' : 'Copy'}

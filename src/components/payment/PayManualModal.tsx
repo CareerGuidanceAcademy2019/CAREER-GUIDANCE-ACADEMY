@@ -57,7 +57,55 @@ interface PayManualModalProps {
 
 export function PayManualModal({ target, onClose, onSuccess }: PayManualModalProps) {
   const { currentStudent, showToast, submitPaymentVerification, db } = useCga();
-  const settings: PaymentSettingsRecord = PAYMENT_SETTINGS;
+  const [settings, setSettings] = useState<PaymentSettingsRecord>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('cga_payment_settings');
+        if (cached) return { ...PAYMENT_SETTINGS, ...JSON.parse(cached) };
+      } catch {}
+    }
+    return PAYMENT_SETTINGS;
+  });
+
+  const [activeQrChoice, setActiveQrChoice] = useState<'primary' | 'backup'>('primary');
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadPaymentSettings() {
+      try {
+        const { createClient } = await import('@/lib/supabase/client');
+        const sb = createClient();
+        const { data } = await sb.from('payment_settings').select('*').eq('id', 1).maybeSingle();
+        if (data && isMounted) {
+          const s: PaymentSettingsRecord = {
+            ...PAYMENT_SETTINGS,
+            payeeName: data.payee_name || PAYMENT_SETTINGS.payeeName,
+            upiId: data.upi_id || PAYMENT_SETTINGS.upiId,
+            upiIdBackup: data.upi_id_backup || null,
+            qrImageUrl: data.qr_image_url || localStorage.getItem('cga_active_qr_image') || PAYMENT_SETTINGS.qrImageUrl,
+            qrImageUrlBackup: data.qr_image_url_backup || localStorage.getItem('cga_backup_qr_image') || null,
+            qrLabel: data.qr_label || 'Primary Institute QR',
+            qrLabelBackup: data.qr_label_backup || 'Secondary / Alternate QR',
+            bankTransferEnabled: data.bank_transfer_enabled ?? true,
+            bankAccountHolder: data.bank_account_holder || PAYMENT_SETTINGS.bankAccountHolder,
+            bankName: data.bank_name || PAYMENT_SETTINGS.bankName,
+            bankAccountNumber: data.bank_account_number || PAYMENT_SETTINGS.bankAccountNumber,
+            bankIfsc: data.bank_ifsc || PAYMENT_SETTINGS.bankIfsc,
+            supportPhone: data.support_phone || PAYMENT_SETTINGS.supportPhone,
+            supportEmail: data.support_email || PAYMENT_SETTINGS.supportEmail,
+          };
+          setSettings(s);
+          localStorage.setItem('cga_payment_settings', JSON.stringify(s));
+          if (s.qrImageUrl) localStorage.setItem('cga_active_qr_image', s.qrImageUrl);
+          if (s.qrImageUrlBackup) localStorage.setItem('cga_backup_qr_image', s.qrImageUrlBackup);
+        }
+      } catch {}
+    }
+    loadPaymentSettings();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Check if student already enrolled in this course or mock series
   const isAlreadyEnrolled = Boolean(
@@ -345,10 +393,19 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
     }
   };
 
+  const effectiveUpiId =
+    activeQrChoice === 'backup' && settings.upiIdBackup
+      ? settings.upiIdBackup
+      : settings.upiId;
+
   const upiIntentUrl = buildUpiDeepLink({
     amount: currentAmount,
     note: `${target.title.slice(0, 30)} - ${referenceCode}`,
     transactionRef: referenceCode,
+    customSettings: {
+      upiId: effectiveUpiId,
+      payeeName: settings.payeeName,
+    },
   });
 
   return (
@@ -609,6 +666,48 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
                 <div className="space-y-4">
                   {/* QR Code Card with Toggle */}
                   <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50 flex flex-col items-center text-center space-y-3">
+                    {/* Limit Failover / Multiple QR Toggle */}
+                    {settings.qrImageUrlBackup && (
+                      <div className="w-full max-w-sm p-3 rounded-2xl bg-amber-50/90 border border-amber-300 text-left space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-extrabold text-amber-950 flex items-center gap-1.5">
+                            <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
+                            <span>Select QR Code:</span>
+                          </span>
+                          <span className="text-[10px] font-bold text-amber-800 bg-amber-200/80 px-2 py-0.5 rounded-full">
+                            Limit Protection
+                          </span>
+                        </div>
+                        <div className="flex rounded-xl bg-white p-1 border border-amber-200 shadow-2xs">
+                          <button
+                            type="button"
+                            onClick={() => setActiveQrChoice('primary')}
+                            className={`flex-1 py-1.5 px-2 rounded-lg font-bold text-xs cursor-pointer transition-all ${
+                              activeQrChoice === 'primary'
+                                ? 'bg-[#0056b3] text-white shadow-xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            QR 1 ({settings.qrLabel || 'Primary'})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActiveQrChoice('backup')}
+                            className={`flex-1 py-1.5 px-2 rounded-lg font-bold text-xs cursor-pointer transition-all ${
+                              activeQrChoice === 'backup'
+                                ? 'bg-purple-700 text-white shadow-xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            QR 2 ({settings.qrLabelBackup || 'Alternate'})
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-amber-900 leading-tight">
+                          💡 <strong>Showing &quot;Limit reached&quot; error in your UPI app?</strong> Switch to <strong>QR 2</strong> above to complete your enrollment without banking limits.
+                        </p>
+                      </div>
+                    )}
+
                     <div className="flex items-center justify-between w-full max-w-xs">
                       <span className="text-xs font-bold text-slate-700">Scan QR Code:</span>
                       <div className="flex items-center gap-1 text-[11px]">
@@ -619,7 +718,7 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
                             qrType === 'official' ? 'bg-[#0056b3] text-white' : 'bg-slate-200 text-slate-700'
                           }`}
                         >
-                          Google Pay QR
+                          {activeQrChoice === 'backup' ? 'Alternate QR' : 'Institute QR'}
                         </button>
                         <button
                           type="button"
@@ -635,7 +734,13 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
 
                     <div className="p-3 rounded-2xl bg-white border-2 border-slate-200 shadow-sm inline-block">
                       <img
-                        src={qrType === 'official' ? getOfficialQrCodeAsset() : getUpiQrCodeUrl(upiIntentUrl, 260)}
+                        src={
+                          qrType === 'official'
+                            ? activeQrChoice === 'backup' && settings.qrImageUrlBackup
+                              ? settings.qrImageUrlBackup
+                              : settings.qrImageUrl || getOfficialQrCodeAsset(settings)
+                            : getUpiQrCodeUrl(upiIntentUrl, 260)
+                        }
                         alt="CGA Official UPI QR Code"
                         className="w-48 h-48 sm:w-56 sm:h-56 object-contain rounded-lg mx-auto"
                       />
@@ -650,7 +755,7 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
                       className="w-full max-w-sm py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 cursor-pointer transition-colors"
                     >
                       <Smartphone className="w-4 h-4" />
-                      <span>Pay with UPI App on Mobile</span>
+                      <span>Pay ₹{currentAmount} with UPI App on Mobile</span>
                       <ExternalLink className="w-3.5 h-3.5" />
                     </a>
                   </div>
@@ -674,12 +779,14 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
 
                     <div className="p-3.5 rounded-xl bg-white border border-slate-200 flex items-center justify-between">
                       <div>
-                        <span className="text-slate-400 font-semibold block">UPI ID / VPA:</span>
-                        <strong className="text-[#0056b3] font-mono font-bold">{settings.upiId}</strong>
+                        <span className="text-slate-400 font-semibold block">
+                          UPI ID / VPA ({activeQrChoice === 'backup' ? 'QR 2' : 'QR 1'}):
+                        </span>
+                        <strong className="text-[#0056b3] font-mono font-bold">{effectiveUpiId}</strong>
                       </div>
                       <button
                         type="button"
-                        onClick={() => handleCopy(settings.upiId, 'upi')}
+                        onClick={() => handleCopy(effectiveUpiId, 'upi')}
                         className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
                         title="Copy UPI ID"
                       >

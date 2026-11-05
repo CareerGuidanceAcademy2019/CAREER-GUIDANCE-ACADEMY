@@ -235,11 +235,10 @@ export function AppearTestButton({
       <button
         type="button"
         onClick={onAppear}
-        className={`w-full py-2.5 px-4 rounded-xl text-white text-xs font-extrabold inline-flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all ${
-          isInProgress
-            ? 'bg-emerald-600 hover:bg-emerald-700 animate-pulse'
-            : 'bg-[#0056b3] hover:bg-blue-700'
-        }`}
+        className={`w-full py-2.5 px-4 rounded-xl text-white text-xs font-extrabold inline-flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all ${isInProgress
+          ? 'bg-emerald-600 hover:bg-emerald-700 animate-pulse'
+          : 'bg-[#0056b3] hover:bg-blue-700'
+          }`}
       >
         {isInProgress ? <Play className="w-3.5 h-3.5 fill-current" /> : <Sparkles className="w-3.5 h-3.5 text-amber-300" />}
         <span>{isInProgress ? 'Resume Test' : 'Appear Test'}</span>
