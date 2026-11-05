@@ -114,6 +114,8 @@ function LoginInner() {
     ? 'You were signed out because your account was used on another device.'
     : null;
 
+  const emailConfirmedNotice = params.get('confirmed') === 'true';
+
   useEffect(() => {
     const t = params.get('as')?.toUpperCase();
     if (t === 'FACULTY' || t === 'ADMIN' || t === 'STUDENT') setActiveTab(t);
@@ -289,6 +291,16 @@ function LoginInner() {
 
             <h2 className="text-2xl font-extrabold text-[#0a0e2a]">{tab.title}</h2>
             <p className="text-xs sm:text-sm text-slate-500 mt-1 mb-6">{tab.subtitle}</p>
+
+            {emailConfirmedNotice && (
+              <div className="mb-6 p-4 rounded-2xl bg-emerald-50 border border-emerald-300 flex items-center gap-3 text-xs font-semibold text-emerald-900 shadow-2xs">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                <div>
+                  <strong className="block text-emerald-950 font-bold">Email Confirmed Successfully!</strong>
+                  <span>Your account is now activated. Please enter your password to sign in.</span>
+                </div>
+              </div>
+            )}
 
             {unconfirmedEmail ? (
               <div className="space-y-5">

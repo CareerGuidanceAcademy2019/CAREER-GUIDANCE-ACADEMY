@@ -631,7 +631,7 @@ export const cgaService = {
     const { data, error } = await sb.auth.signUp({
       email: cleanEmail,
       password,
-      options: { emailRedirectTo: `${window.location.origin}/login`, data: userMeta },
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback`, data: userMeta },
     });
     if (error) {
       const msg = error.message || '';
@@ -642,6 +642,13 @@ export const cgaService = {
         return {
           success: false,
           error: 'Verification email limit reached for this hour. Please wait a few minutes before trying again.',
+        };
+      }
+      if (/confirmation (mail|email)/i.test(msg) || /error sending/i.test(msg)) {
+        return {
+          success: false,
+          error:
+            'Could not dispatch confirmation email due to an SMTP mailer issue. Please contact academy support or try again shortly.',
         };
       }
       if (/database error/i.test(msg)) {
