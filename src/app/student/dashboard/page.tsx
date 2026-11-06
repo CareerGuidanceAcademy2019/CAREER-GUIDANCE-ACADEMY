@@ -1,7 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   BookOpen,
   ClipboardCheck,
@@ -13,14 +14,42 @@ import {
   AlertCircle,
   CheckCircle2,
   Calendar,
+  RefreshCw,
+  LogOut,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
 import { CustomCheckSvg, CustomArrowRightSvg } from '@/components/ui/CustomIcons';
 
 export default function StudentDashboardPage() {
-  const { db, currentStudent } = useCga();
+  const router = useRouter();
+  const { db, currentStudent, logout, refresh, showToast } = useCga();
+  const [isRefreshingSite, setIsRefreshingSite] = useState(false);
 
   if (!currentStudent) return null;
+
+  const handleRefreshWholeSite = async () => {
+    if (isRefreshingSite) return;
+    setIsRefreshingSite(true);
+    try {
+      if (typeof window !== 'undefined') {
+        try {
+          sessionStorage.removeItem('cga_db_cache');
+        } catch {}
+      }
+      await refresh(true);
+      showToast('Site Refreshed', 'Loaded the latest updated version of the portal.', 'success');
+      if (typeof window !== 'undefined') {
+        window.location.reload();
+      }
+    } finally {
+      setIsRefreshingSite(false);
+    }
+  };
+
+  const handleTopLogout = async () => {
+    await logout();
+    router.push('/login');
+  };
 
   const enrolledCourseIds = currentStudent.enrollments.map((e) => e.courseId);
   const totalFee = currentStudent.enrollments.reduce((acc, e) => acc + e.totalFee, 0);
@@ -55,7 +84,40 @@ export default function StudentDashboardPage() {
   );
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      {/* Top Quick Action Bar (Dashboard Only — Mobile & Desktop Friendly) */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-3.5 sm:px-5 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
+        <div className="flex items-center gap-2">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="text-xs font-extrabold text-[#0a0e2a]">
+            Logged in as {currentStudent.name} ({currentStudent.studentCode})
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+          <button
+            type="button"
+            onClick={handleRefreshWholeSite}
+            disabled={isRefreshingSite}
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] disabled:opacity-60 text-white text-xs font-extrabold shadow-xs transition-all cursor-pointer"
+            title="Refresh whole site to see latest updates"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingSite ? 'animate-spin' : ''}`} />
+            <span>{isRefreshingSite ? 'Refreshing...' : 'Refresh Whole Site'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleTopLogout}
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#dc2626] hover:bg-red-700 text-white text-xs font-extrabold shadow-xs transition-all cursor-pointer"
+            title="Sign out of your student account"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Logout</span>
+          </button>
+        </div>
+      </div>
+
       {/* Welcome Banner */}
       <div className="cga-gradient-hero rounded-3xl p-6 sm:p-8 text-white shadow-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
         <div className="space-y-2">

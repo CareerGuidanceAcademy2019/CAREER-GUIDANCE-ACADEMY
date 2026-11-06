@@ -78,12 +78,17 @@ export async function POST(request: Request) {
     }
 
     const materialId = mat.id || `mat-${Date.now()}`;
+    const isCurrentAffairs = mat.type === 'Current Affairs' || Boolean(mat.caCategory || mat.ca_category);
+    const dbType = mat.type === 'Book PDF' ? 'Book PDF' : 'Paid Notes';
 
     const { error: upsertErr } = await admin.from('study_materials').upsert({
       id: materialId,
       title: mat.title,
       course_id: targetCourseId,
-      type: mat.type || 'Paid Notes',
+      type: dbType,
+      ca_category: isCurrentAffairs ? (mat.caCategory || mat.ca_category || 'Domestic') : null,
+      drive_link: mat.driveLink || mat.drive_link || null,
+      access_scope: mat.accessScope || mat.access_scope || 'enrolled',
       author: mat.author || 'C.G.A Academic Wing, Udaipur',
       pages: Number(mat.pages) || 1,
       file_size: mat.fileSize || mat.file_size || '1.0 MB',

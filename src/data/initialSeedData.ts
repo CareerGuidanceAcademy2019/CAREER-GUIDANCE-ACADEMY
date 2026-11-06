@@ -95,7 +95,10 @@ export interface StudyMaterial {
   title: string;
   courseId: string;
   courseName: string;
-  type: 'Book PDF' | 'Paid Notes';
+  type: 'Book PDF' | 'Paid Notes' | 'Current Affairs';
+  caCategory?: 'Domestic' | 'International';
+  driveLink?: string;
+  accessScope?: 'enrolled' | 'all_logged_in';
   author: string;
   pages: number;
   fileSize: string;

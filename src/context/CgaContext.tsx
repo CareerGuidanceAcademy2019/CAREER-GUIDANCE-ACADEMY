@@ -1062,9 +1062,20 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
 
   const saveMaterial = useCallback(
     async (m: StudyMaterial, isNew: boolean) => {
+      const isCa = m.type === 'Current Affairs' || Boolean(m.caCategory);
       await run(cgaService.upsertMaterial(m), {
-        title: isNew ? 'Study Material Uploaded' : 'Study Material Updated',
-        message: `"${m.title}" mapped to ${m.courseName}.`,
+        title: isCa
+          ? isNew
+            ? 'Current Affairs Announced'
+            : 'Current Affairs Updated'
+          : isNew
+            ? 'Study Material Uploaded'
+            : 'Study Material Updated',
+        message: isCa
+          ? `"${m.title}" (${m.caCategory || 'Domestic'}) published for ${
+              m.accessScope === 'all_logged_in' ? 'All Login Students' : 'Enrolled Students'
+            }.`
+          : `"${m.title}" mapped to ${m.courseName}.`,
       });
     },
     [run]

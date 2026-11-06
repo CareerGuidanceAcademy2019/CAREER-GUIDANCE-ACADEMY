@@ -236,19 +236,25 @@ const fromCourse = (c: Course): Row => ({
   material_delivery: c.materialDelivery ?? null,
 });
 
-const toMaterial = (r: Row, courseName: string): StudyMaterial => ({
-  id: r.id,
-  title: r.title,
-  courseId: r.course_id,
-  courseName,
-  type: r.type,
-  author: r.author,
-  pages: r.pages,
-  fileSize: r.file_size,
-  uploadedDate: r.uploaded_date,
-  description: r.description,
-  previewSections: r.preview_sections ?? [],
-});
+const toMaterial = (r: Row, courseName: string): StudyMaterial => {
+  const isCurrentAffairs = Boolean(r.ca_category || r.caCategory || r.type === 'Current Affairs');
+  return {
+    id: r.id,
+    title: r.title,
+    courseId: r.course_id,
+    courseName,
+    type: isCurrentAffairs ? 'Current Affairs' : r.type,
+    caCategory: r.ca_category || r.caCategory || undefined,
+    driveLink: r.drive_link || r.driveLink || undefined,
+    accessScope: r.access_scope || r.accessScope || 'enrolled',
+    author: r.author,
+    pages: r.pages,
+    fileSize: r.file_size,
+    uploadedDate: r.uploaded_date,
+    description: r.description,
+    previewSections: r.preview_sections ?? [],
+  };
+};
 
 const toTest = (r: Row, courseName: string, isStudent = false, hasSubmitted = false): MockTest => {
   const allQs: MCQQuestion[] = r.questions ?? [];
@@ -2755,11 +2761,16 @@ export const cgaService = {
       }
     } catch {}
 
+    const isCurrentAffairs = m.type === 'Current Affairs' || Boolean(m.caCategory);
+    const dbType = m.type === 'Book PDF' ? 'Book PDF' : 'Paid Notes';
     const { error } = await this.client().from('study_materials').upsert({
       id: m.id,
       title: m.title,
-      course_id: m.courseId,
-      type: m.type,
+      course_id: m.courseId || 'crs-tet-1-online',
+      type: dbType,
+      ca_category: isCurrentAffairs ? (m.caCategory || 'Domestic') : null,
+      drive_link: m.driveLink || null,
+      access_scope: m.accessScope || 'enrolled',
       author: m.author,
       pages: m.pages,
       file_size: m.fileSize,

@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   User,
@@ -13,16 +13,13 @@ import {
   CreditCard,
   Trophy,
   Users,
-  LogOut,
   Menu,
   X,
   ChevronRight,
   Globe,
   Lock,
-  RotateCcw,
 } from 'lucide-react';
 import { CGALogo } from '@/components/ui/CGALogo';
-import { CustomAcademicEmblemSvg, CustomArrowRightSvg } from '@/components/ui/CustomIcons';
 import { useCga } from '@/context/CgaContext';
 
 const STUDENT_NAV = [
@@ -31,7 +28,7 @@ const STUDENT_NAV = [
   { href: '/student/profile', label: 'My Profile', icon: User },
   { href: '/student/courses', label: 'Course Catalogue & Enrol', icon: BookOpen },
   { href: '/student/my-courses', label: 'My Enrolled Courses', icon: BookOpen },
-  { href: '/student/materials', label: 'Study Materials (PDFs)', icon: FileText },
+  { href: '/student/materials', label: 'Study Materials & Current Affairs', icon: FileText },
   { href: '/student/tests', label: 'Mock Tests & Rank', icon: ClipboardCheck },
   { href: '/student/fees', label: 'Fees & Ledger', icon: CreditCard },
   { href: '/student/payments', label: 'My Payments & Proofs', icon: FileText },
@@ -41,8 +38,7 @@ const STUDENT_NAV = [
 
 export default function StudentPortalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
-  const { isHydrated, session, currentStudent, logout } = useCga();
+  const { isHydrated, session, currentStudent } = useCga();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const currentPageLabel =
@@ -159,16 +155,6 @@ export default function StudentPortalLayout({ children }: { children: React.Reac
           >
             <Globe className="w-3.5 h-3.5" /> Public Website
           </Link>
-          <button
-            type="button"
-            onClick={() => {
-              logout();
-              router.push('/login');
-            }}
-            className="w-full py-2 px-3 rounded-xl bg-red-500/15 hover:bg-red-500/25 text-red-300 text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer"
-          >
-            <LogOut className="w-3.5 h-3.5" /> Sign Out
-          </button>
         </div>
       </aside>
 
