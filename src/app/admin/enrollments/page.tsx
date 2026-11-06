@@ -14,10 +14,14 @@ import {
   AlertTriangle,
   X,
   UserPlus,
+  ChevronDown,
+  Layers,
+  Sparkles,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
 import { MaskedData } from '@/components/ui/MaskedData';
 import { StudentProfile } from '@/data/initialSeedData';
+import { MOCK_SERIES_INITIAL } from '@/data/mockSeriesSeedData';
 
 type SectionKind = 'mock_series' | 'course';
 
@@ -30,13 +34,26 @@ export default function AdminEnrollmentsPage() {
     showToast,
   } = useCga();
 
+  // Dynamic list of all mock test series (combines db and base catalogue)
+  const allMockSeries = useMemo(() => {
+    return db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL;
+  }, [db.mockSeries]);
+
+  // Dynamic list of all courses and batches
+  const allCourses = useMemo(() => {
+    return db.courses || [];
+  }, [db.courses]);
+
   // Active section tab: Mock Series or Courses
   const [sectionKind, setSectionKind] = useState<SectionKind>('mock_series');
 
   // Currently selected item id (default to first mock series or first course)
-  const defaultSeriesId = db.mockSeries?.[0]?.id || 'series-ttet-paper1';
-  const defaultCourseId = db.courses?.[0]?.id || '';
+  const defaultSeriesId = allMockSeries[0]?.id || 'series-ttet-paper1';
+  const defaultCourseId = allCourses[0]?.id || '';
   const [selectedItemId, setSelectedItemId] = useState<string>(defaultSeriesId);
+
+  // Quick category filter for the single selection bar
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'mock_series' | 'course'>('all');
 
   // Search & Filter within enrolled students
   const [search, setSearch] = useState('');
@@ -75,31 +92,31 @@ export default function AdminEnrollmentsPage() {
 
   // Selected item record
   const selectedSeries = useMemo(
-    () => db.mockSeries.find((s) => s.id === selectedItemId) || db.mockSeries?.[0],
-    [db.mockSeries, selectedItemId]
+    () => allMockSeries.find((s) => s.id === selectedItemId) || allMockSeries[0],
+    [allMockSeries, selectedItemId]
   );
   const selectedCourse = useMemo(
-    () => db.courses.find((c) => c.id === selectedItemId) || db.courses?.[0],
-    [db.courses, selectedItemId]
+    () => allCourses.find((c) => c.id === selectedItemId) || allCourses[0],
+    [allCourses, selectedItemId]
   );
 
   const activeItem = sectionKind === 'mock_series' ? selectedSeries : selectedCourse;
-  const activeItemId = activeItem?.id || selectedItemId;
+  const activeItemId = activeItem?.id || selectedItemId || allMockSeries[0]?.id || '';
   const activeItemName = activeItem?.name || '';
 
   // Calculate enrolled counts for all mock series
   const seriesEnrollmentCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    (db.mockSeries || []).forEach((s) => {
+    allMockSeries.forEach((s) => {
       counts[s.id] = (db.seriesEnrollments || []).filter((se) => se.seriesId === s.id).length;
     });
     return counts;
-  }, [db.mockSeries, db.seriesEnrollments]);
+  }, [allMockSeries, db.seriesEnrollments]);
 
   // Calculate enrolled counts for all courses
   const courseEnrollmentCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    (db.courses || []).forEach((c) => {
+    allCourses.forEach((c) => {
       let cnt = 0;
       (db.students || []).forEach((stu) => {
         if (stu.enrollments.some((e) => e.courseId === c.id)) cnt++;
@@ -107,7 +124,7 @@ export default function AdminEnrollmentsPage() {
       counts[c.id] = cnt;
     });
     return counts;
-  }, [db.courses, db.students]);
+  }, [allCourses, db.students]);
 
   // Find enrolled students for the ACTIVE item
   const enrolledStudentRecords = useMemo(() => {
@@ -212,15 +229,28 @@ export default function AdminEnrollmentsPage() {
       });
   }, [db.students, enrolledStudentRecords, activeItemId, addStudentSearch]);
 
-  // Handle section switch (Mock Series vs Courses)
-  const handleSectionSwitch = (kind: SectionKind) => {
+  // Handle single selection dropdown change
+  const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    if (!val) return;
+    const [kind, id] = val.split(':') as [SectionKind, string];
     setSectionKind(kind);
-    if (kind === 'mock_series') {
-      setSelectedItemId(defaultSeriesId);
-    } else {
-      setSelectedItemId(defaultCourseId || db.courses?.[0]?.id || '');
-    }
+    setSelectedItemId(id);
     setSearch('');
+  };
+
+  // Handle quick category filter switch
+  const handleCategoryFilterChange = (filter: 'all' | 'mock_series' | 'course') => {
+    setCategoryFilter(filter);
+    if (filter === 'mock_series' && sectionKind !== 'mock_series') {
+      setSectionKind('mock_series');
+      setSelectedItemId(allMockSeries[0]?.id || defaultSeriesId);
+      setSearch('');
+    } else if (filter === 'course' && sectionKind !== 'course') {
+      setSectionKind('course');
+      setSelectedItemId(allCourses[0]?.id || defaultCourseId);
+      setSearch('');
+    }
   };
 
   // Submit Add Student to active item
@@ -337,11 +367,11 @@ export default function AdminEnrollmentsPage() {
   const transferOptions = useMemo(() => {
     if (!transferTarget) return [];
     if (sectionKind === 'mock_series') {
-      return (db.mockSeries || [])
+      return allMockSeries
         .filter((s) => s.id !== transferTarget.fromId && s.status !== 'Archived')
         .map((s) => ({ id: s.id, name: s.name, price: s.price }));
     } else {
-      return (db.courses || [])
+      return allCourses
         .filter((c) => c.id !== transferTarget.fromId)
         .map((c) => ({
           id: c.id,
@@ -349,7 +379,7 @@ export default function AdminEnrollmentsPage() {
           price: c.price,
         }));
     }
-  }, [transferTarget, sectionKind, db.mockSeries, db.courses]);
+  }, [transferTarget, sectionKind, allMockSeries, allCourses]);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16">
@@ -392,145 +422,113 @@ export default function AdminEnrollmentsPage() {
         </div>
       </div>
 
-      {/* Main Section Kind Tabs: Mock Series vs Courses */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
-        <button
-          type="button"
-          onClick={() => handleSectionSwitch('mock_series')}
-          className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
-            sectionKind === 'mock_series'
-              ? 'bg-[#ea580c] text-white shadow-sm'
-              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-          }`}
-        >
-          <ClipboardCheck className="w-4 h-4" />
-          <span>Mock Test Series ({db.mockSeries?.length || 0})</span>
-        </button>
+      {/* ================= SINGLE SELECTION BAR (MOCKS & BATCHES) ================= */}
+      <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-sm space-y-3.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <label
+              htmlFor="enrollment-target-select"
+              className="font-extrabold text-slate-800 text-sm sm:text-base flex items-center gap-1.5"
+            >
+              <span>Target Mock Test Series Package or Course Batch</span>
+              <span className="text-[#dc2626] font-black">*</span>
+            </label>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Select from the scrollable list below to view all enrolled students and manage access permissions.
+            </p>
+          </div>
 
-        <button
-          type="button"
-          onClick={() => handleSectionSwitch('course')}
-          className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
-            sectionKind === 'course'
-              ? 'bg-[#0056b3] text-white shadow-sm'
-              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-          }`}
-        >
-          <BookOpen className="w-4 h-4" />
-          <span>Classroom &amp; Online Courses ({db.courses?.length || 0})</span>
-        </button>
-      </div>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            {/* Type badge matching Image 2 */}
+            <span
+              className={`text-[11px] font-bold px-3 py-1 rounded-full border shadow-2xs ${
+                sectionKind === 'mock_series'
+                  ? 'bg-orange-50 text-[#ea580c] border-orange-200'
+                  : 'bg-blue-50 text-[#0056b3] border-blue-200'
+              }`}
+            >
+              {sectionKind === 'mock_series' ? 'Mock Test Section Only' : 'Course Batch Section Only'}
+            </span>
 
-      {/* Section Items Selector Grid / Cards with Live Enrolled Count */}
-      <div>
-        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">
-          Select {sectionKind === 'mock_series' ? 'Mock Test Series' : 'Course Batch'} to View &amp; Manage Enrolled Students:
-        </p>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {sectionKind === 'mock_series'
-            ? (db.mockSeries || []).map((s) => {
-                const isSelected = s.id === activeItemId;
-                const count = seriesEnrollmentCounts[s.id] || 0;
-                return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedItemId(s.id);
-                      setSearch('');
-                    }}
-                    className={`p-4 rounded-2xl text-left border transition-all cursor-pointer relative flex flex-col justify-between gap-3 ${
-                      isSelected
-                        ? 'bg-orange-50/70 border-[#ea580c] ring-2 ring-[#ea580c]/30 shadow-sm'
-                        : 'bg-white border-slate-200 hover:border-orange-300 hover:bg-orange-50/20'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-2 mb-1.5">
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase bg-white border border-slate-200 text-slate-600">
-                          {s.stream || 'Competitive'}
-                        </span>
-                        <span className="text-xs font-extrabold text-slate-900">
-                          ₹{s.price.toLocaleString('en-IN')}
-                        </span>
-                      </div>
-                      <h3 className="font-extrabold text-slate-900 text-sm leading-snug line-clamp-2">
-                        {s.name}
-                      </h3>
-                    </div>
-
-                    <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <Users className="w-3.5 h-3.5 text-[#ea580c]" />
-                        <span className="text-xs font-extrabold text-slate-900">
-                          {count} {count === 1 ? 'Student' : 'Students'}
-                        </span>
-                      </div>
-                      <span
-                        className={`text-[11px] font-bold ${
-                          isSelected ? 'text-[#ea580c]' : 'text-slate-400'
-                        }`}
-                      >
-                        {isSelected ? '● Selected' : 'Click to view'}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })
-            : (db.courses || []).map((c) => {
-                const isSelected = c.id === activeItemId;
-                const count = courseEnrollmentCounts[c.id] || 0;
-                return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedItemId(c.id);
-                      setSearch('');
-                    }}
-                    className={`p-4 rounded-2xl text-left border transition-all cursor-pointer relative flex flex-col justify-between gap-3 ${
-                      isSelected
-                        ? 'bg-blue-50/70 border-[#0056b3] ring-2 ring-[#0056b3]/30 shadow-sm'
-                        : 'bg-white border-slate-200 hover:border-blue-300 hover:bg-blue-50/20'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-2 mb-1.5">
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase bg-white border border-slate-200 text-slate-600">
-                          {c.mode || 'Offline'}
-                        </span>
-                        <span className="text-xs font-extrabold text-slate-900">
-                          ₹{c.price.toLocaleString('en-IN')}
-                        </span>
-                      </div>
-                      <h3 className="font-extrabold text-slate-900 text-sm leading-snug line-clamp-2">
-                        {c.name}
-                      </h3>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        Batch: <strong className="text-slate-700">{c.batchName || 'Regular'}</strong>
-                      </p>
-                    </div>
-
-                    <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <Users className="w-3.5 h-3.5 text-[#0056b3]" />
-                        <span className="text-xs font-extrabold text-slate-900">
-                          {count} {count === 1 ? 'Student' : 'Students'}
-                        </span>
-                      </div>
-                      <span
-                        className={`text-[11px] font-bold ${
-                          isSelected ? 'text-[#0056b3]' : 'text-slate-400'
-                        }`}
-                      >
-                        {isSelected ? '● Selected' : 'Click to view'}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
+            {/* Quick Filter Pills */}
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+              <button
+                type="button"
+                onClick={() => handleCategoryFilterChange('all')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  categoryFilter === 'all'
+                    ? 'bg-white text-slate-900 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                All ({allMockSeries.length + allCourses.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => handleCategoryFilterChange('mock_series')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  categoryFilter === 'mock_series'
+                    ? 'bg-[#ea580c] text-white shadow-2xs'
+                    : 'text-slate-600 hover:text-[#ea580c]'
+                }`}
+              >
+                Mocks ({allMockSeries.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => handleCategoryFilterChange('course')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  categoryFilter === 'course'
+                    ? 'bg-[#0056b3] text-white shadow-2xs'
+                    : 'text-slate-600 hover:text-[#0056b3]'
+                }`}
+              >
+                Courses ({allCourses.length})
+              </button>
+            </div>
+          </div>
         </div>
+
+        {/* The single select with scrolling options matching Image 2 */}
+        <div className="relative">
+          <select
+            id="enrollment-target-select"
+            value={`${sectionKind}:${activeItemId}`}
+            onChange={handleSelectChange}
+            className="w-full px-4 py-3.5 pr-10 rounded-2xl border-2 border-blue-200 bg-white font-extrabold text-slate-800 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3] focus:border-[#0056b3] shadow-xs cursor-pointer appearance-none transition-all"
+          >
+            {(categoryFilter === 'all' || categoryFilter === 'mock_series') && (
+              <optgroup label={`── 🎯 MOCK TEST SERIES PACKAGES (${allMockSeries.length}) ──`}>
+                {allMockSeries.map((s) => {
+                  const count = seriesEnrollmentCounts[s.id] || 0;
+                  return (
+                    <option key={`mock_series:${s.id}`} value={`mock_series:${s.id}`}>
+                      {s.name} (₹{s.price}/-) — {s.classRange || s.stream || 'Test Series'} [{count} {count === 1 ? 'Student' : 'Students'} Enrolled]
+                    </option>
+                  );
+                })}
+              </optgroup>
+            )}
+
+            {(categoryFilter === 'all' || categoryFilter === 'course') && (
+              <optgroup label={`── 📚 CLASSROOM & ONLINE COURSE BATCHES (${allCourses.length}) ──`}>
+                {allCourses.map((c) => {
+                  const count = courseEnrollmentCounts[c.id] || 0;
+                  return (
+                    <option key={`course:${c.id}`} value={`course:${c.id}`}>
+                      {c.name} — ({c.batchName || 'Regular Batch'} • {c.mode || 'Classroom'} • ₹{c.price}/-) [{count} {count === 1 ? 'Student' : 'Students'} Enrolled]
+                    </option>
+                  );
+                })}
+              </optgroup>
+            )}
+          </select>
+          <ChevronDown className="w-5 h-5 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+        </div>
+
+        <p className="text-[11px] text-slate-500">
+          Strict access control: only students enrolled in this series package or course batch will appear in the list below. Any new batch or mock series launched in admin automatically shows up here.
+        </p>
       </div>
 
       {/* Active Item Enrolled Header Card */}
