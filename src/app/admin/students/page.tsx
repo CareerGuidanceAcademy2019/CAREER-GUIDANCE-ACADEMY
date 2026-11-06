@@ -34,6 +34,7 @@ export default function AdminStudentsPage() {
     deleteStudent,
     updateStudentEnrollmentDuration,
     transferStudentEnrollment,
+    removeStudentEnrollment,
     showToast,
   } = useCga();
 
@@ -56,6 +57,16 @@ export default function AdminStudentsPage() {
   const [transferReason, setTransferReason] = useState('');
   const [transferResetAttempts, setTransferResetAttempts] = useState(false);
   const [transferBusy, setTransferBusy] = useState(false);
+
+  // Enrollment removal / access revocation (admin declines or removes a specific batch / mock series)
+  const [removeEnrollmentTarget, setRemoveEnrollmentTarget] = useState<{
+    kind: 'course' | 'mock_series';
+    itemId: string;
+    itemName: string;
+  } | null>(null);
+  const [removeEnrollmentReason, setRemoveEnrollmentReason] = useState('');
+  const [removeEnrollmentResetAttempts, setRemoveEnrollmentResetAttempts] = useState(false);
+  const [removeEnrollmentBusy, setRemoveEnrollmentBusy] = useState(false);
   const [editingStudent, setEditingStudent] = useState<StudentProfile | null>(null);
   const [isNewStudent, setIsNewStudent] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<StudentProfile | null>(null);
@@ -221,6 +232,53 @@ export default function AdminStudentsPage() {
       setTransferToId('');
       setTransferReason('');
       setTransferResetAttempts(false);
+    }
+  };
+
+  // ---------- Enrollment removal / revoke access helpers ----------
+  const openRemoveEnrollment = (kind: 'course' | 'mock_series', itemId: string, itemName: string) => {
+    setRemoveEnrollmentTarget({ kind, itemId, itemName });
+    setRemoveEnrollmentReason('Enrolled in wrong series/batch by mistake');
+    setRemoveEnrollmentResetAttempts(false);
+  };
+
+  const closeRemoveEnrollment = () => {
+    if (removeEnrollmentBusy) return;
+    setRemoveEnrollmentTarget(null);
+    setRemoveEnrollmentReason('');
+    setRemoveEnrollmentResetAttempts(false);
+  };
+
+  const removeEnrollmentAttemptCount = (() => {
+    if (!removeEnrollmentTarget || !inspectingStudent) return 0;
+    if (removeEnrollmentTarget.kind === 'mock_series') {
+      const ids = new Set(db.seriesTests.filter((t) => t.seriesId === removeEnrollmentTarget.itemId).map((t) => t.id));
+      return db.seriesAttempts.filter((a) => a.studentId === inspectingStudent.id && ids.has(a.testId)).length;
+    }
+    const ids = new Set(db.mockTests.filter((t) => t.courseId === removeEnrollmentTarget.itemId).map((t) => t.id));
+    return db.testAttempts.filter((a) => a.studentId === inspectingStudent.id && ids.has(a.testId)).length;
+  })();
+
+  const handleSubmitRemoveEnrollment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!removeEnrollmentTarget || !inspectingStudent || removeEnrollmentBusy) return;
+    if (removeEnrollmentReason.trim().length < 3) {
+      showToast('Reason required', 'Please provide a short reason (at least 3 characters).', 'error');
+      return;
+    }
+    setRemoveEnrollmentBusy(true);
+    const ok = await removeStudentEnrollment({
+      studentId: inspectingStudent.id,
+      kind: removeEnrollmentTarget.kind,
+      itemId: removeEnrollmentTarget.itemId,
+      reason: removeEnrollmentReason.trim(),
+      resetAttempts: removeEnrollmentResetAttempts,
+    });
+    setRemoveEnrollmentBusy(false);
+    if (ok) {
+      setRemoveEnrollmentTarget(null);
+      setRemoveEnrollmentReason('');
+      setRemoveEnrollmentResetAttempts(false);
     }
   };
 
@@ -798,6 +856,135 @@ export default function AdminStudentsPage() {
         </div>
       )}
 
+      {/* ==================== ENROLLMENT REMOVE / REVOKE ACCESS MODAL ==================== */}
+      {removeEnrollmentTarget && inspectingStudent && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/70 p-4 overflow-y-auto"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="remove-enrollment-title"
+        >
+          <form
+            onSubmit={handleSubmitRemoveEnrollment}
+            className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-200 p-6 space-y-4 text-xs"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 id="remove-enrollment-title" className="text-base font-extrabold text-[#dc2626]">
+                  {removeEnrollmentTarget.kind === 'mock_series'
+                    ? 'Remove Mock Test Series Access'
+                    : 'Remove Course / Batch Access'}
+                </h2>
+                <p className="text-slate-500 mt-0.5">
+                  Student: <strong className="text-slate-800">{inspectingStudent.name}</strong> (
+                  {inspectingStudent.studentCode})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeRemoveEnrollment}
+                disabled={removeEnrollmentBusy}
+                className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 cursor-pointer disabled:opacity-50"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-red-50/70 border border-red-200 rounded-xl p-3">
+              <span className="text-[10px] uppercase font-bold text-red-600 block">
+                {removeEnrollmentTarget.kind === 'mock_series'
+                  ? 'Mock Test Series to Remove'
+                  : 'Course / Batch to Remove'}
+              </span>
+              <p className="font-extrabold text-slate-900 text-sm mt-0.5">{removeEnrollmentTarget.itemName}</p>
+            </div>
+
+            <div>
+              <label htmlFor="remove-enr-reason" className="block text-[11px] font-bold text-slate-700 mb-1.5">
+                Reason for Removing / Declining Access <span className="text-[#dc2626]">*</span>
+              </label>
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {[
+                  'Enrolled in wrong series/batch by mistake',
+                  'Duplicate enrollment removed',
+                  'Enrollment declined / cancelled by Admin',
+                ].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setRemoveEnrollmentReason(preset)}
+                    disabled={removeEnrollmentBusy}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border cursor-pointer transition-colors ${
+                      removeEnrollmentReason === preset
+                        ? 'bg-red-50 border-red-300 text-red-800'
+                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+              <textarea
+                id="remove-enr-reason"
+                value={removeEnrollmentReason}
+                onChange={(e) => setRemoveEnrollmentReason(e.target.value)}
+                disabled={removeEnrollmentBusy}
+                rows={2}
+                maxLength={500}
+                placeholder="e.g. Student enrolled in Social Studies by mistake and already has Science."
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-[#dc2626]"
+              />
+            </div>
+
+            {removeEnrollmentAttemptCount > 0 && (
+              <label className="flex items-start gap-2 bg-slate-50 border border-slate-200 rounded-xl p-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={removeEnrollmentResetAttempts}
+                  onChange={(e) => setRemoveEnrollmentResetAttempts(e.target.checked)}
+                  disabled={removeEnrollmentBusy}
+                  className="mt-0.5"
+                />
+                <span className="text-slate-700">
+                  Also delete this student&apos;s <strong>{removeEnrollmentAttemptCount}</strong> test attempt(s) in{' '}
+                  <strong>{removeEnrollmentTarget.itemName}</strong>. Leave unchecked to keep their past scores.
+                </span>
+              </label>
+            )}
+
+            <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3 text-amber-950">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+              <p>
+                This will immediately <strong>revoke and remove</strong> the student&apos;s access to{' '}
+                <strong>{removeEnrollmentTarget.itemName}</strong> and decline any associated enrollment payment for
+                this item so it will no longer appear on their portal. Other enrolled courses or mock test series
+                remain untouched.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={closeRemoveEnrollment}
+                disabled={removeEnrollmentBusy}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={removeEnrollmentBusy || removeEnrollmentReason.trim().length < 3}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#dc2626] hover:bg-red-700 text-white font-bold cursor-pointer disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {removeEnrollmentBusy ? 'Removing…' : 'Confirm & Remove Access'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* ==================== STUDENT 360° DETAIL MODAL ==================== */}
       {inspectingStudent && (
         <div
@@ -1089,19 +1276,28 @@ export default function AdminStudentsPage() {
                           )}
                         </div>
 
-                        {/* Admin: fix a wrong course selection */}
+                        {/* Admin: fix or remove a course / batch selection */}
                         {!String(e.id || '').startsWith('enr-angat-') && (
                           <div className="flex flex-wrap items-center justify-between gap-2 bg-amber-50/60 border border-amber-200 rounded-xl px-3 py-2">
                             <p className="text-[11px] text-amber-900 font-medium">
-                              Enrolled in the wrong course? Move this student to the correct one.
+                              Enrolled in the wrong course or batch? Move this student to the correct one or remove access.
                             </p>
-                            <button
-                              type="button"
-                              onClick={() => openTransfer('course', e.courseId, e.courseName || e.courseId)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] cursor-pointer"
-                            >
-                              <ArrowRightLeft className="w-3.5 h-3.5" /> Change Course
-                            </button>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => openTransfer('course', e.courseId, e.courseName || e.courseId)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] cursor-pointer"
+                              >
+                                <ArrowRightLeft className="w-3.5 h-3.5" /> Change Course
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openRemoveEnrollment('course', e.courseId, e.courseName || e.courseId)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-[11px] cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" /> Remove Access
+                              </button>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -1155,15 +1351,24 @@ export default function AdminStudentsPage() {
                         </div>
                         <div className="flex flex-wrap items-center justify-between gap-2 bg-amber-50/60 border border-amber-200 rounded-xl px-3 py-2">
                           <p className="text-[11px] text-amber-900 font-medium">
-                            Enrolled in the wrong mock test series? Move this student to the correct one.
+                            Enrolled in the wrong mock test series? Move this student to the correct one or remove access.
                           </p>
-                          <button
-                            type="button"
-                            onClick={() => openTransfer('mock_series', se.seriesId, seriesNameOf(se.seriesId))}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] cursor-pointer"
-                          >
-                            <ArrowRightLeft className="w-3.5 h-3.5" /> Change Mock Series
-                          </button>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => openTransfer('mock_series', se.seriesId, seriesNameOf(se.seriesId))}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] cursor-pointer"
+                            >
+                              <ArrowRightLeft className="w-3.5 h-3.5" /> Change Mock Series
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openRemoveEnrollment('mock_series', se.seriesId, seriesNameOf(se.seriesId))}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-[11px] cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" /> Remove Access
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );

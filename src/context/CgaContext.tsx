@@ -132,6 +132,13 @@ interface CgaContextType {
     reason: string;
     resetAttempts: boolean;
   }) => Promise<boolean>;
+  removeStudentEnrollment: (params: {
+    studentId: string;
+    kind: 'course' | 'mock_series';
+    itemId: string;
+    reason: string;
+    resetAttempts: boolean;
+  }) => Promise<boolean>;
   saveStudent: (student: StudentProfile, isNew: boolean) => Promise<{ tempPassword?: string }>;
   adminSetStudentPassword: (studentId: string, password: string) => Promise<{ success: boolean; error?: string }>;
   toggleStudentStatus: (studentId: string) => Promise<void>;
@@ -931,6 +938,21 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
     [refresh, showToast]
   );
 
+  const removeStudentEnrollment = useCallback<CgaContextType['removeStudentEnrollment']>(
+    async (params) => {
+      const res = await cgaService.adminRemoveStudentEnrollment(params);
+      if (!res.success) {
+        showToast('Remove Access Failed', res.error, 'error');
+        return false;
+      }
+      await refresh(true);
+      showToast('Enrollment Access Removed', res.message ?? 'Student access removed successfully.', 'success');
+      (res.warnings ?? []).forEach((w) => showToast('Please note', w, 'info'));
+      return true;
+    },
+    [refresh, showToast]
+  );
+
   const saveStudent = useCallback(
     async (student: StudentProfile, isNew: boolean) => {
       if (isNew) {
@@ -1438,6 +1460,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         extendBatchDuration,
         updateStudentEnrollmentDuration,
       transferStudentEnrollment,
+      removeStudentEnrollment,
         saveStudent,
         adminSetStudentPassword,
         toggleStudentStatus,

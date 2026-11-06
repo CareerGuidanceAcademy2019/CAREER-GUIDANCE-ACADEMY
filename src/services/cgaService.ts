@@ -1138,6 +1138,77 @@ export const cgaService = {
     }
   },
 
+  /**
+   * Admin: remove / revoke a student's access to a specific course (batch) or mock test series.
+   */
+  async adminRemoveStudentEnrollment(params: {
+    studentId: string;
+    kind: 'course' | 'mock_series';
+    itemId: string;
+    reason: string;
+    resetAttempts: boolean;
+  }): Promise<ServiceResult<{ message: string; warnings: string[]; removedAttempts: number }>> {
+    try {
+      const res = await fetch('/api/admin/students/remove-enrollment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        return { success: false, error: data?.error || 'Could not remove the enrollment.' };
+      }
+
+      invalidateDbCache();
+
+      if (typeof window !== 'undefined') {
+        try {
+          if (params.kind === 'mock_series') {
+            const stored = localStorage.getItem('cga_series_enrollments');
+            if (stored) {
+              const list = JSON.parse(stored);
+              if (Array.isArray(list)) {
+                localStorage.setItem(
+                  'cga_series_enrollments',
+                  JSON.stringify(
+                    list.filter((e: any) => !(e.studentId === params.studentId && e.seriesId === params.itemId))
+                  )
+                );
+              }
+            }
+          }
+          const customPay = localStorage.getItem('cga_custom_payments');
+          if (customPay) {
+            const pList = JSON.parse(customPay);
+            if (Array.isArray(pList)) {
+              localStorage.setItem(
+                'cga_custom_payments',
+                JSON.stringify(
+                  pList.filter(
+                    (p: any) =>
+                      !(
+                        p.studentId === params.studentId &&
+                        (p.courseId === params.itemId || p.itemId === params.itemId)
+                      )
+                  )
+                )
+              );
+            }
+          }
+        } catch {}
+      }
+
+      return {
+        success: true,
+        message: data.message ?? 'Enrollment access removed.',
+        warnings: Array.isArray(data.warnings) ? data.warnings : [],
+        removedAttempts: Number(data.removedAttempts ?? 0),
+      };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Network error while removing the enrollment.' };
+    }
+  },
+
   // ============ LOAD EVERYTHING THE CURRENT USER MAY SEE (RLS-filtered) ============
   async loadDatabase(session: AuthSession | null, forceRefresh = false): Promise<CgaDatabase> {
     const sessionKey = `${session?.role || 'anon'}_${session?.userId || 'none'}`;
