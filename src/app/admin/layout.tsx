@@ -25,6 +25,7 @@ import {
   Landmark,
   Coins,
   KeyRound,
+  UserCheck,
 } from 'lucide-react';
 import { CGALogo } from '@/components/ui/CGALogo';
 import { CustomAcademicEmblemSvg, CustomArrowRightSvg } from '@/components/ui/CustomIcons';
@@ -39,6 +40,7 @@ const ADMIN_NAV = [
   { href: '/admin/payment-settings', label: 'Bank & UPI Settings', icon: Landmark },
   { href: '/admin/access', label: 'Admin & Faculty Access', icon: ShieldCheck },
   { href: '/admin/students', label: 'Student Management', icon: Users },
+  { href: '/admin/enrollments', label: 'Course & Mock Enrollments', icon: UserCheck },
   { href: '/admin/courses', label: 'Courses & Batch Control', icon: BookOpen },
   { href: '/admin/faculty', label: 'Faculty Management', icon: GraduationCap },
   { href: '/admin/materials', label: 'Study Materials (PDFs)', icon: FileText },

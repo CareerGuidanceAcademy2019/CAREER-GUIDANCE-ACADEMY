@@ -1209,6 +1209,39 @@ export const cgaService = {
     }
   },
 
+  /**
+   * Admin: directly enroll an existing student in a specific course or mock test series.
+   */
+  async adminEnrollStudent(params: {
+    studentId: string;
+    kind: 'course' | 'mock_series';
+    itemId: string;
+    accessValidMonths?: number;
+    reason?: string;
+  }): Promise<ServiceResult<{ message: string; enrollmentId?: string }>> {
+    try {
+      const res = await fetch('/api/admin/students/enroll', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        return { success: false, error: data?.error || 'Could not enroll the student.' };
+      }
+
+      invalidateDbCache();
+
+      return {
+        success: true,
+        message: data.message ?? 'Student enrolled successfully.',
+        enrollmentId: data.enrollmentId,
+      };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Network error while enrolling student.' };
+    }
+  },
+
   // ============ LOAD EVERYTHING THE CURRENT USER MAY SEE (RLS-filtered) ============
   async loadDatabase(session: AuthSession | null, forceRefresh = false): Promise<CgaDatabase> {
     const sessionKey = `${session?.role || 'anon'}_${session?.userId || 'none'}`;

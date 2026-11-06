@@ -139,6 +139,13 @@ interface CgaContextType {
     reason: string;
     resetAttempts: boolean;
   }) => Promise<boolean>;
+  enrollStudentAsAdmin: (params: {
+    studentId: string;
+    kind: 'course' | 'mock_series';
+    itemId: string;
+    accessValidMonths?: number;
+    reason?: string;
+  }) => Promise<boolean>;
   saveStudent: (student: StudentProfile, isNew: boolean) => Promise<{ tempPassword?: string }>;
   adminSetStudentPassword: (studentId: string, password: string) => Promise<{ success: boolean; error?: string }>;
   toggleStudentStatus: (studentId: string) => Promise<void>;
@@ -953,6 +960,20 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
     [refresh, showToast]
   );
 
+  const enrollStudentAsAdmin = useCallback<CgaContextType['enrollStudentAsAdmin']>(
+    async (params) => {
+      const res = await cgaService.adminEnrollStudent(params);
+      if (!res.success) {
+        showToast('Enrolment Failed', res.error, 'error');
+        return false;
+      }
+      await refresh(true);
+      showToast('Student Enrolled', res.message ?? 'Student enrolled successfully.', 'success');
+      return true;
+    },
+    [refresh, showToast]
+  );
+
   const saveStudent = useCallback(
     async (student: StudentProfile, isNew: boolean) => {
       if (isNew) {
@@ -1461,6 +1482,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         updateStudentEnrollmentDuration,
       transferStudentEnrollment,
       removeStudentEnrollment,
+      enrollStudentAsAdmin,
         saveStudent,
         adminSetStudentPassword,
         toggleStudentStatus,
