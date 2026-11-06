@@ -110,7 +110,7 @@ export default function RegisterPage() {
     }
     const pwCheck = evaluatePasswordStrength(password);
     if (!pwCheck.isValid) {
-      setError(pwCheck.feedback[0] || 'Password must be at least 10 characters and not easily guessable.');
+      setError(pwCheck.feedback[0] || 'Password must be at least 8 characters and not easily guessable.');
       return;
     }
     if (password !== confirmPassword) {
@@ -495,7 +495,7 @@ export default function RegisterPage() {
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Min. 10 characters"
+                    placeholder="Min. 8 characters"
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3] focus-visible:ring-2 focus-visible:ring-[#0056b3]"
                     required
                     aria-required="true"

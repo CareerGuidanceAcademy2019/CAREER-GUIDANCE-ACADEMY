@@ -919,6 +919,7 @@ export const cgaService = {
       p_enrollment_id: enrollmentId,
       p_new_valid_until: newValidUntil,
     });
+    if (!error) invalidateDbCache();
     return error ? { success: false, error: msg(error, 'Could not update student access duration.') } : { success: true };
   },
 
@@ -1080,6 +1081,60 @@ export const cgaService = {
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err?.message || 'Network error executing force sign out.' };
+    }
+  },
+
+  /**
+   * Admin: move a student's enrollment (course or mock series) to another one.
+   * The student loses access to the old item and gains access to the new one.
+   */
+  async adminTransferStudentEnrollment(params: {
+    studentId: string;
+    kind: 'course' | 'mock_series';
+    fromId: string;
+    toId: string;
+    reason: string;
+    resetAttempts: boolean;
+  }): Promise<ServiceResult<{ message: string; warnings: string[]; removedAttempts: number }>> {
+    try {
+      const res = await fetch('/api/admin/students/transfer-enrollment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        return { success: false, error: data?.error || 'Could not transfer the enrollment.' };
+      }
+
+      invalidateDbCache();
+
+      // Drop any locally cached copy of the old series enrollment so the old access can not re-appear in the UI.
+      if (typeof window !== 'undefined' && params.kind === 'mock_series') {
+        try {
+          const stored = localStorage.getItem('cga_series_enrollments');
+          if (stored) {
+            const list = JSON.parse(stored);
+            if (Array.isArray(list)) {
+              localStorage.setItem(
+                'cga_series_enrollments',
+                JSON.stringify(
+                  list.filter((e: any) => !(e.studentId === params.studentId && e.seriesId === params.fromId))
+                )
+              );
+            }
+          }
+        } catch {}
+      }
+
+      return {
+        success: true,
+        message: data.message ?? 'Enrollment transferred.',
+        warnings: Array.isArray(data.warnings) ? data.warnings : [],
+        removedAttempts: Number(data.removedAttempts ?? 0),
+      };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Network error while transferring the enrollment.' };
     }
   },
 

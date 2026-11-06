@@ -104,7 +104,7 @@ export default function ResetPasswordPage() {
     }
 
     const strength = evaluatePasswordStrength(password);
-    if (!strength.isValid && password.length < 10) {
+    if (!strength.isValid && password.length < 8) {
       setError(strength.feedback[0] || 'Please choose a stronger password.');
       return;
     }
@@ -161,7 +161,7 @@ export default function ResetPasswordPage() {
     }
 
     const strength = evaluatePasswordStrength(password);
-    if (!strength.isValid && password.length < 10) {
+    if (!strength.isValid && password.length < 8) {
       setError(strength.feedback[0] || 'Please create a stronger password.');
       return;
     }

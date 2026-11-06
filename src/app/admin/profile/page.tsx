@@ -128,7 +128,7 @@ export default function AdminProfilePage() {
       return;
     }
     const evalRes = evaluatePasswordStrength(newPassword);
-    if (!evalRes.isValid && newPassword.length < 10) {
+    if (!evalRes.isValid && newPassword.length < 8) {
       setPasswordError(evalRes.feedback[0] || 'Please create a stronger password.');
       return;
     }

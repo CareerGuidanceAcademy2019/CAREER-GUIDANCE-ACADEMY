@@ -106,7 +106,7 @@ export default function ForgotPasswordPage() {
     }
 
     const strength = evaluatePasswordStrength(newPassword);
-    if (!strength.isValid && newPassword.length < 10) {
+    if (!strength.isValid && newPassword.length < 8) {
       setError(strength.feedback[0] || 'Please create a stronger password.');
       return;
     }

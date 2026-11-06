@@ -124,6 +124,14 @@ interface CgaContextType {
   updateBatchDuration: (courseId: string, newValidUntil: string) => Promise<boolean>;
   extendBatchDuration: (courseId: string, months: number) => Promise<boolean>;
   updateStudentEnrollmentDuration: (enrollmentId: string, newValidUntil: string) => Promise<boolean>;
+  transferStudentEnrollment: (params: {
+    studentId: string;
+    kind: 'course' | 'mock_series';
+    fromId: string;
+    toId: string;
+    reason: string;
+    resetAttempts: boolean;
+  }) => Promise<boolean>;
   saveStudent: (student: StudentProfile, isNew: boolean) => Promise<{ tempPassword?: string }>;
   adminSetStudentPassword: (studentId: string, password: string) => Promise<{ success: boolean; error?: string }>;
   toggleStudentStatus: (studentId: string) => Promise<void>;
@@ -908,6 +916,21 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
     [refresh, showToast]
   );
 
+  const transferStudentEnrollment = useCallback<CgaContextType['transferStudentEnrollment']>(
+    async (params) => {
+      const res = await cgaService.adminTransferStudentEnrollment(params);
+      if (!res.success) {
+        showToast('Enrollment Transfer Failed', res.error, 'error');
+        return false;
+      }
+      await refresh(true);
+      showToast('Enrollment Transferred', res.message ?? 'Enrollment moved successfully.', 'success');
+      (res.warnings ?? []).forEach((w) => showToast('Please note', w, 'info'));
+      return true;
+    },
+    [refresh, showToast]
+  );
+
   const saveStudent = useCallback(
     async (student: StudentProfile, isNew: boolean) => {
       if (isNew) {
@@ -1414,6 +1437,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         updateBatchDuration,
         extendBatchDuration,
         updateStudentEnrollmentDuration,
+      transferStudentEnrollment,
         saveStudent,
         adminSetStudentPassword,
         toggleStudentStatus,

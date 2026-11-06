@@ -14,7 +14,7 @@ export function PasswordStrengthMeter({ password }: PasswordStrengthMeterProps) 
   if (!password) {
     return (
       <p className="text-xs text-slate-500 mt-1">
-        Password must be at least 10 characters with mixed letters and numbers.
+        Password must be at least 8 characters with mixed letters and numbers.
       </p>
     );
   }
@@ -46,7 +46,7 @@ export function PasswordStrengthMeter({ password }: PasswordStrengthMeterProps) 
           </span>
         ) : (
           <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400 text-xs">
-            <ShieldAlert className="w-3.5 h-3.5" /> Minimum 10 characters required
+            <ShieldAlert className="w-3.5 h-3.5" /> Minimum 8 characters required
           </span>
         )}
       </div>

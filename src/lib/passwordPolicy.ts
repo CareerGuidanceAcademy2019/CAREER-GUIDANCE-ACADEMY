@@ -1,7 +1,7 @@
 /**
  * Password Policy & Strength Evaluator
  * Career Guidance Academy (C.G.A)
- * Requirements: Minimum 10 characters, common-password checks, entropy evaluation.
+ * Requirements: Minimum 8 characters, common-password checks, entropy evaluation.
  */
 
 const COMMON_PASSWORDS = new Set([
@@ -25,8 +25,8 @@ export function evaluatePasswordStrength(password: string): PasswordStrength {
   const p = password || '';
   const feedback: string[] = [];
 
-  if (p.length < 10) {
-    feedback.push('Must be at least 10 characters in length.');
+  if (p.length < 8) {
+    feedback.push('Must be at least 8 characters in length.');
   }
 
   const lower = p.toLowerCase();
@@ -42,7 +42,7 @@ export function evaluatePasswordStrength(password: string): PasswordStrength {
   }
 
   let score = 0;
-  if (p.length >= 10) score += 1;
+  if (p.length >= 8) score += 1;
   if (p.length >= 14) score += 1;
   if (/[A-Z]/.test(p) && /[a-z]/.test(p)) score += 1;
   if (/[0-9]/.test(p)) score += 0.5;
@@ -63,7 +63,7 @@ export function evaluatePasswordStrength(password: string): PasswordStrength {
     feedback.push('Add at least one symbol (e.g., !@#$%^&*).');
   }
 
-  const isValid = p.length >= 10 && finalScore >= 2 && !COMMON_PASSWORDS.has(lower);
+  const isValid = p.length >= 8 && finalScore >= 2 && !COMMON_PASSWORDS.has(lower);
 
   let label: PasswordStrength['label'] = 'Weak';
   let color = 'bg-rose-500';
