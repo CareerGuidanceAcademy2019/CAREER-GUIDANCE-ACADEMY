@@ -19,6 +19,8 @@ import {
   Check,
   BookOpen,
   Bell,
+  Tag,
+  Sparkles,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
 import { StudyMaterial } from '@/data/initialSeedData';
@@ -259,6 +261,15 @@ export default function StudentStudyMaterialsPage() {
                       )}
                     </div>
 
+                    <div className="flex flex-wrap items-center justify-between gap-1.5 text-[11px]">
+                      <span className="font-extrabold text-blue-900 bg-blue-50 px-2.5 py-0.5 rounded-lg border border-blue-100 line-clamp-1">
+                        {mat.subject || 'All Competitive Exams'}
+                      </span>
+                      <span className="font-extrabold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">
+                        {mat.price === 0 ? 'FREE' : `₹${mat.price || 199}/-`}
+                      </span>
+                    </div>
+
                     <p className="text-[11px] font-bold text-[#0056b3] uppercase tracking-wider line-clamp-1">
                       {mat.courseName}
                     </p>
@@ -273,7 +284,7 @@ export default function StudentStudyMaterialsPage() {
 
                     <div className="pt-2 flex items-center justify-between text-[11px] font-semibold text-slate-400 border-t border-slate-100">
                       <span>By {mat.author}</span>
-                      <span>{mat.pages} Pages • View-Only</span>
+                      <span>{mat.pages} Pages</span>
                     </div>
                   </div>
                 </div>
@@ -281,14 +292,28 @@ export default function StudentStudyMaterialsPage() {
                 {/* Action Footer */}
                 <div className="px-6 py-4 bg-slate-50 border-t border-slate-200/80">
                   {mat.isUnlocked ? (
-                    <div className="space-y-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setViewingMaterial(mat)}
-                        className="w-full py-2.5 px-3 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
-                      >
-                        <Eye className="w-3.5 h-3.5" /> Read Online (View-Only)
-                      </button>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        {mat.driveLink && (
+                          <a
+                            href={mat.driveLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 py-2.5 px-3 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-bold inline-flex items-center justify-center gap-1.5 shadow-xs transition-colors"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" /> Open Drive PDF
+                          </a>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setViewingMaterial(mat)}
+                          className={`${
+                            mat.driveLink ? 'px-3' : 'w-full'
+                          } py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors`}
+                        >
+                          <Eye className="w-3.5 h-3.5" /> Read Online
+                        </button>
+                      </div>
                       {mat.validUntil && (
                         <p className="text-[10px] text-center text-slate-500 font-medium">
                           Batch access active till{' '}
@@ -405,8 +430,9 @@ export default function StudentStudyMaterialsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredCurrentAffairs.map((ca) => {
                 const category = ca.caCategory || 'Domestic';
+                const isFree = ca.price === 0;
                 const isAllLogin = ca.accessScope === 'all_logged_in';
-                const isUnlockedForStudent = isAllLogin || isStudentEnrolledAnywhere;
+                const isUnlockedForStudent = isFree || isAllLogin || isStudentEnrolledAnywhere;
 
                 return (
                   <div
@@ -441,17 +467,40 @@ export default function StudentStudyMaterialsPage() {
                             ) : (
                               <Globe className="w-3 h-3" />
                             )}
-                            {category} Current Affairs
+                            {category}
                           </span>
 
+                          <span
+                            className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-black shadow-2xs ${
+                              isFree
+                                ? 'bg-emerald-500 text-white'
+                                : 'bg-gradient-to-r from-[#ea580c] to-amber-600 text-white'
+                            }`}
+                          >
+                            {isFree ? (
+                              <>
+                                <Sparkles className="w-3 h-3" /> FREE
+                              </>
+                            ) : (
+                              <>
+                                <Tag className="w-3 h-3" /> ₹{ca.price || 199}/-
+                              </>
+                            )}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between gap-1.5 text-[11px]">
+                          <span className="font-extrabold text-blue-900 bg-blue-50 px-2.5 py-0.5 rounded-lg border border-blue-100 line-clamp-1">
+                            {ca.subject || 'All Competitive Exams'}
+                          </span>
                           {isUnlockedForStudent ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
                               <Unlock className="w-3 h-3" />{' '}
-                              {isAllLogin ? 'Free for Login Students' : 'Unlocked'}
+                              {isFree ? 'Free Access' : isAllLogin ? 'Free for Login' : 'Unlocked'}
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-[#ea580c] border border-amber-200 text-[11px] font-bold">
-                              <Lock className="w-3 h-3" /> Enrolled Students Only
+                              <Lock className="w-3 h-3" /> Enrolled / Paid
                             </span>
                           )}
                         </div>
@@ -499,21 +548,29 @@ export default function StudentStudyMaterialsPage() {
                       ) : (
                         <div className="space-y-2">
                           <p className="text-[11px] text-slate-600 font-semibold text-center">
-                            This Current Affairs PDF is exclusive to students enrolled in a C.G.A
-                            Course or Mock Test Series.
+                            This Current Affairs series is available for enrolled students or can be unlocked individually.
                           </p>
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setPayTarget({
+                                  itemType: 'material',
+                                  itemId: ca.id,
+                                  title: `${ca.title} (${ca.caCategory || 'Domestic'} Current Affairs)`,
+                                  fullAmount: ca.price || 199,
+                                  paymentType: 'full',
+                                })
+                              }
+                              className="flex-1 py-2 px-3 rounded-xl bg-[#ea580c] hover:bg-orange-700 text-white text-xs font-bold inline-flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                            >
+                              <CreditCard className="w-3.5 h-3.5" /> Unlock Series (₹{ca.price || 199})
+                            </button>
                             <Link
                               href="/student/courses"
-                              className="py-2 px-3 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-bold inline-flex items-center justify-center gap-1 transition-all"
+                              className="py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold inline-flex items-center justify-center gap-1 transition-all"
                             >
                               Enrol Course <ArrowRight className="w-3 h-3" />
-                            </Link>
-                            <Link
-                              href="/student/tests"
-                              className="py-2 px-3 rounded-xl bg-[#ea580c] hover:bg-orange-700 text-white text-xs font-bold inline-flex items-center justify-center gap-1 transition-all"
-                            >
-                              Mock Series <ArrowRight className="w-3 h-3" />
                             </Link>
                           </div>
                         </div>

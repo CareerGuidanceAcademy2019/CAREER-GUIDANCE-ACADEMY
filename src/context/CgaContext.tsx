@@ -1063,6 +1063,13 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
   const saveMaterial = useCallback(
     async (m: StudyMaterial, isNew: boolean) => {
       const isCa = m.type === 'Current Affairs' || Boolean(m.caCategory);
+      setDb((prev) => {
+        const idx = (prev.studyMaterials || []).findIndex((x) => x.id === m.id);
+        const next = idx >= 0
+          ? prev.studyMaterials.map((x, i) => (i === idx ? m : x))
+          : [m, ...(prev.studyMaterials || [])];
+        return { ...prev, studyMaterials: next };
+      });
       await run(cgaService.upsertMaterial(m), {
         title: isCa
           ? isNew

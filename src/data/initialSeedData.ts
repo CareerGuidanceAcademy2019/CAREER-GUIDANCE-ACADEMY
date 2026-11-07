@@ -99,6 +99,8 @@ export interface StudyMaterial {
   caCategory?: 'Domestic' | 'International';
   driveLink?: string;
   accessScope?: 'enrolled' | 'all_logged_in';
+  subject?: string;
+  price?: number;
   author: string;
   pages: number;
   fileSize: string;

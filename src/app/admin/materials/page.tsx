@@ -17,6 +17,9 @@ import {
   ShieldCheck,
   Bell,
   BookOpen,
+  Tag,
+  Sparkles,
+  CheckCircle2,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
 import { StudyMaterial } from '@/data/initialSeedData';
@@ -24,6 +27,21 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 type ActiveSubsection = 'course_materials' | 'current_affairs';
 type CaCategoryFilter = 'All' | 'Domestic' | 'International';
+
+const PRESET_SUBJECTS = [
+  'All Competitive Exams',
+  'Tripura TET (Paper-I)',
+  'Tripura TET (Paper-II Science)',
+  'Tripura TET (Paper-II Social Studies)',
+  'TRBT STGT (Pure Science)',
+  'TRBT STGT (Biological Science)',
+  'TRBT STGT (Social Science)',
+  'TPSC Combined Services & JRBT',
+  'Banking (IBPS/SBI), SSC & Railways',
+  'TCS / TPS Civil & Police Services',
+  'Tripura Forester & Forest Guard',
+  'General Studies & Static GK',
+];
 
 export default function AdminStudyMaterialsPage() {
   const { db, saveMaterial, deleteMaterial, showToast } = useCga();
@@ -43,6 +61,8 @@ export default function AdminStudyMaterialsPage() {
   // Current Affairs Upload / Announcement Modal State
   const [editingCa, setEditingCa] = useState<StudyMaterial | null>(null);
   const [isNewCa, setIsNewCa] = useState(false);
+  const [isCustomSubjectCa, setIsCustomSubjectCa] = useState(false);
+  const [isCustomSubjectMat, setIsCustomSubjectMat] = useState(false);
 
   // Separate Course Materials vs Current Affairs
   const courseMaterials = useMemo(
@@ -71,8 +91,10 @@ export default function AdminStudyMaterialsPage() {
 Downloaded by: Administrator
 Document: ${mat.title}
 Course: ${mat.courseName}
+Subject: ${mat.subject || 'All Competitive Exams'}
 Pages: ${mat.pages}
 Author: ${mat.author}
+Drive Link: ${mat.driveLink || 'None provided'}
 ======================================================================
 ${mat.previewSections.map((s) => `\n--- ${s.heading} ---\n${s.body}\n`).join('\n')}
 ======================================================================
@@ -91,6 +113,7 @@ Confidential Master Copy. Distribution restricted.`;
   const openUploadModal = () => {
     const firstCourse = db.courses[0];
     setIsNew(true);
+    setIsCustomSubjectMat(false);
     setSectionHeading('Unit 1: Key Examination Concepts & Notes');
     setSectionBody(
       'Exclusive Career Guidance Academy (C.G.A) Udaipur classroom study material prepared for enrolled batch students.'
@@ -101,6 +124,9 @@ Confidential Master Copy. Distribution restricted.`;
       courseId: firstCourse?.id || '',
       courseName: firstCourse?.name || '',
       type: 'Paid Notes',
+      subject: 'All Competitive Exams',
+      price: 199,
+      driveLink: '',
       author: 'C.G.A Academic Wing, Udaipur',
       pages: 95,
       fileSize: '3.8 MB',
@@ -113,6 +139,7 @@ Confidential Master Copy. Distribution restricted.`;
   const openCurrentAffairsModal = (defaultCat: 'Domestic' | 'International' = 'Domestic') => {
     const firstCourse = db.courses[0];
     setIsNewCa(true);
+    setIsCustomSubjectCa(false);
     setEditingCa({
       id: `ca-${Date.now()}`,
       title: '',
@@ -120,8 +147,10 @@ Confidential Master Copy. Distribution restricted.`;
       courseName: 'Current Affairs',
       type: 'Current Affairs',
       caCategory: defaultCat,
+      subject: 'All Competitive Exams',
+      price: 0, // default to Free; admin can toggle Paid and enter custom price
       driveLink: '',
-      accessScope: 'enrolled',
+      accessScope: 'all_logged_in',
       author: 'C.G.A Current Affairs Desk, Udaipur',
       pages: 15,
       fileSize: 'PDF (Google Drive)',
@@ -133,9 +162,18 @@ Confidential Master Copy. Distribution restricted.`;
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editing || !editing.title.trim()) return;
+    if (!editing || !editing.title.trim()) {
+      showToast('Title Required', 'Please enter a title for the study material.', 'error');
+      return;
+    }
     const finalMat: StudyMaterial = {
       ...editing,
+      title: editing.title.trim(),
+      courseId: editing.courseId || db.courses[0]?.id || 'crs-tet-1-online',
+      courseName: editing.courseName || db.courses.find((c) => c.id === editing.courseId)?.name || 'Course Batch',
+      subject: (editing.subject || 'All Competitive Exams').trim(),
+      price: editing.price !== undefined && editing.price !== null ? Number(editing.price) : 0,
+      driveLink: editing.driveLink ? editing.driveLink.trim() : undefined,
       previewSections:
         editing.previewSections.length > 0
           ? editing.previewSections
@@ -143,38 +181,47 @@ Confidential Master Copy. Distribution restricted.`;
     };
     saveMaterial(finalMat, isNew);
     setEditing(null);
+    showToast(isNew ? 'Study Material Posted' : 'Study Material Updated', `Saved "${finalMat.title}".`, 'success');
   };
 
   const handleSaveCurrentAffairs = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCa || !editingCa.title.trim()) {
-      showToast('Title Required', 'Please enter a title for the Current Affairs announcement.', 'error');
+      showToast('Title Required', 'Please enter a title for the Current Affairs series.', 'error');
       return;
     }
     if (!editingCa.driveLink || !editingCa.driveLink.trim()) {
       showToast('Drive Link Required', 'Please provide the Google Drive PDF link for students.', 'error');
       return;
     }
+    const priceNum = editingCa.price !== undefined && editingCa.price !== null ? Math.max(0, Number(editingCa.price)) : 0;
     const finalCa: StudyMaterial = {
       ...editingCa,
       title: editingCa.title.trim(),
       type: 'Current Affairs',
       caCategory: editingCa.caCategory || 'Domestic',
+      subject: (editingCa.subject || 'All Competitive Exams').trim(),
+      price: priceNum,
       driveLink: editingCa.driveLink.trim(),
-      accessScope: editingCa.accessScope || 'enrolled',
+      accessScope: editingCa.accessScope || (priceNum > 0 ? 'enrolled' : 'all_logged_in'),
       description:
         editingCa.description.trim() ||
-        `${editingCa.caCategory || 'Domestic'} Current Affairs PDF announced by C.G.A Academic Wing.`,
+        `${editingCa.caCategory || 'Domestic'} Current Affairs series compiled by C.G.A Academic Wing.`,
       previewSections: [
         {
           heading: `${editingCa.caCategory || 'Domestic'} Current Affairs`,
-          body: editingCa.description.trim() || 'Click the Google Drive link to open the full PDF.',
+          body: editingCa.description.trim() || 'Click the Google Drive link to open the full PDF document.',
         },
       ],
     };
     saveMaterial(finalCa, isNewCa);
     setEditingCa(null);
     setActiveSubsection('current_affairs');
+    showToast(
+      isNewCa ? 'Current Affairs Published' : 'Current Affairs Updated',
+      `"${finalCa.title}" (${priceNum === 0 ? 'Free' : `₹${priceNum}`}) is now live.`,
+      'success'
+    );
   };
 
   const handleCopyDriveLink = (id: string, link?: string) => {
@@ -194,8 +241,7 @@ Confidential Master Copy. Distribution restricted.`;
             Study Materials &amp; Current Affairs Hub
           </h1>
           <p className="text-xs sm:text-sm text-slate-600 mt-1">
-            Upload course PDFs (Books &amp; Paid Notes) or announce Domestic &amp; International Current
-            Affairs with Google Drive PDF links for enrolled or all logged-in students.
+            Manage course study materials and announce Domestic &amp; International Current Affairs with flexible pricing (Free or Paid in ₹), subject selection, and Google Drive PDF links.
           </p>
         </div>
 
@@ -205,7 +251,7 @@ Confidential Master Copy. Distribution restricted.`;
             onClick={openUploadModal}
             className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-bold cursor-pointer shadow-xs transition-all"
           >
-            <Upload className="w-4 h-4" /> Upload Course Material PDF
+            <Upload className="w-4 h-4" /> Upload Study Material PDF
           </button>
 
           <button
@@ -213,7 +259,7 @@ Confidential Master Copy. Distribution restricted.`;
             onClick={() => openCurrentAffairsModal('Domestic')}
             className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#ea580c] hover:bg-orange-700 text-white text-xs font-bold cursor-pointer shadow-xs transition-all"
           >
-            <Bell className="w-4 h-4" /> Announce / Upload Current Affairs
+            <Bell className="w-4 h-4" /> Announce / Create Current Affairs
           </button>
         </div>
       </div>
@@ -252,7 +298,7 @@ Confidential Master Copy. Distribution restricted.`;
           }`}
         >
           <Globe className="w-4 h-4" />
-          <span>Current Affairs (Domestic &amp; International)</span>
+          <span>Current Affairs Series (Domestic &amp; International)</span>
           <span
             className={`px-2 py-0.5 rounded-full text-[11px] font-black ${
               activeSubsection === 'current_affairs'
@@ -273,66 +319,125 @@ Confidential Master Copy. Distribution restricted.`;
               <FileText className="w-10 h-10 text-slate-300 mx-auto" />
               <h3 className="text-base font-extrabold text-[#0a0e2a]">No Course Study Materials</h3>
               <p className="text-xs text-slate-500 max-w-md mx-auto">
-                Click &quot;Upload Course Material PDF&quot; above to add books or paid chapter notes.
+                Click &quot;Upload Study Material PDF&quot; above to add books or notes with Google Drive links.
               </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {courseMaterials.map((mat) => (
-                <div
-                  key={mat.id}
-                  className="bg-white rounded-3xl border border-slate-200 p-6 shadow-2xs flex flex-col justify-between space-y-4"
-                >
-                  <div className="space-y-2.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-[#0056b3] text-[11px] font-extrabold whitespace-nowrap shrink-0">
-                        {mat.type}
-                      </span>
-                      <span className="text-[11px] text-slate-400 whitespace-nowrap shrink-0">
-                        {mat.pages} Pages • {mat.fileSize} • {mat.uploadedDate}
-                      </span>
-                    </div>
-                    <p className="text-[11px] font-bold text-[#ea580c] uppercase line-clamp-1">
-                      Mapped to: {mat.courseName}
-                    </p>
-                    <h2 className="text-base font-extrabold text-[#0a0e2a]">{mat.title}</h2>
-                    <p className="text-xs text-slate-600 line-clamp-2">{mat.description}</p>
-                  </div>
+              {courseMaterials.map((mat) => {
+                const isFree = mat.price === 0;
+                return (
+                  <div
+                    key={mat.id}
+                    className="bg-white rounded-3xl border border-slate-200 p-6 shadow-2xs flex flex-col justify-between space-y-4 hover:border-blue-300 transition-all"
+                  >
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-[#0056b3] text-[11px] font-extrabold whitespace-nowrap shrink-0">
+                          {mat.type}
+                        </span>
 
-                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-                    <span className="text-slate-400 truncate max-w-[150px]">{mat.author}</span>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => handleAdminDownload(mat)}
-                        className="p-2 rounded-xl bg-blue-50 text-[#0056b3] hover:bg-blue-100 cursor-pointer"
-                        title="Download Master Copy (Admin Only)"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsNew(false);
-                          setEditing({ ...mat });
-                        }}
-                        className="p-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer"
-                        title="Edit Material"
-                      >
-                        <Edit3 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeleteTarget(mat)}
-                        className="p-2 rounded-xl bg-red-50 text-[#dc2626] hover:bg-red-100 cursor-pointer"
-                        title="Delete Material"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[11px] font-extrabold shrink-0 ${
+                            isFree
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-amber-50 text-amber-800 border border-amber-200'
+                          }`}
+                        >
+                          {isFree ? 'FREE' : `₹${mat.price || 199}/-`}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                        <span className="font-extrabold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-lg border border-indigo-100 line-clamp-1">
+                          {mat.subject || 'All Competitive Exams'}
+                        </span>
+                        <span className="text-slate-400">
+                          {mat.pages} Pages • {mat.fileSize}
+                        </span>
+                      </div>
+
+                      <p className="text-[11px] font-bold text-[#ea580c] uppercase line-clamp-1">
+                        Mapped to: {mat.courseName}
+                      </p>
+
+                      <h2 className="text-base font-extrabold text-[#0a0e2a] leading-snug">
+                        {mat.title}
+                      </h2>
+
+                      <p className="text-xs text-slate-600 line-clamp-2">
+                        {mat.description || 'No description provided.'}
+                      </p>
+
+                      {/* Google Drive PDF Link Box */}
+                      {mat.driveLink && (
+                        <div className="p-3 rounded-2xl bg-blue-50/70 border border-blue-200/80 space-y-1.5">
+                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#0056b3] block">
+                            Shared Google Drive PDF Link
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={mat.driveLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-bold transition-colors"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" /> Open Drive PDF
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyDriveLink(mat.id, mat.driveLink)}
+                              className="p-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 cursor-pointer"
+                              title="Copy Drive Link"
+                            >
+                              {copiedId === mat.id ? (
+                                <Check className="w-4 h-4 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-4 h-4" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                      <span className="text-slate-400 truncate max-w-[130px]">{mat.author}</span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleAdminDownload(mat)}
+                          className="p-2 rounded-xl bg-blue-50 text-[#0056b3] hover:bg-blue-100 cursor-pointer"
+                          title="Download Master Archive (Admin Only)"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsNew(false);
+                            setIsCustomSubjectMat(!PRESET_SUBJECTS.includes(mat.subject || 'All Competitive Exams'));
+                            setEditing({ ...mat });
+                          }}
+                          className="p-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer inline-flex items-center gap-1 font-bold text-xs"
+                          title="Edit Details & Drive Link"
+                        >
+                          <Edit3 className="w-3.5 h-3.5 text-[#0056b3]" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(mat)}
+                          className="p-2 rounded-xl bg-red-50 text-[#dc2626] hover:bg-red-100 cursor-pointer"
+                          title="Delete Material"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -345,15 +450,13 @@ Confidential Master Copy. Distribution restricted.`;
           <div className="bg-gradient-to-r from-[#0a0e2a] via-[#1e3a8a] to-[#0056b3] rounded-3xl p-6 text-white shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div className="space-y-1.5">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 text-amber-300 text-[11px] font-extrabold uppercase tracking-wider">
-                <Bell className="w-3.5 h-3.5" /> Current Affairs Announcement &amp; PDF Desk
+                <Bell className="w-3.5 h-3.5" /> Current Affairs Series Management
               </div>
               <h2 className="text-xl font-extrabold">
-                Domestic &amp; International Current Affairs
+                Domestic &amp; International Current Affairs Series
               </h2>
               <p className="text-xs text-blue-100 max-w-2xl">
-                Publish Current Affairs announcements with Google Drive PDF links. Choose whether each
-                release is exclusive to <strong>Enrolled Students</strong> or open to{' '}
-                <strong>All Logged-in Students</strong>.
+                Create and edit Current Affairs series packages just like mock tests and courses. Manage pricing (Free or Custom ₹), select target exam subjects, and attach Google Drive PDF links.
               </p>
             </div>
 
@@ -406,7 +509,7 @@ Confidential Master Copy. Distribution restricted.`;
             </div>
 
             <span className="text-xs font-bold text-slate-500">
-              Showing {filteredCurrentAffairs.length} announcement(s)
+              Showing {filteredCurrentAffairs.length} series package(s)
             </span>
           </div>
 
@@ -418,11 +521,10 @@ Confidential Master Copy. Distribution restricted.`;
               </div>
               <div className="space-y-1">
                 <h3 className="text-base font-extrabold text-[#0a0e2a]">
-                  No Current Affairs Announced Yet
+                  No Current Affairs Series Announced Yet
                 </h3>
                 <p className="text-xs text-slate-500 max-w-md mx-auto">
-                  Use the buttons above to announce Domestic or International Current Affairs and share
-                  the Google Drive PDF link with your students.
+                  Click the buttons above to create a Domestic or International Current Affairs series with custom pricing, subject selection, and Google Drive PDF links.
                 </p>
               </div>
               <div className="flex items-center justify-center gap-3 pt-2">
@@ -447,10 +549,12 @@ Confidential Master Copy. Distribution restricted.`;
               {filteredCurrentAffairs.map((ca) => {
                 const category = ca.caCategory || 'Domestic';
                 const isAllLogin = ca.accessScope === 'all_logged_in';
+                const isFree = ca.price === 0;
+
                 return (
                   <div
                     key={ca.id}
-                    className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-2xs flex flex-col justify-between"
+                    className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-2xs flex flex-col justify-between hover:border-orange-300 transition-all"
                   >
                     <div>
                       <div
@@ -458,7 +562,8 @@ Confidential Master Copy. Distribution restricted.`;
                           category === 'Domestic' ? 'bg-emerald-600' : 'bg-indigo-600'
                         }`}
                       />
-                      <div className="p-6 space-y-3">
+                      <div className="p-6 space-y-3.5">
+                        {/* Badges: Category, Subject & Pricing */}
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <span
                             className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-extrabold ${
@@ -475,11 +580,37 @@ Confidential Master Copy. Distribution restricted.`;
                             {category}
                           </span>
 
+                          {/* Price Tag Badge */}
                           <span
-                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                            className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-black shadow-2xs ${
+                              isFree
+                                ? 'bg-emerald-500 text-white'
+                                : 'bg-gradient-to-r from-[#ea580c] to-amber-600 text-white'
+                            }`}
+                          >
+                            {isFree ? (
+                              <>
+                                <Sparkles className="w-3 h-3" /> FREE
+                              </>
+                            ) : (
+                              <>
+                                <Tag className="w-3 h-3" /> ₹{ca.price}/-
+                              </>
+                            )}
+                          </span>
+                        </div>
+
+                        {/* Subject Tag & Access Scope */}
+                        <div className="flex flex-wrap items-center justify-between gap-1.5 text-[11px]">
+                          <span className="font-extrabold text-blue-900 bg-blue-50 px-2.5 py-0.5 rounded-lg border border-blue-100">
+                            {ca.subject || 'All Competitive Exams'}
+                          </span>
+
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-bold text-[10px] ${
                               isAllLogin
-                                ? 'bg-blue-50 text-[#0056b3] border border-blue-200'
-                                : 'bg-amber-50 text-[#ea580c] border border-amber-200'
+                                ? 'bg-blue-50 text-[#0056b3]'
+                                : 'bg-amber-50 text-[#ea580c]'
                             }`}
                           >
                             {isAllLogin ? (
@@ -488,7 +619,7 @@ Confidential Master Copy. Distribution restricted.`;
                               </>
                             ) : (
                               <>
-                                <ShieldCheck className="w-3 h-3" /> Enrolled Students Only
+                                <ShieldCheck className="w-3 h-3" /> Enrolled Students
                               </>
                             )}
                           </span>
@@ -499,9 +630,10 @@ Confidential Master Copy. Distribution restricted.`;
                         </h3>
 
                         <p className="text-xs text-slate-600 leading-relaxed line-clamp-3">
-                          {ca.description}
+                          {ca.description || 'Current Affairs capsule release.'}
                         </p>
 
+                        {/* Drive PDF Link Box */}
                         {ca.driveLink && (
                           <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
                             <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">
@@ -536,19 +668,21 @@ Confidential Master Copy. Distribution restricted.`;
 
                     <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs">
                       <span className="text-[11px] font-semibold text-slate-500">
-                        Announced: {ca.uploadedDate}
+                        Date: {ca.uploadedDate}
                       </span>
                       <div className="flex items-center gap-1.5">
                         <button
                           type="button"
                           onClick={() => {
                             setIsNewCa(false);
+                            setIsCustomSubjectCa(!PRESET_SUBJECTS.includes(ca.subject || 'All Competitive Exams'));
                             setEditingCa({ ...ca });
                           }}
-                          className="p-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 cursor-pointer"
-                          title="Edit Current Affairs"
+                          className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-[#0056b3] hover:bg-blue-50 font-extrabold text-xs inline-flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                          title="Full Edit Current Affairs Series"
                         >
                           <Edit3 className="w-3.5 h-3.5" />
+                          <span>Edit Series</span>
                         </button>
                         <button
                           type="button"
@@ -568,7 +702,7 @@ Confidential Master Copy. Distribution restricted.`;
         </div>
       )}
 
-      {/* ==================== MODAL 1: COURSE MATERIAL PDF UPLOAD ==================== */}
+      {/* ==================== MODAL 1: COURSE MATERIAL PDF UPLOAD & EDIT ==================== */}
       {editing && (
         <div
           className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/65 p-4 overflow-y-auto"
@@ -577,22 +711,28 @@ Confidential Master Copy. Distribution restricted.`;
         >
           <form
             onSubmit={handleSave}
-            className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-slate-200 text-xs my-8"
+            className="bg-white rounded-3xl max-w-xl w-full p-6 space-y-4 shadow-2xl border border-slate-200 text-xs my-8"
           >
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-base font-extrabold text-[#0a0e2a]">
-                {isNew ? 'Upload & Map Study Material PDF' : 'Edit Study Material'}
-              </h3>
+              <div>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#0056b3] block">
+                  Course Study Materials
+                </span>
+                <h3 className="text-base font-extrabold text-[#0a0e2a]">
+                  {isNew ? 'Upload & Map Study Material PDF' : 'Edit Study Material Details'}
+                </h3>
+              </div>
               <button
                 type="button"
                 onClick={() => setEditing(null)}
-                className="p-1 text-slate-400 cursor-pointer"
+                className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-3.5">
+              {/* Material Title */}
               <div>
                 <label className="font-bold text-slate-700 block mb-1">Material Title *</label>
                 <input
@@ -600,14 +740,15 @@ Confidential Master Copy. Distribution restricted.`;
                   required
                   value={editing.title}
                   onChange={(e) => setEditing({ ...editing, title: e.target.value })}
-                  placeholder="e.g., STGT History & Civics Complete Paid Notes"
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200"
+                  placeholder="e.g., TRIPURA FORESTER & FOREST GUARD EXAMS STUDY MATERIALS"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 font-semibold text-xs"
                 />
               </div>
 
+              {/* Map to Course Batch */}
               <div>
                 <label className="font-bold text-slate-700 block mb-1">
-                  Map to Course (Auto-Unlocks for Enrolled Students)
+                  Map to Course (Auto-Unlocks for Enrolled Students) *
                 </label>
                 <select
                   value={editing.courseId}
@@ -619,37 +760,84 @@ Confidential Master Copy. Distribution restricted.`;
                       courseName: crs?.name || editing.courseName,
                     });
                   }}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-white"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white font-semibold text-xs"
                 >
                   {db.courses.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name}
+                      {c.name} ({c.batchName || 'Regular Batch'} • {c.mode || 'Classroom'})
                     </option>
                   ))}
                 </select>
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
+              {/* Subject / Target Examination */}
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Subject / Target Exam</label>
+                <select
+                  value={isCustomSubjectMat ? 'CUSTOM' : (editing.subject || 'All Competitive Exams')}
+                  onChange={(e) => {
+                    if (e.target.value === 'CUSTOM') {
+                      setIsCustomSubjectMat(true);
+                      setEditing({ ...editing, subject: '' });
+                    } else {
+                      setIsCustomSubjectMat(false);
+                      setEditing({ ...editing, subject: e.target.value });
+                    }
+                  }}
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-white mb-1.5 text-xs font-semibold"
+                >
+                  {PRESET_SUBJECTS.map((sub) => (
+                    <option key={sub} value={sub}>
+                      {sub}
+                    </option>
+                  ))}
+                  <option value="CUSTOM">-- Custom / Other Subject --</option>
+                </select>
+                {isCustomSubjectMat && (
+                  <input
+                    type="text"
+                    value={editing.subject || ''}
+                    onChange={(e) => setEditing({ ...editing, subject: e.target.value })}
+                    placeholder="Type custom subject or exam name..."
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs"
+                  />
+                )}
+              </div>
+
+              {/* Material Type, Price, Pages, File Size */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Material Type</label>
+                  <label className="font-bold text-slate-700 block mb-1">Type</label>
                   <select
                     value={editing.type}
                     onChange={(e) =>
                       setEditing({ ...editing, type: e.target.value as StudyMaterial['type'] })
                     }
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs"
                   >
-                    <option value="Book PDF">Book PDF</option>
                     <option value="Paid Notes">Paid Notes</option>
+                    <option value="Book PDF">Book PDF</option>
                   </select>
                 </div>
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Total Pages</label>
+                  <label className="font-bold text-slate-700 block mb-1">Price (₹)</label>
                   <input
                     type="number"
+                    min={0}
+                    value={editing.price ?? 199}
+                    onChange={(e) => setEditing({ ...editing, price: Number(e.target.value) })}
+                    placeholder="0 = Free"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 font-bold text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Pages</label>
+                  <input
+                    type="number"
+                    min={1}
                     value={editing.pages}
                     onChange={(e) => setEditing({ ...editing, pages: Number(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs"
                   />
                 </div>
                 <div>
@@ -658,37 +846,71 @@ Confidential Master Copy. Distribution restricted.`;
                     type="text"
                     value={editing.fileSize}
                     onChange={(e) => setEditing({ ...editing, fileSize: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                    placeholder="3.8 MB"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs"
                   />
                 </div>
               </div>
 
+              {/* Description */}
               <div>
-                <label className="font-bold text-slate-700 block mb-1">Description</label>
+                <label className="font-bold text-slate-700 block mb-1">Description &amp; Chapters</label>
                 <textarea
                   rows={2}
                   value={editing.description}
                   onChange={(e) => setEditing({ ...editing, description: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200"
+                  placeholder="Outline topics, chapters, and key highlights covered in this material..."
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs"
                 />
               </div>
 
+              {/* GOOGLE DRIVE LINK OF THE PDF / STUDY MATERIAL */}
+              <div className="p-3.5 rounded-2xl bg-blue-50/70 border-2 border-blue-200 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="font-extrabold text-[#0056b3] text-xs flex items-center gap-1.5">
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Google Drive PDF / Study Material Link</span>
+                  </label>
+                  {editing.driveLink && (
+                    <a
+                      href={editing.driveLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] font-bold text-[#0056b3] hover:underline inline-flex items-center gap-1"
+                    >
+                      Test Link ↗
+                    </a>
+                  )}
+                </div>
+                <input
+                  type="url"
+                  value={editing.driveLink || ''}
+                  onChange={(e) => setEditing({ ...editing, driveLink: e.target.value })}
+                  placeholder="https://drive.google.com/file/d/.../view?usp=sharing"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-blue-200 bg-white font-mono text-xs focus:ring-2 focus:ring-[#0056b3] focus:outline-none"
+                />
+                <p className="text-[10px] text-slate-500">
+                  Paste the shareable Google Drive link of the study material PDF. Enrolled batch students and admins will be able to open the document directly.
+                </p>
+              </div>
+
+              {/* Sample Content */}
               {isNew && (
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">
-                    In-Browser Reader Sample Content
+                    In-Browser Reader Sample Content (Optional)
                   </label>
                   <textarea
-                    rows={3}
+                    rows={2}
                     value={sectionBody}
                     onChange={(e) => setSectionBody(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200"
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs"
                   />
                 </div>
               )}
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 type="button"
                 onClick={() => setEditing(null)}
@@ -698,16 +920,16 @@ Confidential Master Copy. Distribution restricted.`;
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 rounded-xl bg-[#0056b3] text-white font-bold cursor-pointer"
+                className="px-5 py-2 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white font-bold cursor-pointer shadow-xs"
               >
-                Save &amp; Map Material
+                Save &amp; Post Study Material
               </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* ==================== MODAL 2: UPLOAD / ANNOUNCE CURRENT AFFAIRS ==================== */}
+      {/* ==================== MODAL 2: CURRENT AFFAIRS SERIES UPLOAD & FULL EDIT ==================== */}
       {editingCa && (
         <div
           className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/65 p-4 overflow-y-auto"
@@ -716,15 +938,15 @@ Confidential Master Copy. Distribution restricted.`;
         >
           <form
             onSubmit={handleSaveCurrentAffairs}
-            className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-slate-200 text-xs my-8"
+            className="bg-white rounded-3xl max-w-xl w-full p-6 space-y-4 shadow-2xl border border-slate-200 text-xs my-8"
           >
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#ea580c] block">
-                  Current Affairs Section
+                  Current Affairs Series Editor
                 </span>
                 <h3 className="text-base font-extrabold text-[#0a0e2a]">
-                  {isNewCa ? 'Announce & Upload Current Affairs PDF' : 'Edit Current Affairs Announcement'}
+                  {isNewCa ? 'Announce & Create Current Affairs Series' : 'Edit Current Affairs Series'}
                 </h3>
               </div>
               <button
@@ -740,7 +962,7 @@ Confidential Master Copy. Distribution restricted.`;
               {/* 1. Category Selection: Domestic vs International */}
               <div>
                 <label className="font-bold text-slate-700 block mb-1.5">
-                  1. Select Current Affairs Type *
+                  1. Current Affairs Scope / Category *
                 </label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
@@ -793,38 +1015,145 @@ Confidential Master Copy. Distribution restricted.`;
                 </div>
               </div>
 
-              {/* 2. Target Audience: For Enrolled Students vs For All Login Students */}
+              {/* 2. Subject / Target Examination Selection */}
               <div>
                 <label className="font-bold text-slate-700 block mb-1.5">
-                  2. Who Can Access This Announcement? *
+                  2. Select Subject / Target Examination *
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <select
+                  value={isCustomSubjectCa ? 'CUSTOM' : (editingCa.subject || 'All Competitive Exams')}
+                  onChange={(e) => {
+                    if (e.target.value === 'CUSTOM') {
+                      setIsCustomSubjectCa(true);
+                      setEditingCa({ ...editingCa, subject: '' });
+                    } else {
+                      setIsCustomSubjectCa(false);
+                      setEditingCa({ ...editingCa, subject: e.target.value });
+                    }
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white font-semibold text-xs mb-1.5"
+                >
+                  {PRESET_SUBJECTS.map((sub) => (
+                    <option key={sub} value={sub}>
+                      {sub}
+                    </option>
+                  ))}
+                  <option value="CUSTOM">-- Custom / Other Examination --</option>
+                </select>
+                {isCustomSubjectCa && (
+                  <input
+                    type="text"
+                    value={editingCa.subject || ''}
+                    onChange={(e) => setEditingCa({ ...editingCa, subject: e.target.value })}
+                    placeholder="Enter custom examination or subject name..."
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs"
+                  />
+                )}
+              </div>
+
+              {/* 3. Pricing Management (Free vs Paid) */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2.5">
+                <label className="font-bold text-slate-800 block">
+                  3. Pricing &amp; Access Fee Control *
+                </label>
+                <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
-                    onClick={() => setEditingCa({ ...editingCa, accessScope: 'enrolled' })}
-                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-center gap-2.5 ${
-                      editingCa.accessScope === 'enrolled'
-                        ? 'bg-amber-50 border-[#ea580c] ring-2 ring-[#ea580c]/20 text-slate-900'
-                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    onClick={() => setEditingCa({ ...editingCa, price: 0 })}
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-2.5 ${
+                      editingCa.price === 0
+                        ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20 text-emerald-950 font-bold'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
                     }`}
                   >
                     <div
-                      className={`p-2 rounded-xl ${
-                        editingCa.accessScope === 'enrolled'
-                          ? 'bg-[#ea580c] text-white'
-                          : 'bg-slate-100 text-slate-500'
+                      className={`p-2 rounded-lg ${
+                        editingCa.price === 0 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'
                       }`}
                     >
-                      <ShieldCheck className="w-4 h-4" />
+                      <Sparkles className="w-4 h-4" />
                     </div>
                     <div>
-                      <div className="font-extrabold text-xs">For Enrolled Students</div>
-                      <div className="text-[10px] text-slate-500">
-                        Only students enrolled in a course/series
-                      </div>
+                      <div className="font-extrabold text-xs">Free Series (₹0)</div>
+                      <div className="text-[10px] opacity-80">Free for all students</div>
                     </div>
                   </button>
 
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditingCa({
+                        ...editingCa,
+                        price: editingCa.price && editingCa.price > 0 ? editingCa.price : 199,
+                      })
+                    }
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-2.5 ${
+                      editingCa.price && editingCa.price > 0
+                        ? 'bg-orange-50 border-[#ea580c] ring-2 ring-[#ea580c]/20 text-slate-900 font-bold'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <div
+                      className={`p-2 rounded-lg ${
+                        editingCa.price && editingCa.price > 0
+                          ? 'bg-[#ea580c] text-white'
+                          : 'bg-slate-200 text-slate-600'
+                      }`}
+                    >
+                      <Tag className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="font-extrabold text-xs">Paid Series (₹)</div>
+                      <div className="text-[10px] opacity-80">Manage custom pricing</div>
+                    </div>
+                  </button>
+                </div>
+
+                {editingCa.price !== undefined && editingCa.price > 0 && (
+                  <div className="pt-2 border-t border-slate-200/80 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-slate-700">Enter Price (₹) *</span>
+                      <div className="flex items-center gap-1">
+                        {[49, 99, 199, 299, 499].map((amt) => (
+                          <button
+                            key={amt}
+                            type="button"
+                            onClick={() => setEditingCa({ ...editingCa, price: amt })}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-colors ${
+                              editingCa.price === amt
+                                ? 'bg-[#ea580c] text-white'
+                                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                            }`}
+                          >
+                            ₹{amt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-500">
+                        ₹
+                      </span>
+                      <input
+                        type="number"
+                        min={1}
+                        required
+                        value={editingCa.price}
+                        onChange={(e) => setEditingCa({ ...editingCa, price: Number(e.target.value) })}
+                        placeholder="e.g. 199"
+                        className="w-full pl-8 pr-3 py-2 rounded-xl border border-slate-200 bg-white font-extrabold text-xs"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 4. Target Audience Scope */}
+              <div>
+                <label className="font-bold text-slate-700 block mb-1.5">
+                  4. Student Access Scope *
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <button
                     type="button"
                     onClick={() => setEditingCa({ ...editingCa, accessScope: 'all_logged_in' })}
@@ -844,49 +1173,88 @@ Confidential Master Copy. Distribution restricted.`;
                       <Users className="w-4 h-4" />
                     </div>
                     <div>
-                      <div className="font-extrabold text-xs">For All Login Students</div>
+                      <div className="font-extrabold text-xs">All Login Students</div>
                       <div className="text-[10px] text-slate-500">
-                        Open to every registered logged-in student
+                        Available to any registered candidate
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setEditingCa({ ...editingCa, accessScope: 'enrolled' })}
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-center gap-2.5 ${
+                      editingCa.accessScope === 'enrolled'
+                        ? 'bg-amber-50 border-[#ea580c] ring-2 ring-[#ea580c]/20 text-slate-900'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div
+                      className={`p-2 rounded-xl ${
+                        editingCa.accessScope === 'enrolled'
+                          ? 'bg-[#ea580c] text-white'
+                          : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      <ShieldCheck className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="font-extrabold text-xs">Enrolled / Paid Students</div>
+                      <div className="text-[10px] text-slate-500">
+                        Requires course enrollment or purchase
                       </div>
                     </div>
                   </button>
                 </div>
               </div>
 
-              {/* 3. Announcement Title */}
+              {/* 5. Announcement Title */}
               <div>
                 <label className="font-bold text-slate-700 block mb-1">
-                  3. Current Affairs Announcement Title *
+                  5. Current Affairs Series Title *
                 </label>
                 <input
                   type="text"
                   required
                   value={editingCa.title}
                   onChange={(e) => setEditingCa({ ...editingCa, title: e.target.value })}
-                  placeholder="e.g., November 2026 Domestic Current Affairs & GK Digest"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 font-semibold"
+                  placeholder="e.g., National & International Current Affairs July, 2026"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 font-semibold text-xs"
                 />
               </div>
 
-              {/* 4. Google Drive PDF Link */}
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  4. Google Drive PDF Link *
-                </label>
+              {/* 6. Google Drive PDF Link */}
+              <div className="p-3.5 rounded-2xl bg-orange-50/70 border-2 border-orange-200 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="font-extrabold text-[#ea580c] text-xs flex items-center gap-1.5">
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>6. Google Drive PDF Link *</span>
+                  </label>
+                  {editingCa.driveLink && (
+                    <a
+                      href={editingCa.driveLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] font-bold text-[#ea580c] hover:underline inline-flex items-center gap-1"
+                    >
+                      Test Drive Link ↗
+                    </a>
+                  )}
+                </div>
                 <input
                   type="url"
                   required
                   value={editingCa.driveLink || ''}
                   onChange={(e) => setEditingCa({ ...editingCa, driveLink: e.target.value })}
                   placeholder="https://drive.google.com/file/d/.../view?usp=sharing"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 font-mono text-xs"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-orange-200 bg-white font-mono text-xs focus:ring-2 focus:ring-[#ea580c] focus:outline-none"
                 />
-                <p className="text-[10px] text-slate-400 mt-1">
-                  Paste the shareable Google Drive PDF link so eligible students can open or download it.
+                <p className="text-[10px] text-slate-500">
+                  Paste the shareable Google Drive PDF link so students can view, open, or study the capsule document.
                 </p>
               </div>
 
-              {/* 5. Announcement Details / Description & Date */}
+              {/* 7. Date & Author */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">Announcement Date</label>
@@ -894,30 +1262,31 @@ Confidential Master Copy. Distribution restricted.`;
                     type="date"
                     value={editingCa.uploadedDate}
                     onChange={(e) => setEditingCa({ ...editingCa, uploadedDate: e.target.value })}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200"
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs"
                   />
                 </div>
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Compiled By / Author</label>
+                  <label className="font-bold text-slate-700 block mb-1">Compiled By / Desk</label>
                   <input
                     type="text"
                     value={editingCa.author}
                     onChange={(e) => setEditingCa({ ...editingCa, author: e.target.value })}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200"
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs"
                   />
                 </div>
               </div>
 
+              {/* 8. Description */}
               <div>
                 <label className="font-bold text-slate-700 block mb-1">
-                  Announcement Message / Topics Covered
+                  Topics Covered / Summary Description
                 </label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   value={editingCa.description}
                   onChange={(e) => setEditingCa({ ...editingCa, description: e.target.value })}
-                  placeholder="Describe the key topics, exam relevance (TET, STGT, TPSC, Banking, SSC), or instructions for students..."
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200"
+                  placeholder="Describe the key headlines, awards, summits, sports, or exam focus..."
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs"
                 />
               </div>
             </div>
@@ -932,20 +1301,22 @@ Confidential Master Copy. Distribution restricted.`;
               </button>
               <button
                 type="submit"
-                className="px-5 py-2.5 rounded-xl bg-[#ea580c] hover:bg-orange-700 text-white font-extrabold cursor-pointer shadow-xs"
+                className="px-5 py-2.5 rounded-xl bg-[#ea580c] hover:bg-orange-700 text-white font-extrabold cursor-pointer shadow-xs inline-flex items-center gap-1.5"
               >
-                {isNewCa ? 'Announce & Publish Current Affairs' : 'Save Changes'}
+                <CheckCircle2 className="w-4 h-4" />
+                {isNewCa ? 'Announce & Publish Series' : 'Save Changes & Update'}
               </button>
             </div>
           </form>
         </div>
       )}
 
+      {/* Delete Confirmation Dialog */}
       <ConfirmDialog
         isOpen={!!deleteTarget}
         title={
           deleteTarget?.type === 'Current Affairs' || deleteTarget?.caCategory
-            ? 'Delete Current Affairs Announcement?'
+            ? 'Delete Current Affairs Series?'
             : 'Delete Study Material?'
         }
         message={`Are you sure you want to delete "${deleteTarget?.title}"?`}

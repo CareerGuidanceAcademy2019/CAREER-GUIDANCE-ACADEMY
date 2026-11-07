@@ -89,13 +89,14 @@ export async function POST(request: Request) {
       ca_category: isCurrentAffairs ? (mat.caCategory || mat.ca_category || 'Domestic') : null,
       drive_link: mat.driveLink || mat.drive_link || null,
       access_scope: mat.accessScope || mat.access_scope || 'enrolled',
+      subject: mat.subject || 'All Competitive Exams',
       author: mat.author || 'C.G.A Academic Wing, Udaipur',
       pages: Number(mat.pages) || 1,
       file_size: mat.fileSize || mat.file_size || '1.0 MB',
       uploaded_date: mat.uploadedDate || mat.uploaded_date || new Date().toISOString().split('T')[0],
       description: mat.description || '',
       preview_sections: mat.previewSections || mat.preview_sections || [],
-      price: Number(mat.price) || 199,
+      price: mat.price !== undefined && mat.price !== null ? Number(mat.price) : 0,
     });
 
     if (upsertErr) {
