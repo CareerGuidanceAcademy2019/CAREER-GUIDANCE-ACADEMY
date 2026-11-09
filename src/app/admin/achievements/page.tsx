@@ -5,7 +5,6 @@ import { Plus, Trophy, Edit3, Trash2, X, Sparkles } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
 import { Achievement } from '@/data/initialSeedData';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { TopperAvatar } from '@/components/ui/TopperAvatar';
 import { generateInitialsAvatarSvgDataUrl, getNameInitials } from '@/lib/avatarGenerator';
 
 export default function AdminAchievementsPage() {
@@ -63,12 +62,13 @@ export default function AdminAchievementsPage() {
             className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs flex flex-col justify-between space-y-4"
           >
             <div className="text-center space-y-2">
-              <TopperAvatar
-                name={item.name}
-                photo={item.photo}
-                sizeClassName="w-20 h-20"
-                textClassName="text-2xl font-black"
-                className="mx-auto"
+              <img
+                src={item.photo || generateInitialsAvatarSvgDataUrl(item.name)}
+                alt={item.name}
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = generateInitialsAvatarSvgDataUrl(item.name);
+                }}
+                className="w-20 h-20 rounded-full object-cover mx-auto ring-2 ring-[#ea580c]"
               />
               <span className="inline-block px-2.5 py-0.5 rounded-full bg-amber-50 text-[#ea580c] border border-amber-200 text-[11px] font-extrabold">
                 {item.rank} ({item.year})
@@ -139,10 +139,10 @@ export default function AdminAchievementsPage() {
 
               {/* Automatic Name-Initials Avatar Preview */}
               <div className="p-3.5 rounded-2xl bg-blue-50/60 border border-blue-200 flex items-center gap-3">
-                <TopperAvatar
-                  name={editing.name || 'New Student'}
-                  sizeClassName="w-14 h-14"
-                  textClassName="text-lg font-black"
+                <img
+                  src={generateInitialsAvatarSvgDataUrl(editing.name || 'New Student')}
+                  alt="Avatar Preview"
+                  className="w-14 h-14 rounded-full ring-2 ring-[#ea580c] shrink-0"
                 />
                 <div>
                   <span className="text-xs font-extrabold text-[#0a0e2a] flex items-center gap-1">

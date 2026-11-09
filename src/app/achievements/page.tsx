@@ -5,7 +5,6 @@ import { Trophy, CheckCircle2, Award, Search } from 'lucide-react';
 import { PublicHeader } from '@/components/layout/PublicHeader';
 import { PublicFooter } from '@/components/layout/PublicFooter';
 import { useCga } from '@/context/CgaContext';
-import { TopperAvatar } from '@/components/ui/TopperAvatar';
 
 export default function AchievementsPage() {
   const { db } = useCga();
@@ -103,12 +102,10 @@ export default function AchievementsPage() {
                   <div className="h-2 bg-gradient-to-r from-[#0056b3] via-[#ea580c] to-[#dc2626]" />
                   <div className="p-6 text-center border-b border-slate-100">
                     <div className="relative inline-block">
-                      <TopperAvatar
-                        name={item.name}
-                        photo={item.photo}
-                        sizeClassName="w-24 h-24"
-                        textClassName="text-2xl font-black"
-                        className="mx-auto ring-4 ring-amber-100 shadow-md"
+                      <img
+                        src={item.photo}
+                        alt={`Photograph of student ${item.name}, ${item.rank} in ${item.exam}`}
+                        className="w-24 h-24 rounded-full object-cover mx-auto ring-4 ring-amber-100 shadow-md"
                       />
                       <span className="absolute -bottom-1 -right-1 bg-[#ea580c] text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full shadow whitespace-nowrap">
                         {item.year}

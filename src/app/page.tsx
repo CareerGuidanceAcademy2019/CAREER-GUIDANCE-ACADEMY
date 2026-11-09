@@ -25,10 +25,8 @@ import {
   X,
   Camera,
   Upload,
-  Image as ImageIcon,
   ChevronLeft,
   ChevronRight,
-  Sparkles,
 } from 'lucide-react';
 import { PublicHeader } from '@/components/layout/PublicHeader';
 import { PublicFooter } from '@/components/layout/PublicFooter';
@@ -36,9 +34,8 @@ import { CourseCard } from '@/components/public/CourseCard';
 import { useCga } from '@/context/CgaContext';
 import { CustomAcademicEmblemSvg, CustomArrowRightSvg } from '@/components/ui/CustomIcons';
 import { getFacultyAvatarUrl, formatFacultyName } from '@/lib/names';
-import { Announcement, CampusGalleryImage } from '@/data/initialSeedData';
+import { Announcement, CampusGalleryImage, INITIAL_SEED_DATA } from '@/data/initialSeedData';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { TopperAvatar } from '@/components/ui/TopperAvatar';
 import { compressCampusPhoto, type CompressionResult } from '@/lib/imageCompressor';
 
 export default function HomePage() {
@@ -57,54 +54,21 @@ export default function HomePage() {
     }
   }, [router]);
 
-  // Campus & Classroom Gallery state
-  const campusImages: CampusGalleryImage[] =
-    siteContent.campusImages && siteContent.campusImages.length > 0
-      ? siteContent.campusImages
-      : [
-          {
-            id: 'campus-1',
-            url: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=1200&auto=format&fit=crop&q=80',
-            title: 'Interactive Smart Classroom Sessions',
-            caption: 'Regular disciplined lectures with state-topper faculty at Chanban campus, Udaipur.',
-            uploadedAt: '2026-10-01',
-          },
-          {
-            id: 'campus-2',
-            url: 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=1200&auto=format&fit=crop&q=80',
-            title: 'Academy Library & Digital Study Center',
-            caption: 'Curated competitive reference books, current affairs digests, and peaceful self-study space.',
-            uploadedAt: '2026-10-05',
-          },
-          {
-            id: 'campus-3',
-            url: 'https://images.unsplash.com/photo-1427504494785-3a9ca7044f45?w=1200&auto=format&fit=crop&q=80',
-            title: 'OMR & Online Mock Examination Hall',
-            caption: 'Simulating official TRBT, TPSC, and Board examination environments.',
-            uploadedAt: '2026-10-12',
-          },
-        ];
-
-  const [activeGalleryIdx, setActiveGalleryIdx] = useState(0);
-  const [showCampusUploadModal, setShowCampusUploadModal] = useState(false);
+  // Front Banner: Academy Highlights vs Classroom Tour state
+  const [heroTab, setHeroTab] = useState<'stats' | 'campus'>('stats');
+  const [activeCampusIdx, setActiveCampusIdx] = useState(0);
+  const [showCampusModal, setShowCampusModal] = useState(false);
   const [campusPhotoTitle, setCampusPhotoTitle] = useState('');
   const [campusPhotoCaption, setCampusPhotoCaption] = useState('');
   const [compressedResult, setCompressedResult] = useState<CompressionResult | null>(null);
   const [isCompressing, setIsCompressing] = useState(false);
-  const [isSavingCampusPhoto, setIsSavingCampusPhoto] = useState(false);
-  const [deleteCampusTarget, setDeleteCampusTarget] = useState<CampusGalleryImage | null>(null);
+  const [isSavingCampus, setIsSavingCampus] = useState(false);
   const campusFileInputRef = React.useRef<HTMLInputElement>(null);
 
-  // Admin Announcement Quick-Action state
-  const [showAdminAnnForm, setShowAdminAnnForm] = useState(false);
-  const [annTitle, setAnnTitle] = useState('');
-  const [annContent, setAnnContent] = useState('');
-  const [annTargetBatch, setAnnTargetBatch] = useState('All Batches');
-  const [annPriority, setAnnPriority] = useState<Announcement['priority']>('Important');
-  const [isSubmittingAnn, setIsSubmittingAnn] = useState(false);
-  const [deleteAnnTarget, setDeleteAnnTarget] = useState<Announcement | null>(null);
-
-  const isAdmin = session?.role === 'ADMIN';
+  const campusImages: CampusGalleryImage[] =
+    siteContent.campusImages && siteContent.campusImages.length > 0
+      ? siteContent.campusImages
+      : INITIAL_SEED_DATA.siteContent.campusImages || [];
 
   const handleCampusPhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -119,7 +83,7 @@ export default function HomePage() {
       }
       showToast(
         'Image Compressed',
-        `Compressed from ${result.originalSizeKb} KB to ${result.compressedSizeKb} KB (${result.savingsPercent}% savings, lossless visual quality).`,
+        `Optimized from ${result.originalSizeKb} KB to ${result.compressedSizeKb} KB (${result.savingsPercent}% savings, lossless clarity).`,
         'success'
       );
     } catch (err: any) {
@@ -132,7 +96,7 @@ export default function HomePage() {
   const handleSaveCampusPhoto = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!compressedResult) return;
-    setIsSavingCampusPhoto(true);
+    setIsSavingCampus(true);
 
     const newPhoto: CampusGalleryImage = {
       id: `campus-${Date.now()}`,
@@ -145,26 +109,26 @@ export default function HomePage() {
     const currentList = siteContent.campusImages || campusImages;
     const updated = [newPhoto, ...currentList];
     await updateSiteContent({ ...siteContent, campusImages: updated });
-    setIsSavingCampusPhoto(false);
-    setShowCampusUploadModal(false);
+    setIsSavingCampus(false);
+    setShowCampusModal(false);
     setCompressedResult(null);
     setCampusPhotoTitle('');
     setCampusPhotoCaption('');
-    setActiveGalleryIdx(0);
-    showToast('Classroom Photo Published', 'Photo is now live on the front top banner.', 'success');
+    setActiveCampusIdx(0);
+    setHeroTab('campus');
+    showToast('Classroom Photo Published', 'Photo posted to front banner.', 'success');
   };
 
-  const handleConfirmDeleteCampusPhoto = async () => {
-    if (!deleteCampusTarget) return;
-    const currentList = siteContent.campusImages || campusImages;
-    const updated = currentList.filter((img) => img.id !== deleteCampusTarget.id);
-    await updateSiteContent({ ...siteContent, campusImages: updated });
-    setDeleteCampusTarget(null);
-    if (activeGalleryIdx >= updated.length) {
-      setActiveGalleryIdx(Math.max(0, updated.length - 1));
-    }
-    showToast('Photo Removed', 'Image removed from front banner.', 'info');
-  };
+  // Admin Announcement Quick-Action state
+  const [showAdminAnnForm, setShowAdminAnnForm] = useState(false);
+  const [annTitle, setAnnTitle] = useState('');
+  const [annContent, setAnnContent] = useState('');
+  const [annTargetBatch, setAnnTargetBatch] = useState('All Batches');
+  const [annPriority, setAnnPriority] = useState<Announcement['priority']>('Important');
+  const [isSubmittingAnn, setIsSubmittingAnn] = useState(false);
+  const [deleteAnnTarget, setDeleteAnnTarget] = useState<Announcement | null>(null);
+
+  const isAdmin = session?.role === 'ADMIN';
 
   const handleAdminPostAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -289,19 +253,106 @@ export default function HomePage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 my-6">
-                    {siteContent.stats.map((stat, i) => (
-                      <div
-                        key={i}
-                        className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 text-center"
-                      >
-                        <p className="text-2xl font-extrabold text-[#0056b3]">{stat.value}</p>
-                        <p className="text-[11px] font-semibold text-slate-600 mt-0.5 leading-snug">
-                          {stat.label}
-                        </p>
-                      </div>
-                    ))}
+                  {/* Front Banner Tab Selector: Academy Highlights vs Classrooms */}
+                  <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-100 my-4 text-xs font-bold border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setHeroTab('stats')}
+                      className={`flex-1 py-1.5 rounded-lg transition-all cursor-pointer text-center ${
+                        heroTab === 'stats'
+                          ? 'bg-white text-[#0056b3] shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Academy Highlights
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setHeroTab('campus')}
+                      className={`flex-1 py-1.5 rounded-lg transition-all cursor-pointer text-center ${
+                        heroTab === 'campus'
+                          ? 'bg-[#ea580c] text-white shadow-xs'
+                          : 'text-slate-600 hover:text-[#ea580c]'
+                      }`}
+                    >
+                      Classroom &amp; Campus Tour
+                    </button>
                   </div>
+
+                  {heroTab === 'stats' ? (
+                    <div className="grid grid-cols-2 gap-3 my-4">
+                      {siteContent.stats.map((stat, i) => (
+                        <div
+                          key={i}
+                          className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 text-center"
+                        >
+                          <p className="text-2xl font-extrabold text-[#0056b3]">{stat.value}</p>
+                          <p className="text-[11px] font-semibold text-slate-600 mt-0.5 leading-snug">
+                            {stat.label}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-3 my-4">
+                      <div className="relative rounded-2xl overflow-hidden aspect-[16/10] bg-slate-100 border border-slate-200 shadow-inner">
+                        <img
+                          src={campusImages[activeCampusIdx]?.url || '/cga-logo.png'}
+                          alt={campusImages[activeCampusIdx]?.title || 'Classroom'}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent flex flex-col justify-end p-3 text-white">
+                          <p className="text-xs font-bold truncate">
+                            {campusImages[activeCampusIdx]?.title}
+                          </p>
+                          {campusImages[activeCampusIdx]?.caption && (
+                            <p className="text-[10px] text-slate-200 line-clamp-1">
+                              {campusImages[activeCampusIdx]?.caption}
+                            </p>
+                          )}
+                        </div>
+                        {campusImages.length > 1 && (
+                          <div className="absolute top-2 right-2 flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setActiveCampusIdx((p) => (p === 0 ? campusImages.length - 1 : p - 1))
+                              }
+                              className="p-1 rounded-full bg-black/60 hover:bg-black/90 text-white cursor-pointer"
+                              aria-label="Previous photo"
+                            >
+                              <ChevronLeft className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setActiveCampusIdx((p) => (p === campusImages.length - 1 ? 0 : p + 1))
+                              }
+                              className="p-1 rounded-full bg-black/60 hover:bg-black/90 text-white cursor-pointer"
+                              aria-label="Next photo"
+                            >
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCompressedResult(null);
+                            setCampusPhotoTitle('');
+                            setCampusPhotoCaption('');
+                            setShowCampusModal(true);
+                          }}
+                          className="w-full py-2 rounded-xl bg-[#ea580c] hover:bg-orange-600 text-white text-xs font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                        >
+                          <Camera className="w-3.5 h-3.5" />
+                          <span>Upload Classroom Photo (Auto-compressed)</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   <div className="bg-blue-50/90 border border-blue-200 rounded-2xl p-4 flex items-center justify-between gap-3">
                     <div>
@@ -321,204 +372,6 @@ export default function HomePage() {
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ==================== 2. CAMPUS & CLASSROOM EXPERIENCE BANNER ==================== */}
-        <section className="py-12 lg:py-16 bg-slate-900 text-white border-b border-slate-800 relative overflow-hidden">
-          {/* Subtle background glow */}
-          <div className="absolute top-0 right-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute bottom-0 left-1/4 w-96 h-96 bg-orange-600/10 rounded-full blur-3xl pointer-events-none" />
-
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-            <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
-              <div>
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-bold text-amber-300">
-                  <Camera className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Udaipur Campus &amp; Classrooms</span>
-                </div>
-                <h2 className="text-2xl sm:text-3xl font-extrabold text-white mt-2">
-                  Modern Infrastructure &amp; Dynamic Learning Spaces
-                </h2>
-                <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl">
-                  Step inside Career Guidance Academy at Chanban, Udaipur. Explore our multimedia smart classrooms, fully equipped OMR testing center, and dedicated faculty study desks.
-                </p>
-              </div>
-
-              {/* Admin Quick Action Button */}
-              {isAdmin && (
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCompressedResult(null);
-                      setCampusPhotoTitle('');
-                      setCampusPhotoCaption('');
-                      setShowCampusUploadModal(true);
-                    }}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#ea580c] hover:bg-orange-600 text-white text-xs font-bold shadow-md cursor-pointer transition-all"
-                  >
-                    <Upload className="w-4 h-4" />
-                    <span>Upload Classroom Photo</span>
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Featured Front Top Banner / Large Display */}
-            {campusImages.length > 0 && (
-              <div className="space-y-4">
-                <div className="relative rounded-3xl overflow-hidden border-2 border-white/10 bg-slate-950 aspect-[16/9] sm:aspect-[21/9] max-h-[500px] shadow-2xl">
-                  <img
-                    src={campusImages[activeGalleryIdx]?.url || campusImages[0].url}
-                    alt={campusImages[activeGalleryIdx]?.title || 'CGA Classroom'}
-                    className="w-full h-full object-cover transition-all duration-500"
-                  />
-                  {/* Gradient Overlay & Captions */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/30 to-transparent flex flex-col justify-end p-6 sm:p-8">
-                    <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
-                      <div className="space-y-1">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-amber-300 bg-black/40 backdrop-blur-md px-2.5 py-1 rounded-full inline-block">
-                          Photo {activeGalleryIdx + 1} of {campusImages.length}
-                        </span>
-                        <h3 className="text-lg sm:text-2xl font-black text-white">
-                          {campusImages[activeGalleryIdx]?.title}
-                        </h3>
-                        {campusImages[activeGalleryIdx]?.caption && (
-                          <p className="text-xs sm:text-sm text-slate-200 max-w-2xl line-clamp-2">
-                            {campusImages[activeGalleryIdx]?.caption}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Admin Delete Action for Current Photo */}
-                      {isAdmin && (
-                        <button
-                          type="button"
-                          onClick={() => setDeleteCampusTarget(campusImages[activeGalleryIdx])}
-                          className="self-start sm:self-auto p-2 rounded-xl bg-red-600/80 hover:bg-red-600 text-white text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer backdrop-blur-md"
-                          title="Delete this classroom photo"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>Delete Photo</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Navigation Arrows */}
-                  {campusImages.length > 1 && (
-                    <div className="absolute top-4 right-4 flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setActiveGalleryIdx((prev) => (prev === 0 ? campusImages.length - 1 : prev - 1))
-                        }
-                        className="p-2.5 rounded-full bg-black/50 hover:bg-black/80 text-white backdrop-blur-md cursor-pointer transition-colors"
-                        aria-label="Previous Photo"
-                      >
-                        <ChevronLeft className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setActiveGalleryIdx((prev) => (prev === campusImages.length - 1 ? 0 : prev + 1))
-                        }
-                        className="p-2.5 rounded-full bg-black/50 hover:bg-black/80 text-white backdrop-blur-md cursor-pointer transition-colors"
-                        aria-label="Next Photo"
-                      >
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Thumbnails Row */}
-                {campusImages.length > 1 && (
-                  <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-none">
-                    {campusImages.map((img, idx) => (
-                      <button
-                        key={img.id || idx}
-                        type="button"
-                        onClick={() => setActiveGalleryIdx(idx)}
-                        className={`relative rounded-2xl overflow-hidden shrink-0 w-28 sm:w-36 h-20 border-2 transition-all cursor-pointer ${
-                          activeGalleryIdx === idx
-                            ? 'border-[#ea580c] ring-2 ring-orange-400 shadow-md scale-102'
-                            : 'border-white/20 opacity-70 hover:opacity-100'
-                        }`}
-                      >
-                        <img src={img.url} alt={img.title} className="w-full h-full object-cover" />
-                        <div className="absolute inset-0 bg-black/20" />
-                        <span className="absolute bottom-1 left-1.5 right-1.5 text-[10px] font-bold text-white truncate drop-shadow">
-                          {img.title}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* ==================== 3. TOPPERS & ACHIEVEMENTS PREVIEW (IMMEDIATELY AFTER BANNER) ==================== */}
-        <section className="py-16 lg:py-20 bg-slate-50 border-b border-slate-200">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-10 gap-4">
-              <div>
-                <span className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-widest text-[#ea580c]">
-                  <Trophy className="w-4 h-4" /> Hall of Fame &amp; Achievements
-                </span>
-                <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0a0e2a] mt-1">
-                  Our State Rankers &amp; Board Toppers
-                </h2>
-                <p className="text-xs sm:text-sm text-slate-600 mt-1">
-                  Consistent high performers produced through C.G.A Udaipur’s disciplined pedagogy and rigorous testing.
-                </p>
-              </div>
-              <Link
-                href="/achievements"
-                className="inline-flex items-center gap-2 text-sm font-bold text-[#0056b3] hover:underline"
-              >
-                View Complete Hall of Fame <ArrowRight className="w-4 h-4" />
-              </Link>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {topAchievements.map((topper) => (
-                <div
-                  key={topper.id}
-                  className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs cga-card-hover flex flex-col"
-                >
-                  <div className="p-5 flex items-center gap-3.5 border-b border-slate-100">
-                    <TopperAvatar
-                      name={topper.name}
-                      photo={topper.photo}
-                      sizeClassName="w-16 h-16"
-                      textClassName="text-lg font-black"
-                    />
-                    <div>
-                      <span className="inline-block px-2 py-0.5 rounded bg-amber-50 text-[#ea580c] border border-amber-200 text-[11px] font-extrabold">
-                        {topper.rank}
-                      </span>
-                      <h3 className="text-base font-extrabold text-[#0a0e2a] mt-1">{topper.name}</h3>
-                      <p className="text-xs font-semibold text-[#0056b3]">{topper.exam}</p>
-                    </div>
-                  </div>
-                  <div className="p-5 flex-1 flex flex-col justify-between bg-slate-50/50">
-                    <p className="text-xs text-slate-600 italic leading-relaxed">
-                      “{topper.quote}”
-                    </p>
-                    <div className="mt-3 pt-2 border-t border-slate-200/60 flex items-center justify-between gap-2 text-[11px] font-bold text-slate-400">
-                      <span className="whitespace-nowrap">Batch of {topper.year}</span>
-                      <span className="text-emerald-600 flex items-center gap-1 whitespace-nowrap shrink-0">
-                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> Verified Ranker
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
         </section>
@@ -894,7 +747,64 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ==================== 5. FACULTY PREVIEW ==================== */}
+        {/* ==================== 5. TOPPERS & ACHIEVEMENTS PREVIEW ==================== */}
+        <section className="py-16 lg:py-20 bg-slate-50 border-t border-slate-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-10 gap-4">
+              <div>
+                <span className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-widest text-[#ea580c]">
+                  <Trophy className="w-4 h-4" /> Hall of Fame
+                </span>
+                <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0a0e2a] mt-1">
+                  Our State Rankers & Board Toppers
+                </h2>
+              </div>
+              <Link
+                href="/achievements"
+                className="inline-flex items-center gap-2 text-sm font-bold text-[#0056b3] hover:underline"
+              >
+                View All Toppers & Selections <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {topAchievements.map((topper) => (
+                <div
+                  key={topper.id}
+                  className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs cga-card-hover flex flex-col"
+                >
+                  <div className="p-5 flex items-center gap-3.5 border-b border-slate-100">
+                    <img
+                      src={topper.photo}
+                      alt={`Photograph of student ${topper.name}, ${topper.rank} in ${topper.exam}`}
+                      className="w-16 h-16 rounded-full object-cover ring-2 ring-[#ea580c] shrink-0"
+                    />
+                    <div>
+                      <span className="inline-block px-2 py-0.5 rounded bg-amber-50 text-[#ea580c] border border-amber-200 text-[11px] font-extrabold">
+                        {topper.rank}
+                      </span>
+                      <h3 className="text-base font-extrabold text-[#0a0e2a] mt-1">{topper.name}</h3>
+                      <p className="text-xs font-semibold text-[#0056b3]">{topper.exam}</p>
+                    </div>
+                  </div>
+                  <div className="p-5 flex-1 flex flex-col justify-between bg-slate-50/50">
+                    <p className="text-xs text-slate-600 italic leading-relaxed">
+                      “{topper.quote}”
+                    </p>
+                    <div className="mt-3 pt-2 border-t border-slate-200/60 flex items-center justify-between gap-2 text-[11px] font-bold text-slate-400">
+                      <span className="whitespace-nowrap">Batch of {topper.year}</span>
+                      <span className="text-emerald-600 flex items-center gap-1 whitespace-nowrap shrink-0">
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> Verified Ranker
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ==================== 6. FACULTY PREVIEW ==================== */}
         <section className="py-16 lg:py-20 bg-white border-t border-slate-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-10 gap-4">
@@ -1092,7 +1002,7 @@ export default function HomePage() {
       />
 
       {/* Admin Campus & Classroom Photo Upload Modal */}
-      {isAdmin && showCampusUploadModal && (
+      {isAdmin && showCampusModal && (
         <div
           className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-xs"
           role="dialog"
@@ -1118,7 +1028,7 @@ export default function HomePage() {
               </div>
               <button
                 type="button"
-                onClick={() => setShowCampusUploadModal(false)}
+                onClick={() => setShowCampusModal(false)}
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-700 cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -1211,31 +1121,22 @@ export default function HomePage() {
             <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
               <button
                 type="button"
-                onClick={() => setShowCampusUploadModal(false)}
+                onClick={() => setShowCampusModal(false)}
                 className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs hover:bg-slate-200 cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                disabled={!compressedResult || isSavingCampusPhoto}
+                disabled={!compressedResult || isSavingCampus}
                 className="px-5 py-2 rounded-xl bg-[#ea580c] hover:bg-orange-600 text-white font-bold text-xs shadow-sm cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
               >
-                {isSavingCampusPhoto ? 'Publishing…' : 'Publish to Front Banner'}
+                {isSavingCampus ? 'Publishing…' : 'Publish to Front Banner'}
               </button>
             </div>
           </form>
         </div>
       )}
-
-      {/* Delete Campus Photo Confirm Dialog */}
-      <ConfirmDialog
-        isOpen={!!deleteCampusTarget}
-        title="Remove Classroom Photo?"
-        message={`Are you sure you want to remove photo "${deleteCampusTarget?.title}" from the public front banner?`}
-        onCancel={() => setDeleteCampusTarget(null)}
-        onConfirm={handleConfirmDeleteCampusPhoto}
-      />
     </div>
   );
 }
