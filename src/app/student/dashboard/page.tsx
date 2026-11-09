@@ -221,10 +221,10 @@ export default function StudentDashboardPage() {
                 <BookOpen className="w-5 h-5 text-[#0056b3] shrink-0" /> My Enrolled Batches
               </h2>
               <Link
-                href="/student/my-courses"
+                href="/student/my-learning?tab=courses"
                 className="text-xs font-bold text-[#0056b3] hover:underline inline-flex items-center gap-1 whitespace-nowrap shrink-0"
               >
-                View All <ArrowRight className="w-3.5 h-3.5" />
+                View in My Learning <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>
 

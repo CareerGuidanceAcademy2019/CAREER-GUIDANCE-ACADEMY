@@ -611,6 +611,11 @@ export default function StudentMyLearningPage() {
               {enrolledCourses.map((enr) => {
                 const fullCourse = db.courses.find((c) => c.id === enr.courseId);
                 const isOnline = fullCourse?.mode === 'Online';
+                const courseMaterials = (db.studyMaterials || []).filter((m) => m.courseId === enr.courseId);
+                const courseTests = (db.mockTests || []).filter((t) => t.courseId === enr.courseId);
+                const isExpired = Boolean(
+                  enr.accessValidUntil && new Date(enr.accessValidUntil).getTime() < currentTime
+                );
 
                 return (
                   <div
@@ -670,6 +675,26 @@ export default function StudentMyLearningPage() {
                         </div>
                       </div>
 
+                      {/* Access Validity Badge */}
+                      <div className="flex items-center justify-between text-xs p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                        <span className="text-slate-500 font-medium flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5 text-[#0056b3]" /> Access Validity:
+                        </span>
+                        {isExpired ? (
+                          <span className="px-2.5 py-0.5 rounded-full bg-red-100 text-red-700 font-bold border border-red-200">
+                            Expired on {new Date(enr.accessValidUntil!).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                        ) : enr.accessValidUntil ? (
+                          <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold border border-blue-200">
+                            Active till {new Date(enr.accessValidUntil).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold border border-emerald-200">
+                            Active Full Batch Access
+                          </span>
+                        )}
+                      </div>
+
                       <div className="p-3.5 rounded-2xl bg-blue-50/70 border border-blue-200/80 space-y-2">
                         <div className="flex items-center justify-between text-xs font-bold text-[#0056b3]">
                           <span className="flex items-center gap-1.5">
@@ -710,18 +735,18 @@ export default function StudentMyLearningPage() {
                       </div>
                     </div>
 
-                    <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-3 text-xs font-bold">
+                    <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs font-bold">
                       <Link
                         href={`/student/materials?course=${enr.courseId}`}
-                        className="text-[#0056b3] hover:underline flex items-center gap-1"
+                        className="text-[#0056b3] hover:underline flex items-center gap-1.5"
                       >
-                        <FileText className="w-3.5 h-3.5" /> Batch Notes (PDFs)
+                        <FileText className="w-3.5 h-3.5" /> Batch Notes ({courseMaterials.length})
                       </Link>
                       <Link
-                        href="/student/my-courses"
-                        className="text-slate-600 hover:text-slate-900"
+                        href={`/student/tests?courseId=${enr.courseId}`}
+                        className="text-[#ea580c] hover:underline flex items-center gap-1.5"
                       >
-                        Full Details →
+                        <ClipboardCheck className="w-3.5 h-3.5" /> Mock Tests ({courseTests.length}) →
                       </Link>
                     </div>
                   </div>
