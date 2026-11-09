@@ -339,6 +339,15 @@ export interface SiteContent {
   };
   testimonials: Testimonial[];
   standalonePackages?: StandalonePackage[];
+  campusImages?: CampusGalleryImage[];
+}
+
+export interface CampusGalleryImage {
+  id: string;
+  url: string;
+  title: string;
+  caption?: string;
+  uploadedAt: string;
 }
 
 export interface CgaDatabase {
@@ -479,6 +488,36 @@ export const INITIAL_SEED_DATA: CgaDatabase = {
           'Bilingual Questions in English & Bengali (except English & Bengali papers)',
         ],
         isPublished: true,
+      },
+    ],
+    campusImages: [
+      {
+        id: 'campus-img-1',
+        url: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=1200&auto=format&fit=crop&q=80',
+        title: 'Smart Interactive Classroom Session',
+        caption: 'Daily interactive lectures and syllabus coverage with state-topper faculty at Chanban campus.',
+        uploadedAt: '2026-10-01',
+      },
+      {
+        id: 'campus-img-2',
+        url: 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=1200&auto=format&fit=crop&q=80',
+        title: 'Academy Library & Digital Study Center',
+        caption: 'Quiet, air-conditioned study hall with curated competitive reference books and digital notes.',
+        uploadedAt: '2026-10-05',
+      },
+      {
+        id: 'campus-img-3',
+        url: 'https://images.unsplash.com/photo-1427504494785-3a9ca7044f45?w=1200&auto=format&fit=crop&q=80',
+        title: 'Weekly OMR & Online Mock Examination Hall',
+        caption: 'Rigorous exam simulation under strict TRBT & TPSC timed evaluation conditions.',
+        uploadedAt: '2026-10-12',
+      },
+      {
+        id: 'campus-img-4',
+        url: 'https://images.unsplash.com/photo-1577896851231-70ef18881754?w=1200&auto=format&fit=crop&q=80',
+        title: 'One-on-One Faculty Mentorship & Doubt Hub',
+        caption: 'Personal problem-solving sessions ensuring zero doubts remain before the examination.',
+        uploadedAt: '2026-10-18',
       },
     ],
     testimonials: [

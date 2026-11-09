@@ -864,12 +864,38 @@ export default function AdminEnrollmentsPage() {
                   disabled={addBusy}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-[#0056b3] bg-white"
                 >
-                  <option value={1}>1 Month</option>
+                  <option value={1}>1 Month (Monthly ₹49 Plan)</option>
                   <option value={3}>3 Months</option>
                   <option value={6}>6 Months (Standard Default)</option>
-                  <option value={12}>12 Months (1 Year)</option>
+                  <option value={12}>12 Months / 1 Year (Yearly ₹499 Plan)</option>
                   <option value={24}>24 Months (2 Years)</option>
                 </select>
+                {activeItemId === 'series-current-affairs' && (
+                  <div className="flex items-center gap-1.5 mt-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setAddValidityMonths(1)}
+                      className={`px-2.5 py-0.5 rounded-md text-[10px] font-extrabold cursor-pointer transition-all ${
+                        addValidityMonths === 1
+                          ? 'bg-[#ea580c] text-white'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      1 Month (₹49)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAddValidityMonths(12)}
+                      className={`px-2.5 py-0.5 rounded-md text-[10px] font-extrabold cursor-pointer transition-all ${
+                        addValidityMonths === 12
+                          ? 'bg-[#0056b3] text-white'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      1 Year (₹499)
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div>

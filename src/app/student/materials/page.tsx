@@ -56,6 +56,26 @@ export default function StudentStudyMaterialsPage() {
     [db.studyMaterials]
   );
 
+  // Dedicated Current Affairs Subscription check
+  const caEnrollment = useMemo(() => {
+    if (!currentStudent) return null;
+    return (db.seriesEnrollments || []).find(
+      (se) =>
+        (se.studentId === currentStudent.id || se.studentId === 'me') &&
+        se.seriesId === 'series-current-affairs'
+    );
+  }, [currentStudent, db.seriesEnrollments]);
+
+  const isCaExpired = Boolean(
+    caEnrollment?.accessValidUntil &&
+      new Date(caEnrollment.accessValidUntil).getTime() < currentTime
+  );
+
+  const hasActiveCaSubscription = Boolean(
+    caEnrollment &&
+      (!caEnrollment.accessValidUntil || new Date(caEnrollment.accessValidUntil).getTime() >= currentTime)
+  );
+
   // Check if student is enrolled in ANY active course or mock test series
   const isStudentEnrolledAnywhere = useMemo(() => {
     if (!currentStudent) return false;
@@ -65,6 +85,7 @@ export default function StudentStudyMaterialsPage() {
     const hasActiveSeries = (db.seriesEnrollments || []).some(
       (se) =>
         (se.studentId === currentStudent.id || se.studentId === 'me') &&
+        se.seriesId !== 'series-current-affairs' &&
         (!se.accessValidUntil || new Date(se.accessValidUntil).getTime() >= currentTime)
     );
     const hasVerifiedPayment = (db.feePayments || []).some(
@@ -413,6 +434,133 @@ export default function StudentStudyMaterialsPage() {
             </div>
           </div>
 
+          {/* Current Affairs Subscription Status or Plan Selection */}
+          {hasActiveCaSubscription ? (
+            <div className="p-4 sm:p-5 rounded-3xl bg-emerald-50 border border-emerald-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-emerald-950">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-extrabold uppercase tracking-wider bg-emerald-200/80 text-emerald-900 px-2.5 py-0.5 rounded-full">
+                      Active Subscription
+                    </span>
+                    <span className="text-xs font-bold text-emerald-800">
+                      Current Affairs Series
+                    </span>
+                  </div>
+                  <p className="text-xs text-emerald-900 font-semibold mt-0.5">
+                    {caEnrollment?.accessValidUntil
+                      ? `Access valid till ${new Date(caEnrollment.accessValidUntil).toLocaleDateString('en-IN', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        })} (Auto-expiring on completion)`
+                      : 'Active Unlimited Access'}
+                  </p>
+                </div>
+              </div>
+              <span className="text-xs font-bold text-emerald-700 bg-white px-3 py-1.5 rounded-xl border border-emerald-200 shadow-2xs self-stretch sm:self-auto text-center">
+                All PDFs Unlocked
+              </span>
+            </div>
+          ) : (
+            <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-amber-50 via-orange-50 to-white border-2 border-orange-200 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-black uppercase tracking-wider bg-[#ea580c] text-white px-2.5 py-0.5 rounded-full">
+                      Subscription Required
+                    </span>
+                    {isCaExpired && (
+                      <span className="text-[11px] font-bold text-red-600 bg-red-100 px-2 py-0.5 rounded-full">
+                        Previous Plan Expired
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="text-base sm:text-lg font-black text-[#0a0e2a] mt-1">
+                    Subscribe to Current Affairs Series (Domestic &amp; International)
+                  </h3>
+                  <p className="text-xs text-slate-600">
+                    Choose your access plan below to unlock all regular Drive PDF capsules. Plans automatically expire upon duration completion.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                {/* 1 Month Plan */}
+                <div className="bg-white rounded-2xl border-2 border-orange-300 p-4.5 flex flex-col justify-between shadow-2xs hover:shadow-md transition-shadow">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-black text-slate-800 uppercase tracking-wide">
+                        1-Month Series
+                      </span>
+                      <strong className="text-xl font-black text-[#ea580c]">₹49</strong>
+                    </div>
+                    <p className="text-xs text-slate-600 leading-relaxed mb-3">
+                      Get <strong>30 days access</strong> to all domestic &amp; international current affairs updates. Access expires automatically after 30 days.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPayTarget({
+                        itemType: 'mock_series',
+                        itemId: 'series-current-affairs',
+                        title: 'Current Affairs Series (1-Month Pass)',
+                        fullAmount: 49,
+                        paymentType: 'full',
+                        category: 'Current Affairs & GK Series',
+                      })
+                    }
+                    className="w-full py-2.5 px-3 rounded-xl bg-[#ea580c] hover:bg-orange-700 text-white font-extrabold text-xs shadow-xs cursor-pointer inline-flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <CreditCard className="w-3.5 h-3.5" />
+                    <span>Subscribe for ₹49 (1 Month)</span>
+                  </button>
+                </div>
+
+                {/* 1 Year Plan */}
+                <div className="bg-white rounded-2xl border-2 border-blue-400 p-4.5 flex flex-col justify-between shadow-2xs hover:shadow-md transition-shadow">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-black text-slate-800 uppercase tracking-wide">
+                          1-Year Series (365 Days)
+                        </span>
+                        <span className="text-[10px] font-black bg-blue-100 text-[#0056b3] px-2 py-0.5 rounded-full">
+                          Best Value
+                        </span>
+                      </div>
+                      <strong className="text-xl font-black text-[#0056b3]">₹499</strong>
+                    </div>
+                    <p className="text-xs text-slate-600 leading-relaxed mb-3">
+                      Complete <strong>365 days access</strong> for uninterrupted preparation across all 2026–27 competitive exams and board tests.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPayTarget({
+                        itemType: 'mock_series',
+                        itemId: 'series-current-affairs',
+                        title: 'Current Affairs Series (1-Year Pass)',
+                        fullAmount: 499,
+                        paymentType: 'full',
+                        category: 'Current Affairs & GK Series',
+                      })
+                    }
+                    className="w-full py-2.5 px-3 rounded-xl bg-[#0056b3] hover:bg-blue-700 text-white font-extrabold text-xs shadow-xs cursor-pointer inline-flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <CreditCard className="w-3.5 h-3.5" />
+                    <span>Subscribe for ₹499 (1 Year)</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {filteredCurrentAffairs.length === 0 ? (
             <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center space-y-3">
               <div className="w-14 h-14 rounded-2xl bg-blue-50 text-[#0056b3] flex items-center justify-center mx-auto">
@@ -432,7 +580,8 @@ export default function StudentStudyMaterialsPage() {
                 const category = ca.caCategory || 'Domestic';
                 const isFree = ca.price === 0;
                 const isAllLogin = ca.accessScope === 'all_logged_in';
-                const isUnlockedForStudent = isFree || isAllLogin || isStudentEnrolledAnywhere;
+                const isUnlockedForStudent =
+                  isFree || isAllLogin || hasActiveCaSubscription || isStudentEnrolledAnywhere;
 
                 return (
                   <div
@@ -555,16 +704,17 @@ export default function StudentStudyMaterialsPage() {
                               type="button"
                               onClick={() =>
                                 setPayTarget({
-                                  itemType: 'material',
-                                  itemId: ca.id,
-                                  title: `${ca.title} (${ca.caCategory || 'Domestic'} Current Affairs)`,
-                                  fullAmount: ca.price || 199,
+                                  itemType: 'mock_series',
+                                  itemId: 'series-current-affairs',
+                                  title: 'Current Affairs Series (Monthly ₹49 / 1-Year ₹499)',
+                                  fullAmount: 49,
                                   paymentType: 'full',
+                                  category: 'Current Affairs & GK Series',
                                 })
                               }
                               className="flex-1 py-2 px-3 rounded-xl bg-[#ea580c] hover:bg-orange-700 text-white text-xs font-bold inline-flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
                             >
-                              <CreditCard className="w-3.5 h-3.5" /> Unlock Series (₹{ca.price || 199})
+                              <CreditCard className="w-3.5 h-3.5" /> Subscribe to Series (from ₹49)
                             </button>
                             <Link
                               href="/student/courses"

@@ -142,6 +142,10 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
   const [requestId, setRequestId] = useState<string>('');
   const [qrType, setQrType] = useState<'official' | 'dynamic'>('official');
 
+  // Current Affairs 1-Month (₹49) vs 1-Year (₹499) plan selection
+  const isCaSeries = target?.itemId === 'series-current-affairs';
+  const [caPlan, setCaPlan] = useState<'monthly' | 'yearly'>('monthly');
+
   // Proof form state
   const [utr, setUtr] = useState('');
   const [utrError, setUtrError] = useState('');
@@ -158,12 +162,15 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
   if (!target) return null;
 
   // Calculate current amount based on selected plan
-  const currentAmount =
-    selectedPlan === 'instalment_1' && target.instalmentAmount
-      ? target.instalmentAmount
-      : selectedPlan === 'balance' && target.dueAmount
-      ? target.dueAmount
-      : target.fullAmount;
+  const currentAmount = isCaSeries
+    ? caPlan === 'yearly'
+      ? 499
+      : 49
+    : selectedPlan === 'instalment_1' && target.instalmentAmount
+    ? target.instalmentAmount
+    : selectedPlan === 'balance' && target.dueAmount
+    ? target.dueAmount
+    : target.fullAmount;
 
   const handleCopy = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
@@ -535,6 +542,56 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
                 </div>
               </div>
 
+              {/* Current Affairs Subscription Plan Choice */}
+              {isCaSeries && (
+                <div className="space-y-2.5">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
+                    Select Current Affairs Plan:
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setCaPlan('monthly')}
+                      className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer ${
+                        caPlan === 'monthly'
+                          ? 'border-[#0056b3] bg-blue-50/50 shadow-xs'
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <strong className="text-sm font-extrabold text-slate-900">
+                          1-Month Pass
+                        </strong>
+                        <span className="text-xs font-black text-[#0056b3]">₹49</span>
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        30 days access to all Domestic &amp; International current affairs PDFs.
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setCaPlan('yearly')}
+                      className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer ${
+                        caPlan === 'yearly'
+                          ? 'border-[#0056b3] bg-blue-50/50 shadow-xs'
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <strong className="text-sm font-extrabold text-slate-900">
+                          1-Year Pass (365 Days)
+                        </strong>
+                        <span className="text-xs font-black text-[#0056b3]">₹499</span>
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        Full year coverage of all Tripura &amp; national competitive exam capsules.
+                      </p>
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Course Instalment Choice */}
               {target.itemType === 'course' && target.instalmentAvailable && !target.dueAmount && (
                 <div className="space-y-2.5">
@@ -758,6 +815,25 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
                       <span>Pay ₹{currentAmount} with UPI App on Mobile</span>
                       <ExternalLink className="w-3.5 h-3.5" />
                     </a>
+
+                    {/* Bank Limit Advisory for Google Pay / UPI Apps */}
+                    <div className="w-full max-w-sm p-3.5 rounded-2xl bg-amber-50/90 border border-amber-300 text-left space-y-1.5">
+                      <div className="flex items-center gap-1.5 text-xs font-extrabold text-amber-900">
+                        <ShieldCheck className="w-4 h-4 text-amber-700" />
+                        <span>Google Pay showing &quot;Exceeded bank limit&quot;?</span>
+                      </div>
+                      <p className="text-[11px] text-amber-950 leading-relaxed">
+                        If Google Pay shows <em>&quot;You&apos;ve exceeded the bank limit for this payment&quot;</em>, don&apos;t worry! Simply <strong>Scan the QR code above directly</strong> with Google Pay or transfer to UPI ID <strong>{effectiveUpiId}</strong> directly.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(effectiveUpiId, 'upi-direct')}
+                        className="w-full py-1.5 rounded-lg bg-white border border-amber-300 text-amber-900 font-bold text-xs hover:bg-amber-100 inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                      >
+                        {copiedKey === 'upi-direct' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>Copy Official UPI ID ({effectiveUpiId})</span>
+                      </button>
+                    </div>
                   </div>
 
                   {/* UPI Details */}

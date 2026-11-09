@@ -369,6 +369,26 @@ export const MOCK_SERIES_INITIAL: MockSeries[] = [
     status: 'Open',
     startsOn: 'Flexible / Admin Scheduled (Launch on Demand)',
   },
+  {
+    id: 'series-current-affairs',
+    slug: 'current-affairs-series',
+    name: 'Current Affairs Series (Monthly ₹49 / 1-Year ₹499)',
+    classRange: 'All Competitive Exams',
+    stream: 'Current Affairs & GK',
+    price: 49,
+    batchLabel: 'Monthly & Yearly Plans',
+    description: 'Complete Domestic & International Current Affairs, Monthly GK Digest & Exam Capsules for Tripura TET, STGT, TPSC, Banking & SSC.',
+    highlights: [
+      'Monthly (₹49 / 30-Day) and 1-Year (₹499 / 365-Day) Access Plans',
+      'Curated Domestic (National & Tripura State) Current Affairs',
+      'Curated International (Global & World Affairs) Capsules',
+      'Direct Google Drive PDF Downloads & Online Reading',
+      'Instant Auto-Expiry on Duration Completion',
+      'Full Administrator Access Control & Student Management',
+    ],
+    status: 'Open',
+    startsOn: 'Ongoing / Flexible Enrollment',
+  },
 ];
 
 

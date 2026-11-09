@@ -297,6 +297,17 @@ export function UpiPaymentModal({
                     <p className="text-[11px] font-semibold text-slate-500">
                       Supports Google Pay, PhonePe, Paytm, BHIM, Cred, YONO &amp; other UPI apps
                     </p>
+
+                    {/* Bank Limit Advisory */}
+                    <div className="p-3 rounded-xl bg-amber-50/90 border border-amber-300 text-left space-y-1">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
+                        <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
+                        <span>Google Pay showing &quot;Exceeded bank limit&quot;?</span>
+                      </div>
+                      <p className="text-[10px] text-amber-950 leading-relaxed">
+                        If Google Pay shows <em>&quot;You&apos;ve exceeded the bank limit for this payment&quot;</em>, simply <strong>Scan the QR code below directly</strong> with Google Pay or transfer to UPI ID <strong>{effectiveUpiId}</strong> directly.
+                      </p>
+                    </div>
                   </div>
 
                   {/* QR Code Section */}

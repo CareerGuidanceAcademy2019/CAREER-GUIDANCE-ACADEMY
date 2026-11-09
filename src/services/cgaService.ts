@@ -1728,6 +1728,9 @@ export const cgaService = {
         standalonePackages:
           ((site.data?.content as SiteContent)?.standalonePackages) ??
           INITIAL_SEED_DATA.siteContent.standalonePackages,
+        campusImages:
+          ((site.data?.content as SiteContent)?.campusImages) ??
+          INITIAL_SEED_DATA.siteContent.campusImages,
       },
       courses: courseList.length > 0 ? courseList : INITIAL_SEED_DATA.courses,
       faculty: facultyList.length > 0 ? facultyList : INITIAL_SEED_DATA.faculty,
@@ -2431,6 +2434,15 @@ export const cgaService = {
         raw.remarks?.includes('mock_series');
 
       if (isSeries && targetStudentId && targetSeriesId) {
+        const isCaSeries = targetSeriesId === 'series-current-affairs';
+        const paidNum = Number(raw.amount || 0);
+        const validityDays = isCaSeries
+          ? paidNum >= 400
+            ? 365
+            : 30
+          : 180;
+        const validUntilIso = new Date(Date.now() + validityDays * 24 * 3600 * 1000).toISOString();
+
         try {
           const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw.id);
           await sb.from('series_enrollments').upsert(
@@ -2439,7 +2451,7 @@ export const cgaService = {
               series_id: targetSeriesId,
               payment_id: isUuid ? raw.id : null,
               enrolled_at: new Date().toISOString(),
-              access_valid_until: new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString(),
+              access_valid_until: validUntilIso,
             },
             { onConflict: 'student_id, series_id' }
           );
@@ -2458,7 +2470,7 @@ export const cgaService = {
                 seriesId: targetSeriesId,
                 paymentId: raw.id,
                 enrolledAt: new Date().toISOString(),
-                accessValidUntil: new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString(),
+                accessValidUntil: validUntilIso,
               });
               localStorage.setItem('cga_series_enrollments', JSON.stringify(seList));
             }

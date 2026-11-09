@@ -76,20 +76,26 @@ export function buildUpiDeepLink(params: {
 }): string {
   const settings = { ...PAYMENT_SETTINGS, ...params.customSettings };
   const cleanNote = (params.note || 'CGA Course Fee')
-    .slice(0, 50)
-    .replace(/[^a-zA-Z0-9 -]/g, '');
-  const ref = params.transactionRef || `CGA${Date.now().toString().slice(-8)}`;
+    .slice(0, 30)
+    .replace(/[^a-zA-Z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 
-  const query = new URLSearchParams({
-    pa: settings.upiId,
-    pn: settings.payeeName,
-    am: Number(params.amount).toFixed(2),
-    cu: 'INR',
-    tn: cleanNote,
-    tr: ref,
-  });
+  // NPCI Specification Note:
+  // For personal / savings account VPAs (e.g. popighosh40@okicici), passing `tr` (transaction reference)
+  // or URL encoding spaces with `+` triggers bank fraud checks and the Axis/ICICI/NPCI error:
+  // "You've exceeded the bank limit for this payment. Retry with a smaller amount."
+  // NPCI specifies that `tr` is strictly for registered merchant codes.
+  // Using standard RFC 3986 percent encoding (%20) without `tr` creates a clean, compliant P2P deep link.
+  const queryParts = [
+    `pa=${encodeURIComponent(settings.upiId)}`,
+    `pn=${encodeURIComponent(settings.payeeName)}`,
+    `am=${Number(params.amount).toFixed(2)}`,
+    `cu=INR`,
+    `tn=${encodeURIComponent(cleanNote || 'CGA Course Fee')}`,
+  ];
 
-  return `upi://pay?${query.toString()}`;
+  return `upi://pay?${queryParts.join('&')}`;
 }
 
 /**
