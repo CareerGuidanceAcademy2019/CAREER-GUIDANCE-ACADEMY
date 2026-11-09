@@ -54,21 +54,23 @@ export default function HomePage() {
     }
   }, [router]);
 
-  // Front Banner: Academy Highlights vs Classroom Tour state
-  const [heroTab, setHeroTab] = useState<'stats' | 'campus'>('stats');
-  const [activeCampusIdx, setActiveCampusIdx] = useState(0);
-  const [showCampusModal, setShowCampusModal] = useState(false);
-  const [campusPhotoTitle, setCampusPhotoTitle] = useState('');
-  const [campusPhotoCaption, setCampusPhotoCaption] = useState('');
-  const [compressedResult, setCompressedResult] = useState<CompressionResult | null>(null);
-  const [isCompressing, setIsCompressing] = useState(false);
-  const [isSavingCampus, setIsSavingCampus] = useState(false);
-  const campusFileInputRef = React.useRef<HTMLInputElement>(null);
-
+  // Campus & Classroom Experience Banner / Gallery state
   const campusImages: CampusGalleryImage[] =
     siteContent.campusImages && siteContent.campusImages.length > 0
       ? siteContent.campusImages
       : INITIAL_SEED_DATA.siteContent.campusImages || [];
+
+  const [activeGalleryIdx, setActiveGalleryIdx] = useState(0);
+  const [showCampusUploadModal, setShowCampusUploadModal] = useState(false);
+  const [campusPhotoTitle, setCampusPhotoTitle] = useState('');
+  const [campusPhotoCaption, setCampusPhotoCaption] = useState('');
+  const [compressedResult, setCompressedResult] = useState<CompressionResult | null>(null);
+  const [isCompressing, setIsCompressing] = useState(false);
+  const [isSavingCampusPhoto, setIsSavingCampusPhoto] = useState(false);
+  const [deleteCampusTarget, setDeleteCampusTarget] = useState<CampusGalleryImage | null>(null);
+  const campusFileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const isAdmin = session?.role === 'ADMIN';
 
   const handleCampusPhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -96,7 +98,7 @@ export default function HomePage() {
   const handleSaveCampusPhoto = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!compressedResult) return;
-    setIsSavingCampus(true);
+    setIsSavingCampusPhoto(true);
 
     const newPhoto: CampusGalleryImage = {
       id: `campus-${Date.now()}`,
@@ -109,14 +111,25 @@ export default function HomePage() {
     const currentList = siteContent.campusImages || campusImages;
     const updated = [newPhoto, ...currentList];
     await updateSiteContent({ ...siteContent, campusImages: updated });
-    setIsSavingCampus(false);
-    setShowCampusModal(false);
+    setIsSavingCampusPhoto(false);
+    setShowCampusUploadModal(false);
     setCompressedResult(null);
     setCampusPhotoTitle('');
     setCampusPhotoCaption('');
-    setActiveCampusIdx(0);
-    setHeroTab('campus');
-    showToast('Classroom Photo Published', 'Photo posted to front banner.', 'success');
+    setActiveGalleryIdx(0);
+    showToast('Classroom Photo Published', 'Photo is now live on the front top banner.', 'success');
+  };
+
+  const handleConfirmDeleteCampusPhoto = async () => {
+    if (!deleteCampusTarget) return;
+    const currentList = siteContent.campusImages || campusImages;
+    const updated = currentList.filter((img) => img.id !== deleteCampusTarget.id);
+    await updateSiteContent({ ...siteContent, campusImages: updated });
+    setDeleteCampusTarget(null);
+    if (activeGalleryIdx >= updated.length) {
+      setActiveGalleryIdx(Math.max(0, updated.length - 1));
+    }
+    showToast('Photo Removed', 'Image removed from front banner.', 'info');
   };
 
   // Admin Announcement Quick-Action state
@@ -127,8 +140,6 @@ export default function HomePage() {
   const [annPriority, setAnnPriority] = useState<Announcement['priority']>('Important');
   const [isSubmittingAnn, setIsSubmittingAnn] = useState(false);
   const [deleteAnnTarget, setDeleteAnnTarget] = useState<Announcement | null>(null);
-
-  const isAdmin = session?.role === 'ADMIN';
 
   const handleAdminPostAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -198,45 +209,61 @@ export default function HomePage() {
                 <div className="flex flex-wrap items-center gap-4 pt-2">
                   <Link
                     href="/courses"
-                    id="hero-explore-courses-btn"
-                    className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl bg-[#ea580c] hover:bg-orange-600 text-white font-bold text-sm sm:text-base shadow-lg shadow-orange-950/30 transition-all"
+                    className="px-6 py-3.5 rounded-xl bg-[#ea580c] hover:bg-orange-600 text-white font-bold text-sm shadow-lg shadow-orange-950/20 transition-all inline-flex items-center gap-2"
                   >
-                    {siteContent.heroCtaPrimary}
-                    <ArrowRight className="w-4 h-4" />
+                    <span>Explore Exam Courses</span>
+                    <CustomArrowRightSvg className="w-4 h-4" />
                   </Link>
+
                   <Link
                     href="/login"
-                    id="hero-portal-login-btn"
-                    className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl bg-white text-[#0a0e2a] hover:bg-blue-50 font-bold text-sm sm:text-base shadow-md transition-all"
+                    className="px-6 py-3.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/25 text-white font-bold text-sm backdrop-blur-xs transition-all inline-flex items-center gap-2"
                   >
-                    {siteContent.heroCtaSecondary}
+                    <span>Student Login</span>
                   </Link>
                 </div>
 
-                {/* Quick Category Pills */}
-                <div className="pt-4 flex flex-wrap items-center gap-2 text-xs text-blue-100">
-                  <span className="font-bold text-white mr-1">Popular Wings:</span>
-                  {['TET Paper I & II', 'TRBT STGT / STPGT', 'TPSC & JRBT', 'IBPS & SSC', 'TBSE & CBSE (VII–X)'].map(
-                    (tag) => (
-                      <Link
-                        key={tag}
-                        href="/courses"
-                        className="px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 transition-colors"
-                      >
-                        {tag}
-                      </Link>
-                    )
-                  )}
+                {/* Key Pillars */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-white/15">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-white/10 text-amber-300 shrink-0">
+                      <Award className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-white">State Topper Mentorship</p>
+                      <p className="text-[11px] text-blue-200">Tripura Rank #01 Faculty</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-white/10 text-emerald-300 shrink-0">
+                      <GraduationCap className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-white">Gomati Classroom & Online</p>
+                      <p className="text-[11px] text-blue-200">Udaipur Center + Live Classes</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-white/10 text-sky-300 shrink-0">
+                      <FileCheck className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-white">100% Focused Curriculum</p>
+                      <p className="text-[11px] text-blue-200">TRBT &amp; TPSC Pattern</p>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Right Column: Emblem Showcase Card */}
+              {/* Right Column: Academic Highlights Card */}
               <div className="lg:col-span-5">
-                <div className="bg-white/95 text-slate-900 rounded-3xl p-6 sm:p-8 shadow-2xl border-4 border-white/30 relative">
-                  <div className="flex items-center gap-4 pb-6 border-b border-slate-200">
+                <div className="bg-white rounded-3xl p-6 sm:p-8 text-slate-800 shadow-2xl border border-white/20 relative">
+                  <div className="flex items-center gap-4 pb-6 border-b border-slate-100">
                     <img
                       src="/cga-logo.png"
-                      alt="Career Guidance Academy (C.G.A) Seal"
+                      alt="Career Guidance Academy Logo"
                       className="w-20 h-20 sm:w-24 sm:h-24 object-contain shrink-0 rounded-full shadow-md"
                     />
                     <div>
@@ -253,106 +280,19 @@ export default function HomePage() {
                     </div>
                   </div>
 
-                  {/* Front Banner Tab Selector: Academy Highlights vs Classrooms */}
-                  <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-100 my-4 text-xs font-bold border border-slate-200">
-                    <button
-                      type="button"
-                      onClick={() => setHeroTab('stats')}
-                      className={`flex-1 py-1.5 rounded-lg transition-all cursor-pointer text-center ${
-                        heroTab === 'stats'
-                          ? 'bg-white text-[#0056b3] shadow-xs'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      Academy Highlights
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setHeroTab('campus')}
-                      className={`flex-1 py-1.5 rounded-lg transition-all cursor-pointer text-center ${
-                        heroTab === 'campus'
-                          ? 'bg-[#ea580c] text-white shadow-xs'
-                          : 'text-slate-600 hover:text-[#ea580c]'
-                      }`}
-                    >
-                      Classroom &amp; Campus Tour
-                    </button>
-                  </div>
-
-                  {heroTab === 'stats' ? (
-                    <div className="grid grid-cols-2 gap-3 my-4">
-                      {siteContent.stats.map((stat, i) => (
-                        <div
-                          key={i}
-                          className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 text-center"
-                        >
-                          <p className="text-2xl font-extrabold text-[#0056b3]">{stat.value}</p>
-                          <p className="text-[11px] font-semibold text-slate-600 mt-0.5 leading-snug">
-                            {stat.label}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="space-y-3 my-4">
-                      <div className="relative rounded-2xl overflow-hidden aspect-[16/10] bg-slate-100 border border-slate-200 shadow-inner">
-                        <img
-                          src={campusImages[activeCampusIdx]?.url || '/cga-logo.png'}
-                          alt={campusImages[activeCampusIdx]?.title || 'Classroom'}
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent flex flex-col justify-end p-3 text-white">
-                          <p className="text-xs font-bold truncate">
-                            {campusImages[activeCampusIdx]?.title}
-                          </p>
-                          {campusImages[activeCampusIdx]?.caption && (
-                            <p className="text-[10px] text-slate-200 line-clamp-1">
-                              {campusImages[activeCampusIdx]?.caption}
-                            </p>
-                          )}
-                        </div>
-                        {campusImages.length > 1 && (
-                          <div className="absolute top-2 right-2 flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setActiveCampusIdx((p) => (p === 0 ? campusImages.length - 1 : p - 1))
-                              }
-                              className="p-1 rounded-full bg-black/60 hover:bg-black/90 text-white cursor-pointer"
-                              aria-label="Previous photo"
-                            >
-                              <ChevronLeft className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setActiveCampusIdx((p) => (p === campusImages.length - 1 ? 0 : p + 1))
-                              }
-                              className="p-1 rounded-full bg-black/60 hover:bg-black/90 text-white cursor-pointer"
-                              aria-label="Next photo"
-                            >
-                              <ChevronRight className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        )}
+                  <div className="grid grid-cols-2 gap-3 my-6">
+                    {siteContent.stats.map((stat, i) => (
+                      <div
+                        key={i}
+                        className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 text-center"
+                      >
+                        <p className="text-2xl font-extrabold text-[#0056b3]">{stat.value}</p>
+                        <p className="text-[11px] font-semibold text-slate-600 mt-0.5 leading-snug">
+                          {stat.label}
+                        </p>
                       </div>
-                      {isAdmin && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCompressedResult(null);
-                            setCampusPhotoTitle('');
-                            setCampusPhotoCaption('');
-                            setShowCampusModal(true);
-                          }}
-                          className="w-full py-2 rounded-xl bg-[#ea580c] hover:bg-orange-600 text-white text-xs font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
-                        >
-                          <Camera className="w-3.5 h-3.5" />
-                          <span>Upload Classroom Photo (Auto-compressed)</span>
-                        </button>
-                      )}
-                    </div>
-                  )}
+                    ))}
+                  </div>
 
                   <div className="bg-blue-50/90 border border-blue-200 rounded-2xl p-4 flex items-center justify-between gap-3">
                     <div>
@@ -376,379 +316,146 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ==================== 2. OFFICIAL ANNOUNCEMENTS & ACADEMIC BULLETIN ==================== */}
-        <section className="py-12 bg-slate-50 border-b border-slate-200">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+        {/* ==================== 2. CAMPUS & CLASSROOM EXPERIENCE BANNER (TOP & FRONT BANNER) ==================== */}
+        <section className="py-12 lg:py-16 bg-slate-900 text-white border-b border-slate-800 relative overflow-hidden">
+          {/* Subtle background glow */}
+          <div className="absolute top-0 right-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute bottom-0 left-1/4 w-96 h-96 bg-orange-600/10 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
               <div>
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100/70 border border-blue-200 text-xs font-bold text-[#0056b3]">
-                  <Bell className="w-3.5 h-3.5 text-[#0056b3]" />
-                  Official Academy Bulletin
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-bold text-amber-300">
+                  <Camera className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Udaipur Campus &amp; Classrooms</span>
                 </div>
-                <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0a0e2a] mt-2">
-                  Notices & Examination Announcements
+                <h2 className="text-2xl sm:text-3xl font-extrabold text-white mt-2">
+                  Modern Infrastructure &amp; Dynamic Learning Spaces
                 </h2>
-                <p className="text-xs sm:text-sm text-slate-600 mt-1">
-                  Live updates for ongoing batches, mock test launches, study materials, and Udaipur campus alerts.
+                <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl">
+                  Step inside Career Guidance Academy at Chanban, Udaipur. Explore our multimedia smart classrooms,
+                  fully equipped OMR testing center, and dedicated faculty study desks.
                 </p>
               </div>
 
-              {/* Admin Actions Bar (Visible ONLY to Admin) */}
+              {/* Admin Quick Action Button */}
               {isAdmin && (
-                <div className="flex flex-wrap items-center gap-2.5 p-2 bg-white rounded-2xl border border-blue-200 shadow-xs">
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-xs font-extrabold text-amber-800">
-                    <Shield className="w-3.5 h-3.5 text-amber-600" />
-                    Admin Section
-                  </div>
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setShowAdminAnnForm(!showAdminAnnForm)}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-bold transition-all cursor-pointer shadow-xs"
+                    onClick={() => {
+                      setCompressedResult(null);
+                      setCampusPhotoTitle('');
+                      setCampusPhotoCaption('');
+                      setShowCampusUploadModal(true);
+                    }}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#ea580c] hover:bg-orange-600 text-white text-xs font-bold shadow-md cursor-pointer transition-all"
                   >
-                    {showAdminAnnForm ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-                    {showAdminAnnForm ? 'Close Notice Form' : 'Add Announcement'}
+                    <Upload className="w-4 h-4" />
+                    <span>Upload Classroom Photo</span>
                   </button>
-                  <Link
-                    href="/admin/announcements"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors"
-                  >
-                    Manage All Notices
-                  </Link>
                 </div>
               )}
             </div>
 
-            {/* Admin-Only Inline Announcement Creation Form */}
-            {isAdmin && showAdminAnnForm && (
-              <form
-                onSubmit={handleAdminPostAnnouncement}
-                className="mb-8 p-6 bg-white rounded-3xl border-2 border-[#0056b3]/30 shadow-md space-y-4 text-xs"
-              >
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#0056b3] flex items-center justify-center">
-                      <Plus className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-extrabold text-[#0a0e2a]">Publish New Announcement</h3>
-                      <p className="text-[11px] text-slate-500">
-                        This notice will be immediately published to the Home Page and saved to the database.
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowAdminAnnForm(false)}
-                    className="p-1 rounded-lg text-slate-400 hover:text-slate-700 cursor-pointer"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                  <div className="md:col-span-6">
-                    <label className="font-bold text-slate-700 block mb-1">Notice Title *</label>
-                    <input
-                      type="text"
-                      required
-                      value={annTitle}
-                      onChange={(e) => setAnnTitle(e.target.value)}
-                      placeholder="e.g., TET-2026 Morning Batch Mock Exam Schedule Released"
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
-                    />
-                  </div>
-
-                  <div className="md:col-span-3">
-                    <label className="font-bold text-slate-700 block mb-1">Target Audience</label>
-                    <select
-                      value={annTargetBatch}
-                      onChange={(e) => setAnnTargetBatch(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-xs"
-                    >
-                      <option value="All Batches">All Batches (Public Notice)</option>
-                      {courses.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.batchName} ({c.subCategory})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="md:col-span-3">
-                    <label className="font-bold text-slate-700 block mb-1">Priority</label>
-                    <select
-                      value={annPriority}
-                      onChange={(e) => setAnnPriority(e.target.value as Announcement['priority'])}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-xs"
-                    >
-                      <option value="Normal">Normal Notice</option>
-                      <option value="Important">Important Alert</option>
-                      <option value="Urgent">Urgent / Immediate Action</option>
-                    </select>
-                  </div>
-
-                  <div className="md:col-span-12">
-                    <label className="font-bold text-slate-700 block mb-1">Notice Description / Content *</label>
-                    <textarea
-                      required
-                      rows={3}
-                      value={annContent}
-                      onChange={(e) => setAnnContent(e.target.value)}
-                      placeholder="Provide full details of the notice, schedule, instructions, or campus guidelines..."
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-100">
-                  <button
-                    type="button"
-                    onClick={() => setShowAdminAnnForm(false)}
-                    className="px-4 py-2 rounded-xl bg-slate-100 text-slate-600 font-bold text-xs cursor-pointer hover:bg-slate-200"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSubmittingAnn}
-                    className="px-5 py-2 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white font-bold text-xs shadow-sm cursor-pointer disabled:opacity-60 inline-flex items-center gap-1.5"
-                  >
-                    {isSubmittingAnn ? 'Publishing…' : 'Publish Notice to Database'}
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {/* Announcements Grid */}
-            {announcements.length === 0 ? (
-              <div className="p-8 text-center bg-white rounded-3xl border border-slate-200 text-slate-500 text-xs">
-                No announcements posted at this time. Check back soon for examination notices.
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                {announcements.slice(0, 6).map((ann) => {
-                  const isUrgent = ann.priority === 'Urgent';
-                  const isImportant = ann.priority === 'Important';
-                  return (
-                    <div
-                      key={ann.id}
-                      className={`bg-white rounded-3xl border p-5 shadow-xs flex flex-col justify-between transition-all hover:shadow-md ${
-                        isUrgent
-                          ? 'border-red-300 ring-1 ring-red-200 bg-gradient-to-b from-red-50/20 to-white'
-                          : isImportant
-                          ? 'border-amber-200'
-                          : 'border-slate-200'
-                      }`}
-                    >
-                      <div>
-                        {/* Tags Row */}
-                        <div className="flex items-center justify-between gap-2 mb-3">
-                          <span
-                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
-                              isUrgent
-                                ? 'bg-red-100 text-red-700'
-                                : isImportant
-                                ? 'bg-amber-100 text-amber-800'
-                                : 'bg-blue-50 text-[#0056b3]'
-                            }`}
-                          >
-                            {isUrgent && <span className="w-1.5 h-1.5 rounded-full bg-red-600 animate-ping" />}
-                            {ann.priority} Notice
-                          </span>
-                          <span className="text-[11px] font-medium text-slate-400 flex items-center gap-1">
-                            <Calendar className="w-3 h-3 text-slate-400" />
-                            {ann.date}
-                          </span>
-                        </div>
-
-                        <span className="inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-bold mb-2">
-                          {ann.targetLabel || 'All Batches'}
+            {/* Featured Front Top Banner / Large Display */}
+            {campusImages.length > 0 && (
+              <div className="space-y-4">
+                <div className="relative rounded-3xl overflow-hidden border-2 border-white/10 bg-slate-950 aspect-[16/9] sm:aspect-[21/9] max-h-[520px] shadow-2xl">
+                  <img
+                    src={campusImages[activeGalleryIdx]?.url || campusImages[0].url}
+                    alt={campusImages[activeGalleryIdx]?.title || 'CGA Classroom'}
+                    className="w-full h-full object-cover transition-all duration-500"
+                  />
+                  {/* Gradient Overlay & Captions */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/30 to-transparent flex flex-col justify-end p-6 sm:p-8">
+                    <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+                      <div className="space-y-1">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-amber-300 bg-black/40 backdrop-blur-md px-2.5 py-1 rounded-full inline-block">
+                          Photo {activeGalleryIdx + 1} of {campusImages.length}
                         </span>
-
-                        <h3 className="text-sm font-extrabold text-[#0a0e2a] line-clamp-2 mb-2 leading-snug">
-                          {ann.title}
+                        <h3 className="text-lg sm:text-2xl font-black text-white">
+                          {campusImages[activeGalleryIdx]?.title}
                         </h3>
-
-                        <p className="text-xs text-slate-600 line-clamp-4 leading-relaxed">
-                          {ann.content}
-                        </p>
-                      </div>
-
-                      <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
-                        <span className="truncate max-w-[170px] italic">By {ann.author}</span>
-
-                        {/* Admin Inline Delete Control */}
-                        {isAdmin && (
-                          <button
-                            type="button"
-                            onClick={() => setDeleteAnnTarget(ann)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-                            title="Delete Announcement from Database"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                        {campusImages[activeGalleryIdx]?.caption && (
+                          <p className="text-xs sm:text-sm text-slate-200 max-w-2xl line-clamp-2">
+                            {campusImages[activeGalleryIdx]?.caption}
+                          </p>
                         )}
                       </div>
+
+                      {/* Admin Delete Action for Current Photo */}
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => setDeleteCampusTarget(campusImages[activeGalleryIdx])}
+                          className="self-start sm:self-auto p-2 rounded-xl bg-red-600/80 hover:bg-red-600 text-white text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer backdrop-blur-md"
+                          title="Delete this classroom photo"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Delete Photo</span>
+                        </button>
+                      )}
                     </div>
-                  );
-                })}
+                  </div>
+
+                  {/* Navigation Arrows */}
+                  {campusImages.length > 1 && (
+                    <div className="absolute top-4 right-4 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setActiveGalleryIdx((prev) => (prev === 0 ? campusImages.length - 1 : prev - 1))
+                        }
+                        className="p-2.5 rounded-full bg-black/50 hover:bg-black/80 text-white backdrop-blur-md cursor-pointer transition-colors"
+                        aria-label="Previous Photo"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setActiveGalleryIdx((prev) => (prev === campusImages.length - 1 ? 0 : prev + 1))
+                        }
+                        className="p-2.5 rounded-full bg-black/50 hover:bg-black/80 text-white backdrop-blur-md cursor-pointer transition-colors"
+                        aria-label="Next Photo"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Thumbnails Row */}
+                {campusImages.length > 1 && (
+                  <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-none">
+                    {campusImages.map((img, idx) => (
+                      <button
+                        key={img.id || idx}
+                        type="button"
+                        onClick={() => setActiveGalleryIdx(idx)}
+                        className={`relative rounded-2xl overflow-hidden shrink-0 w-28 sm:w-36 h-20 border-2 transition-all cursor-pointer ${
+                          activeGalleryIdx === idx
+                            ? 'border-[#ea580c] ring-2 ring-orange-400 shadow-md scale-102'
+                            : 'border-white/20 opacity-70 hover:opacity-100'
+                        }`}
+                      >
+                        <img src={img.url} alt={img.title} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/20" />
+                        <span className="absolute bottom-1 left-1.5 right-1.5 text-[10px] font-bold text-white truncate drop-shadow">
+                          {img.title}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
         </section>
 
-        {/* ==================== 3. INSTITUTE INTRODUCTION & HIGHLIGHTS ==================== */}
-        <section className="py-16 lg:py-20 bg-white">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="max-w-3xl mx-auto text-center mb-12">
-              <span className="text-xs font-extrabold uppercase tracking-widest text-[#0056b3] bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
-                Academic Excellence in Udaipur
-              </span>
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0a0e2a] mt-3">
-                {siteContent.introHeading}
-              </h2>
-              <p className="text-slate-600 mt-3 leading-relaxed text-sm sm:text-base">
-                {siteContent.introText}
-              </p>
-            </div>
-
-            {/* 4 Core Pillars */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {siteContent.whyChooseUs.map((item, idx) => {
-                const icons = [Users, BookOpen, FileCheck, GraduationCap];
-                const IconComp = icons[idx % icons.length];
-                return (
-                  <div
-                    key={idx}
-                    className="p-6 rounded-2xl bg-slate-50/70 border border-slate-200/90 cga-card-hover"
-                  >
-                    <div className="w-12 h-12 rounded-2xl bg-[#0056b3] text-white flex items-center justify-center mb-4 shadow-sm">
-                      <IconComp className="w-6 h-6" />
-                    </div>
-                    <h3 className="text-base font-extrabold text-[#0a0e2a] mb-2">{item.title}</h3>
-                    <p className="text-sm text-slate-600 leading-relaxed">{item.description}</p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </section>
-
-        {/* ==================== 3. FOUR COURSE CATEGORIES STRIP ==================== */}
-        <section className="py-14 bg-slate-50 border-y border-slate-200">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
-              <div>
-                <span className="text-xs font-extrabold uppercase tracking-widest text-[#dc2626]">
-                  Structured Coaching Wings
-                </span>
-                <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0a0e2a] mt-1">
-                  Explore Our 4 Academic & Competitive Divisions
-                </h2>
-              </div>
-              <Link
-                href="/courses"
-                className="inline-flex items-center gap-1.5 text-sm font-bold text-[#0056b3] hover:underline"
-              >
-                {courses.length > 0
-                  ? `View All ${courses.length} Active Courses`
-                  : 'View All Courses'}{' '}
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-              {[
-                {
-                  title: 'Teaching & Recruitment Exams',
-                  subtitle: 'TET (I & II), STGT, STPGT, TPSC, JRBT',
-                  badge: '5 Flagship Batches',
-                  color: 'border-t-4 border-t-[#0056b3]',
-                  href: '/courses?category=Teaching+and+Recruitment+Exams',
-                },
-                {
-                  title: 'Banking, SSC & Railway',
-                  subtitle: 'IBPS PO/Clerk, SBI, SSC CGL/CHSL/MTS, RRB NTPC',
-                  badge: '3 Specialized Batches',
-                  color: 'border-t-4 border-t-[#ea580c]',
-                  href: '/courses?category=Banking,+SSC+and+Railway',
-                },
-                {
-                  title: 'Other Competitive Exams',
-                  subtitle: 'Tripura Police SI, TSR, Defence & CUET (UG)',
-                  badge: '2 Target Batches',
-                  color: 'border-t-4 border-t-[#dc2626]',
-                  href: '/courses?category=Other+Competitive+Examinations',
-                },
-                {
-                  title: 'School Coaching (Class VII–X)',
-                  subtitle: 'Separate Batches for TBSE & CBSE Boards',
-                  badge: '8 Board Batches (VII–X)',
-                  color: 'border-t-4 border-t-emerald-600',
-                  href: '/courses?category=School+Coaching',
-                },
-              ].map((cat) => (
-                <Link
-                  key={cat.title}
-                  href={cat.href}
-                  className={`bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs cga-card-hover flex flex-col justify-between ${cat.color}`}
-                >
-                  <div>
-                    <span className="inline-block text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 mb-3">
-                      {cat.badge}
-                    </span>
-                    <h3 className="text-base font-extrabold text-[#0a0e2a]">{cat.title}</h3>
-                    <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">{cat.subtitle}</p>
-                  </div>
-                  <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-[#0056b3]">
-                    <span>Browse Batches</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ==================== 4. FEATURED COURSES ==================== */}
-        <section className="py-16 lg:py-20 bg-white">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-10 gap-4">
-              <div>
-                <span className="text-xs font-extrabold uppercase tracking-widest text-[#0056b3]">
-                  Admissions Open 2026–27
-                </span>
-                <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0a0e2a] mt-1">
-                  Featured Courses & Upcoming Batches
-                </h2>
-              </div>
-              <Link
-                href="/courses"
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-50 text-[#0056b3] hover:bg-blue-100 text-sm font-bold transition-colors"
-              >
-                Explore Complete Course Catalogue
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {featuredCourses.length === 0 ? (
-                <div className="col-span-full text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-300">
-                  <p className="text-sm font-semibold text-slate-500">
-                    Upcoming batches and courses will be announced shortly.
-                  </p>
-                </div>
-              ) : (
-                featuredCourses.map((course) => (
-                  <CourseCard key={course.id} course={course} />
-                ))
-              )}
-            </div>
-          </div>
-        </section>
-
-        {/* ==================== 5. TOPPERS & ACHIEVEMENTS PREVIEW ==================== */}
-        <section className="py-16 lg:py-20 bg-slate-50 border-t border-slate-200">
+        {/* ==================== 3. TOPPERS & ACHIEVEMENTS PREVIEW (IMMEDIATELY AFTER BANNER) ==================== */}
+        <section className="py-16 lg:py-20 bg-slate-50 border-b border-slate-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-10 gap-4">
               <div>
@@ -756,14 +463,14 @@ export default function HomePage() {
                   <Trophy className="w-4 h-4" /> Hall of Fame
                 </span>
                 <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0a0e2a] mt-1">
-                  Our State Rankers & Board Toppers
+                  Our State Rankers &amp; Board Toppers
                 </h2>
               </div>
               <Link
                 href="/achievements"
                 className="inline-flex items-center gap-2 text-sm font-bold text-[#0056b3] hover:underline"
               >
-                View All Toppers & Selections <ArrowRight className="w-4 h-4" />
+                View Complete Hall of Fame <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
 
@@ -780,7 +487,7 @@ export default function HomePage() {
                       className="w-16 h-16 rounded-full object-cover ring-2 ring-[#ea580c] shrink-0"
                     />
                     <div>
-                      <span className="inline-block px-2 py-0.5 rounded bg-amber-50 text-[#ea580c] border border-amber-200 text-[11px] font-extrabold">
+                      <span className="inline-block px-2.5 py-0.5 rounded bg-amber-50 text-[#ea580c] border border-amber-200 text-[11px] font-extrabold">
                         {topper.rank}
                       </span>
                       <h3 className="text-base font-extrabold text-[#0a0e2a] mt-1">{topper.name}</h3>
@@ -804,184 +511,456 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ==================== 6. FACULTY PREVIEW ==================== */}
-        <section className="py-16 lg:py-20 bg-white border-t border-slate-200">
+        {/* ==================== 4. OFFICIAL ANNOUNCEMENTS & ACADEMIC BULLETIN ==================== */}
+        <section className="py-12 bg-white border-b border-slate-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-10 gap-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+              <div>
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100/70 border border-blue-200 text-xs font-bold text-[#0056b3]">
+                  <Bell className="w-3.5 h-3.5 text-[#0056b3]" />
+                  Official Academy Bulletin
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0a0e2a] mt-2">
+                  Notices &amp; Examination Announcements
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-600 mt-1">
+                  Stay updated with official batch dates, mock test schedules, and government notifications.
+                </p>
+              </div>
+
+              {isAdmin && (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminAnnForm(!showAdminAnnForm)}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-bold shadow-xs cursor-pointer transition-all"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>{showAdminAnnForm ? 'Cancel Notice' : 'Post Announcement'}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Admin Quick Post Form */}
+            {isAdmin && showAdminAnnForm && (
+              <form
+                onSubmit={handleAdminPostAnnouncement}
+                className="mb-8 p-6 rounded-2xl bg-white border-2 border-blue-200 shadow-md space-y-4"
+              >
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <h3 className="text-sm font-extrabold text-[#0a0e2a] flex items-center gap-2">
+                    <Plus className="w-4 h-4 text-[#0056b3]" />
+                    Publish Official Academy Announcement
+                  </h3>
+                  <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
+                    Admin Authenticated
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="md:col-span-2 space-y-1">
+                    <label className="text-xs font-bold text-slate-700">Notice Headline *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Tripura TET 2026 Special Sunday Mock Test Timetable Released"
+                      value={annTitle}
+                      onChange={(e) => setAnnTitle(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-[#0056b3]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700">Priority Level</label>
+                    <select
+                      value={annPriority}
+                      onChange={(e) => setAnnPriority(e.target.value as Announcement['priority'])}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white"
+                    >
+                      <option value="Important">Important (Orange)</option>
+                      <option value="Urgent">Urgent (Red)</option>
+                      <option value="Notice">Notice (Blue)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="md:col-span-2 space-y-1">
+                    <label className="text-xs font-bold text-slate-700">Notice Body Details *</label>
+                    <textarea
+                      required
+                      rows={3}
+                      placeholder="Enter the full announcement details, timings, guidelines or room allocations..."
+                      value={annContent}
+                      onChange={(e) => setAnnContent(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-[#0056b3]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700">Target Batch / Exam</label>
+                    <select
+                      value={annTargetBatch}
+                      onChange={(e) => setAnnTargetBatch(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white"
+                    >
+                      <option value="All Batches">All Batches (Public)</option>
+                      {courses.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} ({c.batchName})
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Choose which batch this announcement is pinned for.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminAnnForm(false)}
+                    className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs hover:bg-slate-200 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingAnn}
+                    className="px-5 py-2 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white font-bold text-xs shadow-xs cursor-pointer disabled:opacity-50"
+                  >
+                    {isSubmittingAnn ? 'Publishing…' : 'Publish Announcement'}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* Announcement Cards Display */}
+            {announcements.length === 0 ? (
+              <div className="p-8 text-center bg-white rounded-2xl border border-slate-200 text-slate-500 text-xs">
+                No active announcements right now. Check back soon for examination schedules and updates.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {announcements.map((ann) => {
+                  const priorityColors: Record<string, string> = {
+                    Urgent: 'bg-red-50 text-[#dc2626] border-red-200',
+                    Important: 'bg-amber-50 text-[#ea580c] border-amber-200',
+                    Notice: 'bg-blue-50 text-[#0056b3] border-blue-200',
+                  };
+                  const badgeClass = priorityColors[ann.priority] || 'bg-slate-50 text-slate-700 border-slate-200';
+
+                  return (
+                    <div
+                      key={ann.id}
+                      className="p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs hover:shadow-md transition-shadow flex flex-col justify-between space-y-3"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <span
+                            className={`px-2.5 py-0.5 rounded-full text-[11px] font-extrabold border ${badgeClass}`}
+                          >
+                            {ann.priority}
+                          </span>
+                          <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {ann.date}
+                          </span>
+                        </div>
+
+                        <h3 className="text-sm font-extrabold text-[#0a0e2a] leading-snug line-clamp-2">
+                          {ann.title}
+                        </h3>
+
+                        <p className="text-xs text-slate-600 mt-2 leading-relaxed line-clamp-3">
+                          {ann.content}
+                        </p>
+                      </div>
+
+                      <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                        <span className="font-bold text-[#0056b3] bg-blue-50 px-2 py-0.5 rounded-md truncate max-w-[180px]">
+                          {ann.targetLabel || 'All Batches'}
+                        </span>
+
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => setDeleteAnnTarget(ann)}
+                            className="text-red-500 hover:text-red-700 p-1 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+                            title="Delete Announcement"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* ==================== 5. WELCOME & ACADEMIC INTRO ==================== */}
+        <section className="py-16 lg:py-20 bg-white">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="max-w-3xl mx-auto text-center mb-12">
+              <span className="text-xs font-extrabold uppercase tracking-widest text-[#0056b3]">
+                Welcome to Career Guidance Academy
+              </span>
+              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-[#0a0e2a] mt-2">
+                Gomati District’s Premier Competitive Coaching Destination
+              </h2>
+              <div className="w-16 h-1 bg-[#ea580c] mx-auto mt-4 rounded-full" />
+              <p className="text-sm sm:text-base text-slate-600 mt-4 leading-relaxed">
+                Founded in 2019 at Chanban, Udaipur, Career Guidance Academy (C.G.A) delivers
+                disciplined, syllabus-focused classroom and online coaching for Teaching Eligibility
+                (Tripura TET, STGT), Civil &amp; General Recruitment (TPSC, JRBT, Banking, SSC,
+                Railways), and Secondary/Higher Secondary Foundation batches.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* ==================== 6. SPECIALIZED ACADEMIC WINGS ==================== */}
+        <section className="py-14 bg-slate-50 border-y border-slate-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
               <div>
                 <span className="text-xs font-extrabold uppercase tracking-widest text-[#0056b3]">
-                  Mentors Behind the Ranks
+                  Structured Curriculum
                 </span>
                 <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0a0e2a] mt-1">
-                  Learn from Tripura’s Most Experienced Educators
+                  Our Four Specialized Academic Wings
                 </h2>
               </div>
               <Link
-                href="/faculty"
-                className="inline-flex items-center gap-2 text-sm font-bold text-[#0056b3] hover:underline"
+                href="/courses"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0056b3] hover:underline"
               >
-                {faculty.length > 0
-                  ? `Meet All ${faculty.length} Faculty Members`
-                  : 'Meet Our Faculty Members'}{' '}
-                <ArrowRight className="w-4 h-4" />
+                <span>Browse All Batches</span>
+                <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {topFaculty.length === 0 ? (
-                <div className="col-span-full text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-300">
-                  <p className="text-sm font-semibold text-slate-500">
-                    Faculty mentor profiles will be announced shortly.
-                  </p>
+              <div className="p-6 rounded-3xl bg-white border border-slate-200 shadow-xs hover:border-[#0056b3] transition-all">
+                <div className="w-10 h-10 rounded-2xl bg-blue-50 text-[#0056b3] flex items-center justify-center font-bold mb-4">
+                  1
+                </div>
+                <h3 className="text-base font-extrabold text-[#0a0e2a]">Teaching Exams Wing</h3>
+                <p className="text-xs text-slate-600 mt-2 leading-relaxed">
+                  Rigorous preparation for Tripura TET (Paper I &amp; Paper II). Complete syllabus coverage for CDP, Languages, Science, and Social Studies.
+                </p>
+              </div>
+
+              <div className="p-6 rounded-3xl bg-white border border-slate-200 shadow-xs hover:border-[#ea580c] transition-all">
+                <div className="w-10 h-10 rounded-2xl bg-amber-50 text-[#ea580c] flex items-center justify-center font-bold mb-4">
+                  2
+                </div>
+                <h3 className="text-base font-extrabold text-[#0a0e2a]">STGT &amp; High School Wing</h3>
+                <p className="text-xs text-slate-600 mt-2 leading-relaxed">
+                  Specialized subject batches for Graduate Teachers (Secondary): Pure Science (PCM), Bio Science (CBZ), and Social Studies.
+                </p>
+              </div>
+
+              <div className="p-6 rounded-3xl bg-white border border-slate-200 shadow-xs hover:border-emerald-600 transition-all">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold mb-4">
+                  3
+                </div>
+                <h3 className="text-base font-extrabold text-[#0a0e2a]">TPSC &amp; General Exams</h3>
+                <p className="text-xs text-slate-600 mt-2 leading-relaxed">
+                  Comprehensive coverage of Tripura GK, Current Affairs, English, Quantitative Aptitude &amp; Reasoning for TPSC Combined &amp; JRBT.
+                </p>
+              </div>
+
+              <div className="p-6 rounded-3xl bg-white border border-slate-200 shadow-xs hover:border-sky-600 transition-all">
+                <div className="w-10 h-10 rounded-2xl bg-sky-50 text-sky-700 flex items-center justify-center font-bold mb-4">
+                  4
+                </div>
+                <h3 className="text-base font-extrabold text-[#0a0e2a]">Board Foundation Wing</h3>
+                <p className="text-xs text-slate-600 mt-2 leading-relaxed">
+                  TBSE &amp; CBSE Classes VII to X foundation batches building concepts in Mathematics, Science, and English for future competitive exams.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ==================== 7. FEATURED COURSES ==================== */}
+        <section className="py-16 lg:py-20 bg-white">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-10 gap-4">
+              <div>
+                <span className="text-xs font-extrabold uppercase tracking-widest text-[#0056b3]">
+                  Admissions Open
+                </span>
+                <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0a0e2a] mt-1">
+                  Featured Preparation Courses
+                </h2>
+              </div>
+              <Link
+                href="/courses"
+                className="inline-flex items-center gap-2 text-sm font-bold text-[#0056b3] hover:underline"
+              >
+                View All Batches <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {featuredCourses.length === 0 ? (
+                <div className="col-span-3 text-center py-12 text-slate-500">
+                  No featured courses found at this time.
                 </div>
               ) : (
-                topFaculty.map((member) => (
-                  <div
-                    key={member.id}
-                    className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs cga-card-hover flex flex-col"
-                  >
-                    <div className="flex items-center gap-3.5 mb-4">
-                      <img
-                        src={member.photo || getFacultyAvatarUrl(member.name)}
-                        alt={`Faculty avatar of ${formatFacultyName(member.name)}, ${member.designation || 'Instructor'}`}
-                        onError={(e) => {
-                          (e.currentTarget as HTMLImageElement).src = getFacultyAvatarUrl(member.name);
-                        }}
-                        className="w-16 h-16 rounded-2xl object-cover border-2 border-[#0056b3]/20 shrink-0"
-                      />
-                      <div>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          {member.designation && (
-                            <span className="inline-block px-1.5 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200 text-[10px] font-extrabold uppercase">
-                              {member.designation}
-                            </span>
-                          )}
-                          <span className="inline-block px-2 py-0.5 rounded bg-blue-50 text-[#0056b3] text-[11px] font-bold">
-                            {member.experience}
-                          </span>
-                        </div>
-                        <h3 className="text-base font-extrabold text-[#0a0e2a] mt-1">
-                          {formatFacultyName(member.name)}
-                        </h3>
-                      </div>
-                    </div>
-                    <p className="text-xs font-bold text-[#0056b3] mb-1">{member.subject}</p>
-                    <p className="text-xs text-slate-500 font-medium mb-3">{member.qualification}</p>
-                    <p className="text-xs text-slate-600 leading-relaxed mt-auto line-clamp-3">
-                      {member.bio}
-                    </p>
-                  </div>
+                featuredCourses.map((course) => (
+                  <CourseCard key={course.id} course={course} />
                 ))
               )}
             </div>
           </div>
         </section>
 
-        {/* ==================== 7. ACADEMIC METHODOLOGY & PILLARS ==================== */}
-        <section className="py-16 bg-slate-50 border-t border-slate-200">
+        {/* ==================== 8. FACULTY PREVIEW ==================== */}
+        <section className="py-16 lg:py-20 bg-white border-t border-slate-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center max-w-2xl mx-auto mb-12">
-              <span className="text-xs font-extrabold uppercase tracking-widest text-[#0056b3]">
-                Academic Excellence
-              </span>
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0a0e2a] mt-1">
-                Our Proven Pedagogical Methodology
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-600 mt-2">
-                Ground-level coaching built on disciplined mentorship, localized syllabus coverage, and regular performance evaluations.
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-10 gap-4">
+              <div>
+                <span className="text-xs font-extrabold uppercase tracking-widest text-[#0056b3]">
+                  Mentorship Council
+                </span>
+                <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0a0e2a] mt-1">
+                  Learn from State Toppers &amp; Veteran Educators
+                </h2>
+              </div>
+              <Link
+                href="/faculty"
+                className="inline-flex items-center gap-2 text-sm font-bold text-[#0056b3] hover:underline"
+              >
+                Meet All Faculty <ArrowRight className="w-4 h-4" />
+              </Link>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-2xs flex flex-col justify-between">
-                <div>
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#0056b3] flex items-center justify-center font-bold mb-4">
-                    <BookOpen className="w-5 h-5" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {topFaculty.map((member) => (
+                <div
+                  key={member.id}
+                  className="bg-white rounded-2xl border border-slate-200 p-6 text-center shadow-2xs cga-card-hover flex flex-col items-center justify-between"
+                >
+                  <div className="flex flex-col items-center">
+                    <img
+                      src={getFacultyAvatarUrl(member.name)}
+                      alt={`Portrait of ${formatFacultyName(member.name)}, faculty at Career Guidance Academy`}
+                      className="w-24 h-24 rounded-full object-cover ring-4 ring-blue-50 shadow-sm"
+                    />
+                    <h3 className="text-base font-extrabold text-[#0a0e2a] mt-4">
+                      {formatFacultyName(member.name)}
+                    </h3>
+                    <p className="text-xs font-bold text-[#0056b3] mt-0.5">{member.designation}</p>
+                    <span className="inline-block mt-2 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[11px] font-semibold">
+                      {member.subject}
+                    </span>
+                    <p className="text-xs text-slate-600 mt-3 leading-relaxed line-clamp-3">
+                      {member.bio}
+                    </p>
                   </div>
-                  <h3 className="text-base font-extrabold text-[#0a0e2a] mb-2">
-                    Comprehensive Syllabus Coverage
-                  </h3>
-                  <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                    Exhaustive module-by-module preparation aligned with latest TRBT, TPSC, JRBT and Board patterns, with dedicated attention to foundational concepts.
-                  </p>
-                </div>
-                <div className="mt-5 pt-4 border-t border-slate-100 flex items-center gap-1.5 text-xs font-bold text-[#0056b3]">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>Handcrafted Study Modules</span>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-2xs flex flex-col justify-between">
-                <div>
-                  <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold mb-4">
-                    <FileCheck className="w-5 h-5" />
+                  <div className="mt-4 pt-3 border-t border-slate-100 w-full flex items-center justify-center gap-1.5 text-xs font-semibold text-slate-500">
+                    <Award className="w-3.5 h-3.5 text-[#ea580c]" />
+                    <span>{member.experience} Experience</span>
                   </div>
-                  <h3 className="text-base font-extrabold text-[#0a0e2a] mb-2">
-                    Rigorous Mock Tests &amp; Analysis
-                  </h3>
-                  <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                    Weekly OMR-style and timed assessments replicating exam environments, followed by question-by-question breakdown and doubt clearance.
-                  </p>
                 </div>
-                <div className="mt-5 pt-4 border-t border-slate-100 flex items-center gap-1.5 text-xs font-bold text-[#0056b3]">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>Individual Performance Tracking</span>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-2xs flex flex-col justify-between">
-                <div>
-                  <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center font-bold mb-4">
-                    <Users className="w-5 h-5" />
-                  </div>
-                  <h3 className="text-base font-extrabold text-[#0a0e2a] mb-2">
-                    Personalized Mentor Support
-                  </h3>
-                  <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                    Small, focused classroom batches at our Chanban campus ensure every student receives direct guidance from experienced faculty.
-                  </p>
-                </div>
-                <div className="mt-5 pt-4 border-t border-slate-100 flex items-center gap-1.5 text-xs font-bold text-[#0056b3]">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>Offline Campus at Udaipur</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Statutory Compliance Notice Banner */}
-            <div className="mt-10 p-4 rounded-xl bg-slate-100 border border-slate-200 text-center text-xs text-slate-500 max-w-3xl mx-auto">
-              <span className="font-semibold text-slate-700">Institutional Notice:</span> Career Guidance Academy (C.G.A) operates solely as an educational tutoring institute. We do not display unverified promotional endorsements. Academic outcomes are the result of student effort, dedicated classroom training, and independent selection processes by respective government examination boards.
+              ))}
             </div>
           </div>
         </section>
 
-        {/* ==================== 8. REGISTRATION CALL-TO-ACTION ==================== */}
+        {/* ==================== 9. METHODOLOGY ==================== */}
+        <section className="py-16 bg-slate-50 border-t border-slate-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center max-w-2xl mx-auto mb-12">
+              <span className="text-xs font-extrabold uppercase tracking-widest text-[#0056b3]">
+                Proven System
+              </span>
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0a0e2a] mt-1">
+                Our 6-Step Preparation Methodology
+              </h2>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[
+                {
+                  num: '01',
+                  title: 'Complete Syllabus Mapping',
+                  desc: 'Every lecture strictly adheres to official TRBT, TPSC, and TBSE guidelines with updated questions.',
+                },
+                {
+                  num: '02',
+                  title: 'Handcrafted Printed Handouts',
+                  desc: 'Concise, high-yield chapter notes and conceptual formula booklets distributed to students.',
+                },
+                {
+                  num: '03',
+                  title: 'Weekly OMR & Online CBT Mocks',
+                  desc: 'Timed exam-simulated tests with negative marking, instant scorecards, and ranking.',
+                },
+                {
+                  num: '04',
+                  title: 'One-on-One Doubt Solving',
+                  desc: 'Dedicated daily clearing hours with faculty ensuring zero conceptual bottlenecks.',
+                },
+                {
+                  num: '05',
+                  title: 'Tripura Current Affairs Digests',
+                  desc: 'Domestic & International capsules with special emphasis on Tripura state GK.',
+                },
+                {
+                  num: '06',
+                  title: 'Rigorous Past 10-Yr Paper Analysis',
+                  desc: 'Dissecting previous years questions to spot recurring themes and patterns.',
+                },
+              ].map((step, i) => (
+                <div
+                  key={i}
+                  className="p-6 rounded-2xl bg-white border border-slate-200 shadow-2xs hover:border-[#0056b3] transition-colors"
+                >
+                  <span className="text-2xl font-black text-[#ea580c] block mb-2">{step.num}</span>
+                  <h3 className="text-base font-extrabold text-[#0a0e2a]">{step.title}</h3>
+                  <p className="text-xs text-slate-600 mt-2 leading-relaxed">{step.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ==================== 10. CALL TO ACTION BANNER ==================== */}
         <section className="py-16 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="cga-gradient-hero rounded-3xl p-8 sm:p-12 text-white shadow-xl flex flex-col lg:flex-row items-center justify-between gap-8">
               <div className="space-y-3 max-w-2xl text-center lg:text-left">
-                <span className="inline-block px-3 py-1 rounded-full bg-white/15 text-amber-300 text-xs font-bold uppercase tracking-wider">
-                  Start Your Preparation Today
+                <span className="inline-block px-3 py-1 rounded-full bg-white/10 text-amber-300 text-xs font-bold uppercase tracking-wider">
+                  Admissions Open for 2026–27 Session
                 </span>
-                <h2 className="text-2xl sm:text-3xl font-extrabold">
-                  Ready to Join Career Guidance Academy (C.G.A), Udaipur?
+                <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight">
+                  Ready to Secure Your State Rank in Tripura?
                 </h2>
-                <p className="text-sm sm:text-base text-blue-100 leading-relaxed">
-                  Register on our Student Portal to browse live seat availability, pay fees in full or
-                  convenient instalments, unlock watermarked PDF study books, and attempt timed mock
-                  tests.
+                <p className="text-sm text-blue-100 leading-relaxed">
+                  Join hundreds of successful candidates who transformed their preparation at Career
+                  Guidance Academy. Enrol online or visit our Udaipur campus today.
                 </p>
               </div>
-              <div className="flex flex-wrap items-center justify-center gap-4 shrink-0">
+
+              <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto shrink-0 justify-center">
                 <Link
                   href="/register"
-                  className="px-6 py-3.5 rounded-xl bg-[#ea580c] hover:bg-orange-600 text-white font-bold text-sm shadow-lg transition-all"
+                  className="px-6 py-3.5 rounded-xl bg-[#ea580c] hover:bg-orange-600 text-white font-bold text-sm shadow-lg shadow-orange-950/20 text-center transition-all"
                 >
                   Create Student Account
                 </Link>
                 <Link
                   href="/contact"
-                  className="px-6 py-3.5 rounded-xl bg-white text-[#0a0e2a] hover:bg-blue-50 font-bold text-sm transition-all"
+                  className="px-6 py-3.5 rounded-xl bg-white text-[#0a0e2a] hover:bg-blue-50 font-bold text-sm transition-all text-center"
                 >
                   Visit Udaipur Office
                 </Link>
@@ -993,6 +972,7 @@ export default function HomePage() {
 
       <PublicFooter />
 
+      {/* Delete Announcement Confirmation Dialog */}
       <ConfirmDialog
         isOpen={!!deleteAnnTarget}
         title="Delete Announcement?"
@@ -1001,8 +981,17 @@ export default function HomePage() {
         onConfirm={handleConfirmDeleteAnnouncement}
       />
 
+      {/* Delete Campus Photo Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={!!deleteCampusTarget}
+        title="Remove Classroom Photo?"
+        message={`Are you sure you want to remove photo "${deleteCampusTarget?.title}" from the public front banner?`}
+        onCancel={() => setDeleteCampusTarget(null)}
+        onConfirm={handleConfirmDeleteCampusPhoto}
+      />
+
       {/* Admin Campus & Classroom Photo Upload Modal */}
-      {isAdmin && showCampusModal && (
+      {isAdmin && showCampusUploadModal && (
         <div
           className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-xs"
           role="dialog"
@@ -1028,7 +1017,7 @@ export default function HomePage() {
               </div>
               <button
                 type="button"
-                onClick={() => setShowCampusModal(false)}
+                onClick={() => setShowCampusUploadModal(false)}
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-700 cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -1121,17 +1110,17 @@ export default function HomePage() {
             <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
               <button
                 type="button"
-                onClick={() => setShowCampusModal(false)}
+                onClick={() => setShowCampusUploadModal(false)}
                 className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs hover:bg-slate-200 cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                disabled={!compressedResult || isSavingCampus}
+                disabled={!compressedResult || isSavingCampusPhoto}
                 className="px-5 py-2 rounded-xl bg-[#ea580c] hover:bg-orange-600 text-white font-bold text-xs shadow-sm cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
               >
-                {isSavingCampus ? 'Publishing…' : 'Publish to Front Banner'}
+                {isSavingCampusPhoto ? 'Publishing…' : 'Publish to Front Banner'}
               </button>
             </div>
           </form>
