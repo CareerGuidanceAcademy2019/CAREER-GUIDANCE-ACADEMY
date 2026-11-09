@@ -30,7 +30,7 @@ type StudentMaterialTab = 'course_materials' | 'current_affairs';
 type CaCategoryFilter = 'All' | 'Domestic' | 'International';
 
 export default function StudentStudyMaterialsPage() {
-  const { db, currentStudent, showToast } = useCga();
+  const { db, currentStudent, session, showToast } = useCga();
   const [activeTab, setActiveTab] = useState<StudentMaterialTab>('course_materials');
   const [filterType, setFilterType] = useState<'All' | 'Unlocked' | 'Locked'>('All');
   const [caCategoryFilter, setCaCategoryFilter] = useState<CaCategoryFilter>('All');
@@ -59,12 +59,59 @@ export default function StudentStudyMaterialsPage() {
   // Dedicated Current Affairs Subscription check
   const caEnrollment = useMemo(() => {
     if (!currentStudent) return null;
-    return (db.seriesEnrollments || []).find(
+    const fromSeries = (db.seriesEnrollments || []).find(
       (se) =>
         (se.studentId === currentStudent.id || se.studentId === 'me') &&
         se.seriesId === 'series-current-affairs'
     );
-  }, [currentStudent, db.seriesEnrollments]);
+    if (fromSeries) return fromSeries;
+
+    const fromCourse = (currentStudent.enrollments || []).find(
+      (e) => e.courseId === 'series-current-affairs'
+    );
+    if (fromCourse) {
+      return {
+        id: `ca-enr-${currentStudent.id}`,
+        studentId: currentStudent.id,
+        seriesId: 'series-current-affairs',
+        enrolledAt: fromCourse.enrolledDate,
+        accessValidUntil: fromCourse.accessValidUntil,
+      };
+    }
+
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('cga_series_enrollments');
+        if (stored) {
+          const list = JSON.parse(stored);
+          const found = list.find(
+            (se: any) =>
+              (se.studentId === currentStudent.id || se.studentId === 'me') &&
+              se.seriesId === 'series-current-affairs'
+          );
+          if (found) return found;
+        }
+      } catch {}
+    }
+
+    const verifiedPayment = (db.feePayments || []).find(
+      (p) =>
+        (p.studentId === currentStudent.id || p.studentId === 'me') &&
+        p.status === 'Verified' &&
+        (p.itemId === 'series-current-affairs' || p.courseId === 'series-current-affairs')
+    );
+    if (verifiedPayment) {
+      return {
+        id: `ca-pay-${verifiedPayment.id}`,
+        studentId: currentStudent.id,
+        seriesId: 'series-current-affairs',
+        enrolledAt: verifiedPayment.date,
+        accessValidUntil: (verifiedPayment as any).accessValidUntil,
+      };
+    }
+
+    return null;
+  }, [currentStudent, db.seriesEnrollments, db.feePayments]);
 
   const isCaExpired = Boolean(
     caEnrollment?.accessValidUntil &&
@@ -72,8 +119,9 @@ export default function StudentStudyMaterialsPage() {
   );
 
   const hasActiveCaSubscription = Boolean(
-    caEnrollment &&
-      (!caEnrollment.accessValidUntil || new Date(caEnrollment.accessValidUntil).getTime() >= currentTime)
+    session?.role === 'ADMIN' ||
+    (caEnrollment &&
+      (!caEnrollment.accessValidUntil || new Date(caEnrollment.accessValidUntil).getTime() >= currentTime))
   );
 
   // Check if student is enrolled in ANY active course or mock test series
@@ -578,10 +626,8 @@ export default function StudentStudyMaterialsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredCurrentAffairs.map((ca) => {
                 const category = ca.caCategory || 'Domestic';
-                const isFree = ca.price === 0;
-                const isAllLogin = ca.accessScope === 'all_logged_in';
-                const isUnlockedForStudent =
-                  isFree || isAllLogin || hasActiveCaSubscription || isStudentEnrolledAnywhere;
+                // Strict rule: access to drive link / PDF requires active Current Affairs subscription or Admin role
+                const isUnlockedForStudent = hasActiveCaSubscription || session?.role === 'ADMIN';
 
                 return (
                   <div
@@ -619,22 +665,8 @@ export default function StudentStudyMaterialsPage() {
                             {category}
                           </span>
 
-                          <span
-                            className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-black shadow-2xs ${
-                              isFree
-                                ? 'bg-emerald-500 text-white'
-                                : 'bg-gradient-to-r from-[#ea580c] to-amber-600 text-white'
-                            }`}
-                          >
-                            {isFree ? (
-                              <>
-                                <Sparkles className="w-3 h-3" /> FREE
-                              </>
-                            ) : (
-                              <>
-                                <Tag className="w-3 h-3" /> ₹{ca.price || 199}/-
-                              </>
-                            )}
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-black bg-orange-100 text-[#ea580c]">
+                            Current Affairs Series
                           </span>
                         </div>
 
@@ -644,12 +676,15 @@ export default function StudentStudyMaterialsPage() {
                           </span>
                           {isUnlockedForStudent ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
-                              <Unlock className="w-3 h-3" />{' '}
-                              {isFree ? 'Free Access' : isAllLogin ? 'Free for Login' : 'Unlocked'}
+                              <Unlock className="w-3 h-3" /> Unlocked (Subscribed)
+                            </span>
+                          ) : isCaExpired ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 text-[11px] font-bold">
+                              <Lock className="w-3 h-3" /> Access Expired
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-[#ea580c] border border-amber-200 text-[11px] font-bold">
-                              <Lock className="w-3 h-3" /> Enrolled / Paid
+                              <Lock className="w-3 h-3" /> Enrolment Required
                             </span>
                           )}
                         </div>
@@ -697,7 +732,9 @@ export default function StudentStudyMaterialsPage() {
                       ) : (
                         <div className="space-y-2">
                           <p className="text-[11px] text-slate-600 font-semibold text-center">
-                            This Current Affairs series is available for enrolled students or can be unlocked individually.
+                            {isCaExpired
+                              ? `Your subscription expired on ${new Date(caEnrollment!.accessValidUntil!).toLocaleDateString('en-IN')}. Renew to access Drive PDF capsules.`
+                              : 'Students must be enrolled in Current Affairs Series to access Drive PDF capsules.'}
                           </p>
                           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                             <button
@@ -712,15 +749,16 @@ export default function StudentStudyMaterialsPage() {
                                   category: 'Current Affairs & GK Series',
                                 })
                               }
-                              className="flex-1 py-2 px-3 rounded-xl bg-[#ea580c] hover:bg-orange-700 text-white text-xs font-bold inline-flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                              className="flex-1 py-2.5 px-3 rounded-xl bg-[#ea580c] hover:bg-orange-700 text-white text-xs font-bold inline-flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
                             >
-                              <CreditCard className="w-3.5 h-3.5" /> Subscribe to Series (from ₹49)
+                              <CreditCard className="w-3.5 h-3.5" />
+                              <span>{isCaExpired ? 'Renew Subscription (from ₹49)' : 'Subscribe to Unlock (from ₹49)'}</span>
                             </button>
                             <Link
-                              href="/student/courses"
-                              className="py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold inline-flex items-center justify-center gap-1 transition-all"
+                              href="/student/my-learning?tab=current_affairs"
+                              className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold inline-flex items-center justify-center gap-1 transition-all"
                             >
-                              Enrol Course <ArrowRight className="w-3 h-3" />
+                              My Learning <ArrowRight className="w-3 h-3" />
                             </Link>
                           </div>
                         </div>

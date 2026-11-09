@@ -112,9 +112,21 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
     currentStudent &&
       target &&
       ((target.itemType === 'mock_series' &&
-        (db.seriesEnrollments?.some((se) => se.studentId === currentStudent.id && se.seriesId === target.itemId) ||
-          currentStudent.enrollments.some((e) => e.courseId === target.itemId) ||
-          (currentStudent as any).seriesEnrolled)) ||
+        (target.itemId === 'series-current-affairs'
+          ? ((db.seriesEnrollments || []).some(
+              (se) =>
+                (se.studentId === currentStudent.id || se.studentId === 'me') &&
+                se.seriesId === 'series-current-affairs' &&
+                (!se.accessValidUntil || new Date(se.accessValidUntil).getTime() >= Date.now())
+            ) ||
+            (currentStudent.enrollments || []).some(
+              (e) =>
+                e.courseId === 'series-current-affairs' &&
+                (!e.accessValidUntil || new Date(e.accessValidUntil).getTime() >= Date.now())
+            ))
+          : (db.seriesEnrollments?.some((se) => se.studentId === currentStudent.id && se.seriesId === target.itemId) ||
+              currentStudent.enrollments.some((e) => e.courseId === target.itemId) ||
+              (currentStudent as any).seriesEnrolled))) ||
         (target.itemType === 'course' && currentStudent.enrollments.some((e) => e.courseId === target.itemId)))
   );
 
