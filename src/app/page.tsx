@@ -110,26 +110,30 @@ export default function HomePage() {
 
     const currentList = siteContent.campusImages || campusImages;
     const updated = [newPhoto, ...currentList];
-    await updateSiteContent({ ...siteContent, campusImages: updated });
+    const ok = await updateSiteContent({ ...siteContent, campusImages: updated });
     setIsSavingCampusPhoto(false);
-    setShowCampusUploadModal(false);
-    setCompressedResult(null);
-    setCampusPhotoTitle('');
-    setCampusPhotoCaption('');
-    setActiveGalleryIdx(0);
-    showToast('Classroom Photo Published', 'Photo is now live on the front top banner.', 'success');
+    if (ok) {
+      setShowCampusUploadModal(false);
+      setCompressedResult(null);
+      setCampusPhotoTitle('');
+      setCampusPhotoCaption('');
+      setActiveGalleryIdx(0);
+      showToast('Classroom Photo Published', 'Photo is now live on the front top banner.', 'success');
+    }
   };
 
   const handleConfirmDeleteCampusPhoto = async () => {
     if (!deleteCampusTarget) return;
     const currentList = siteContent.campusImages || campusImages;
     const updated = currentList.filter((img) => img.id !== deleteCampusTarget.id);
-    await updateSiteContent({ ...siteContent, campusImages: updated });
-    setDeleteCampusTarget(null);
-    if (activeGalleryIdx >= updated.length) {
-      setActiveGalleryIdx(Math.max(0, updated.length - 1));
+    const ok = await updateSiteContent({ ...siteContent, campusImages: updated });
+    if (ok) {
+      setDeleteCampusTarget(null);
+      if (activeGalleryIdx >= updated.length) {
+        setActiveGalleryIdx(Math.max(0, updated.length - 1));
+      }
+      showToast('Photo Removed', 'Image removed from front banner.', 'info');
     }
-    showToast('Photo Removed', 'Image removed from front banner.', 'info');
   };
 
   // Admin Announcement Quick-Action state

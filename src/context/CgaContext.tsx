@@ -160,7 +160,7 @@ interface CgaContextType {
   deleteAchievement: (achievementId: string) => Promise<void>;
   saveAnnouncement: (announcement: Announcement, isNew: boolean) => Promise<void>;
   deleteAnnouncement: (announcementId: string) => Promise<void>;
-  updateSiteContent: (content: SiteContent) => Promise<void>;
+  updateSiteContent: (content: SiteContent) => Promise<boolean>;
   updateMockSeries: (series: MockSeries) => Promise<void>;
   saveMockSubjectPost: (post: MockSubjectPost, isNew: boolean) => Promise<void>;
   deleteMockSubjectPost: (postId: string) => Promise<void>;
@@ -1195,13 +1195,38 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
   );
 
   const updateSiteContent = useCallback(
-    async (content: SiteContent) => {
-      await run(cgaService.saveSiteContent(content), {
+    async (content: SiteContent): Promise<boolean> => {
+      // 1. Optimistically update local database state so UI immediately reflects change
+      setDb((prev) => ({
+        ...prev,
+        siteContent: content,
+      }));
+
+      // 2. Invalidate memory & session cache and persist to browser storage
+      if (typeof window !== 'undefined') {
+        try {
+          sessionStorage.removeItem('cga_db_cache');
+          localStorage.setItem('cga_site_content', JSON.stringify(content));
+          if (content.campusImages) {
+            localStorage.setItem('cga_campus_images', JSON.stringify(content.campusImages));
+          }
+        } catch {}
+      }
+
+      // 3. Persist to database via service
+      const ok = await run(cgaService.saveSiteContent(content), {
         title: 'Public Website Content Saved!',
         message: 'Homepage banners, About Us, and Contact details have been updated live.',
       });
+
+      if (!ok) {
+        // If network save failed, reload server state to avoid state drift
+        await refresh(true);
+        return false;
+      }
+      return true;
     },
-    [run]
+    [run, refresh]
   );
 
   const updateMockSeries = useCallback(

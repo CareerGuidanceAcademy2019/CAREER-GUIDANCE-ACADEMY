@@ -1728,9 +1728,27 @@ export const cgaService = {
         standalonePackages:
           ((site.data?.content as SiteContent)?.standalonePackages) ??
           INITIAL_SEED_DATA.siteContent.standalonePackages,
-        campusImages:
-          ((site.data?.content as SiteContent)?.campusImages) ??
-          INITIAL_SEED_DATA.siteContent.campusImages,
+        campusImages: (() => {
+          const dbContent = site.data?.content as SiteContent | undefined;
+          if (dbContent && Array.isArray(dbContent.campusImages)) {
+            if (typeof window !== 'undefined') {
+              try {
+                localStorage.setItem('cga_campus_images', JSON.stringify(dbContent.campusImages));
+              } catch {}
+            }
+            return dbContent.campusImages;
+          }
+          if (typeof window !== 'undefined') {
+            try {
+              const local = localStorage.getItem('cga_campus_images');
+              if (local) {
+                const parsed = JSON.parse(local);
+                if (Array.isArray(parsed)) return parsed;
+              }
+            } catch {}
+          }
+          return INITIAL_SEED_DATA.siteContent.campusImages || [];
+        })(),
       },
       courses: courseList.length > 0 ? courseList : INITIAL_SEED_DATA.courses,
       faculty: facultyList.length > 0 ? facultyList : INITIAL_SEED_DATA.faculty,
@@ -3165,11 +3183,62 @@ export const cgaService = {
     }
   },
 
-  async saveSiteContent(content: SiteContent): Promise<ServiceResult> {
-    const { error } = await this.client()
-      .from('site_content')
-      .upsert({ id: 1, content, updated_at: new Date().toISOString() });
-    return error ? { success: false, error: msg(error, 'Save failed.') } : { success: true };
+  async saveSiteContent(content: SiteContent): Promise<ServiceResult<{ content?: SiteContent }>> {
+    try {
+      // 1. Immediately invalidate in-memory and session cache
+      dbCache = null;
+      if (typeof window !== 'undefined') {
+        try {
+          sessionStorage.removeItem('cga_db_cache');
+          localStorage.setItem('cga_site_content', JSON.stringify(content));
+          if (content.campusImages) {
+            localStorage.setItem('cga_campus_images', JSON.stringify(content.campusImages));
+          }
+        } catch {}
+      }
+
+      // 2. Obtain current session access token
+      const s = (await this.client().auth.getSession()).data?.session;
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (s?.access_token) {
+        headers['Authorization'] = `Bearer ${s.access_token}`;
+      }
+
+      // 3. Call dedicated Admin API route (service-role upsert)
+      try {
+        const res = await fetch('/api/admin/site-content', {
+          method: 'POST',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify({ content }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json.success) {
+          return { success: true, content: json.content };
+        }
+        if (!res.ok && res.status === 403) {
+          console.warn('[cgaService] Admin API returned 403, falling back to direct upsert.');
+        } else if (!res.ok) {
+          console.warn('[cgaService] Admin API error:', json.error);
+        }
+      } catch (fetchErr) {
+        console.warn('[cgaService] Admin API route unreachable, trying direct upsert:', fetchErr);
+      }
+
+      // 4. Direct Supabase client upsert fallback
+      const { error } = await this.client()
+        .from('site_content')
+        .upsert({ id: 1, content, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+
+      if (error) {
+        console.error('[cgaService.saveSiteContent] Supabase upsert error:', error);
+        return { success: false, error: msg(error, 'Could not save site content to database.') };
+      }
+
+      return { success: true, content };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Failed to save site content' };
+    }
   },
 
   // ---- student management (admin) ----

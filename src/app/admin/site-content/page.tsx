@@ -10,6 +10,7 @@ export default function AdminSiteContentCmsPage() {
   const { db, updateSiteContent, showToast } = useCga();
   const [form, setForm] = useState<SiteContent>(db.siteContent);
   const [isCompressing, setIsCompressing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [photoTitle, setPhotoTitle] = useState('');
   const [photoCaption, setPhotoCaption] = useState('');
   const [compressedResult, setCompressedResult] = useState<CompressionResult | null>(null);
@@ -59,9 +60,11 @@ export default function AdminSiteContentCmsPage() {
     setForm({ ...form, campusImages: updated });
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateSiteContent(form);
+    setIsSaving(true);
+    await updateSiteContent(form);
+    setIsSaving(false);
   };
 
   return (
@@ -79,9 +82,10 @@ export default function AdminSiteContentCmsPage() {
         <button
           type="button"
           onClick={handleSave}
-          className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-extrabold shadow-sm cursor-pointer self-start"
+          disabled={isSaving}
+          className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-extrabold shadow-sm cursor-pointer self-start disabled:opacity-50"
         >
-          <Save className="w-4 h-4" /> Save All Site Content
+          <Save className="w-4 h-4" /> {isSaving ? 'Saving...' : 'Save All Site Content'}
         </button>
       </div>
 
@@ -319,9 +323,10 @@ export default function AdminSiteContentCmsPage() {
         <div className="flex justify-end">
           <button
             type="submit"
-            className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white font-extrabold text-xs shadow-md cursor-pointer"
+            disabled={isSaving}
+            className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white font-extrabold text-xs shadow-md cursor-pointer disabled:opacity-50"
           >
-            <Save className="w-4 h-4" /> Save & Publish Changes to Website
+            <Save className="w-4 h-4" /> {isSaving ? 'Saving...' : 'Save & Publish Changes to Website'}
           </button>
         </div>
       </form>
