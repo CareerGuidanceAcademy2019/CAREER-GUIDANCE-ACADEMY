@@ -27,6 +27,8 @@ import {
   Upload,
   ChevronLeft,
   ChevronRight,
+  Maximize2,
+  Edit3,
 } from 'lucide-react';
 import { PublicHeader } from '@/components/layout/PublicHeader';
 import { PublicFooter } from '@/components/layout/PublicFooter';
@@ -62,6 +64,9 @@ export default function HomePage() {
 
   const [activeGalleryIdx, setActiveGalleryIdx] = useState(0);
   const [showCampusUploadModal, setShowCampusUploadModal] = useState(false);
+  const [editingCampusPhoto, setEditingCampusPhoto] = useState<CampusGalleryImage | null>(null);
+  const [fullViewImageIdx, setFullViewImageIdx] = useState<number | null>(null);
+  const [isAutoPlayPaused, setIsAutoPlayPaused] = useState(false);
   const [campusPhotoTitle, setCampusPhotoTitle] = useState('');
   const [campusPhotoCaption, setCampusPhotoCaption] = useState('');
   const [compressedResult, setCompressedResult] = useState<CompressionResult | null>(null);
@@ -71,6 +76,31 @@ export default function HomePage() {
   const campusFileInputRef = React.useRef<HTMLInputElement>(null);
 
   const isAdmin = session?.role === 'ADMIN';
+
+  // 1. Auto-rotation: photos change one after another automatically every 4.5 seconds
+  useEffect(() => {
+    if (campusImages.length <= 1 || isAutoPlayPaused || fullViewImageIdx !== null) return;
+    const interval = setInterval(() => {
+      setActiveGalleryIdx((prev) => (prev + 1) % campusImages.length);
+    }, 4500);
+    return () => clearInterval(interval);
+  }, [campusImages.length, isAutoPlayPaused, fullViewImageIdx]);
+
+  // 2. Full-View Lightbox Keyboard Controls (Esc to close, Arrow keys to navigate)
+  useEffect(() => {
+    if (fullViewImageIdx === null) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setFullViewImageIdx(null);
+      } else if (e.key === 'ArrowLeft') {
+        setFullViewImageIdx((prev) => (prev === 0 ? campusImages.length - 1 : (prev ?? 0) - 1));
+      } else if (e.key === 'ArrowRight') {
+        setFullViewImageIdx((prev) => (prev === campusImages.length - 1 ? 0 : (prev ?? 0) + 1));
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [fullViewImageIdx, campusImages.length]);
 
   const handleCampusPhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -95,30 +125,61 @@ export default function HomePage() {
     }
   };
 
+  const handleOpenEditCampusPhoto = (photo: CampusGalleryImage) => {
+    setEditingCampusPhoto(photo);
+    setCampusPhotoTitle(photo.title);
+    setCampusPhotoCaption(photo.caption || '');
+    setCompressedResult(null);
+    setShowCampusUploadModal(true);
+  };
+
   const handleSaveCampusPhoto = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!compressedResult) return;
+    if (!editingCampusPhoto && !compressedResult) return;
     setIsSavingCampusPhoto(true);
 
-    const newPhoto: CampusGalleryImage = {
-      id: `campus-${Date.now()}`,
-      url: compressedResult.dataUrl,
-      title: campusPhotoTitle.trim() || 'Career Guidance Academy Classroom',
-      caption: campusPhotoCaption.trim() || undefined,
-      uploadedAt: new Date().toISOString().split('T')[0],
-    };
-
     const currentList = siteContent.campusImages || campusImages;
-    const updated = [newPhoto, ...currentList];
+    let updated: CampusGalleryImage[];
+
+    if (editingCampusPhoto) {
+      // Admin editing / replacing existing photo
+      updated = currentList.map((img) =>
+        img.id === editingCampusPhoto.id
+          ? {
+              ...img,
+              url: compressedResult ? compressedResult.dataUrl : img.url,
+              title: campusPhotoTitle.trim() || img.title,
+              caption: campusPhotoCaption.trim() || undefined,
+              uploadedAt: new Date().toISOString().split('T')[0],
+            }
+          : img
+      );
+    } else {
+      // Admin uploading brand new photo
+      const newPhoto: CampusGalleryImage = {
+        id: `campus-${Date.now()}`,
+        url: compressedResult!.dataUrl,
+        title: campusPhotoTitle.trim() || 'Career Guidance Academy Classroom',
+        caption: campusPhotoCaption.trim() || undefined,
+        uploadedAt: new Date().toISOString().split('T')[0],
+      };
+      updated = [newPhoto, ...currentList];
+    }
+
     const ok = await updateSiteContent({ ...siteContent, campusImages: updated });
     setIsSavingCampusPhoto(false);
     if (ok) {
       setShowCampusUploadModal(false);
+      setEditingCampusPhoto(null);
       setCompressedResult(null);
       setCampusPhotoTitle('');
       setCampusPhotoCaption('');
-      setActiveGalleryIdx(0);
-      showToast('Classroom Photo Published', 'Photo is now live on the front top banner.', 'success');
+      if (!editingCampusPhoto) setActiveGalleryIdx(0);
+      showToast(
+        editingCampusPhoto ? 'Photo Updated' : 'Classroom Photo Published',
+        editingCampusPhoto ? 'Classroom photo has been successfully updated.' : 'Photo is now live on the front top banner.',
+        'success'
+      );
     }
   };
 
@@ -320,40 +381,37 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ==================== 2. CAMPUS & CLASSROOM EXPERIENCE BANNER (TOP & FRONT BANNER) ==================== */}
-        <section className="py-12 lg:py-16 bg-slate-900 text-white border-b border-slate-800 relative overflow-hidden">
-          {/* Subtle background glow */}
-          <div className="absolute top-0 right-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute bottom-0 left-1/4 w-96 h-96 bg-orange-600/10 rounded-full blur-3xl pointer-events-none" />
-
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+        {/* ==================== 2. CAMPUS & CLASSROOM GALLERY (WHITE COLOURED SECTION) ==================== */}
+        <section className="py-12 lg:py-16 bg-white border-b border-slate-200 relative">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
               <div>
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-bold text-amber-300">
-                  <Camera className="w-3.5 h-3.5 text-amber-400" />
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-xs font-extrabold text-[#0056b3]">
+                  <Camera className="w-3.5 h-3.5 text-[#0056b3]" />
                   <span>Udaipur Campus &amp; Classrooms</span>
                 </div>
-                <h2 className="text-2xl sm:text-3xl font-extrabold text-white mt-2">
+                <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0a0e2a] mt-2">
                   Modern Infrastructure &amp; Dynamic Learning Spaces
                 </h2>
-                <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl">
+                <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-2xl">
                   Step inside Career Guidance Academy at Chanban, Udaipur. Explore our multimedia smart classrooms,
                   fully equipped OMR testing center, and dedicated faculty study desks.
                 </p>
               </div>
 
-              {/* Admin Quick Action Button */}
+              {/* Admin Quick Action Button - ONLY Admins can upload */}
               {isAdmin && (
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => {
+                      setEditingCampusPhoto(null);
                       setCompressedResult(null);
                       setCampusPhotoTitle('');
                       setCampusPhotoCaption('');
                       setShowCampusUploadModal(true);
                     }}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#ea580c] hover:bg-orange-600 text-white text-xs font-bold shadow-md cursor-pointer transition-all"
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#ea580c] hover:bg-orange-600 text-white text-xs font-bold shadow-sm cursor-pointer transition-all"
                   >
                     <Upload className="w-4 h-4" />
                     <span>Upload Classroom Photo</span>
@@ -362,77 +420,118 @@ export default function HomePage() {
               )}
             </div>
 
-            {/* Featured Front Top Banner / Large Display */}
+            {/* Featured Front Top Banner / Large Auto-rotating Display */}
             {campusImages.length > 0 && (
-              <div className="space-y-4">
-                <div className="relative rounded-3xl overflow-hidden border-2 border-white/10 bg-slate-950 aspect-[16/9] sm:aspect-[21/9] max-h-[520px] shadow-2xl">
-                  <img
-                    src={campusImages[activeGalleryIdx]?.url || campusImages[0].url}
-                    alt={campusImages[activeGalleryIdx]?.title || 'CGA Classroom'}
-                    className="w-full h-full object-cover transition-all duration-500"
-                  />
-                  {/* Gradient Overlay & Captions */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/30 to-transparent flex flex-col justify-end p-6 sm:p-8">
-                    <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
-                      <div className="space-y-1">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-amber-300 bg-black/40 backdrop-blur-md px-2.5 py-1 rounded-full inline-block">
-                          Photo {activeGalleryIdx + 1} of {campusImages.length}
-                        </span>
-                        <h3 className="text-lg sm:text-2xl font-black text-white">
-                          {campusImages[activeGalleryIdx]?.title}
-                        </h3>
-                        {campusImages[activeGalleryIdx]?.caption && (
-                          <p className="text-xs sm:text-sm text-slate-200 max-w-2xl line-clamp-2">
-                            {campusImages[activeGalleryIdx]?.caption}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Admin Delete Action for Current Photo */}
-                      {isAdmin && (
-                        <button
-                          type="button"
-                          onClick={() => setDeleteCampusTarget(campusImages[activeGalleryIdx])}
-                          className="self-start sm:self-auto p-2 rounded-xl bg-red-600/80 hover:bg-red-600 text-white text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer backdrop-blur-md"
-                          title="Delete this classroom photo"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>Delete Photo</span>
-                        </button>
-                      )}
+              <div
+                className="space-y-4"
+                onMouseEnter={() => setIsAutoPlayPaused(true)}
+                onMouseLeave={() => setIsAutoPlayPaused(false)}
+              >
+                {/* Main Display: Pure image without name or text, click to view full image */}
+                <div className="relative rounded-3xl overflow-hidden border border-slate-200/90 bg-slate-900 aspect-[16/9] sm:aspect-[21/9] max-h-[520px] shadow-lg group">
+                  <div
+                    onClick={() => setFullViewImageIdx(activeGalleryIdx)}
+                    className="w-full h-full cursor-zoom-in relative"
+                    title="Click to view full image"
+                  >
+                    <img
+                      src={campusImages[activeGalleryIdx]?.url || campusImages[0].url}
+                      alt="Classroom photo"
+                      className="w-full h-full object-cover transition-all duration-700 ease-in-out group-hover:scale-101"
+                    />
+                    {/* Hover hint for full view */}
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center pointer-events-none">
+                      <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/65 backdrop-blur-md text-white text-xs font-bold px-4 py-2 rounded-full inline-flex items-center gap-2 shadow-xl">
+                        <Maximize2 className="w-4 h-4" />
+                        <span>Click to View Full Image</span>
+                      </span>
                     </div>
                   </div>
 
-                  {/* Navigation Arrows */}
-                  {campusImages.length > 1 && (
-                    <div className="absolute top-4 right-4 flex items-center gap-2">
+                  {/* Admin-Only Management Controls: Change / Replace & Delete */}
+                  {isAdmin && (
+                    <div className="absolute top-4 left-4 z-20 flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() =>
-                          setActiveGalleryIdx((prev) => (prev === 0 ? campusImages.length - 1 : prev - 1))
-                        }
-                        className="p-2.5 rounded-full bg-black/50 hover:bg-black/80 text-white backdrop-blur-md cursor-pointer transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenEditCampusPhoto(campusImages[activeGalleryIdx]);
+                        }}
+                        className="p-2 rounded-xl bg-white/95 hover:bg-white text-slate-800 text-xs font-bold inline-flex items-center gap-1.5 shadow-md cursor-pointer backdrop-blur-md border border-slate-200 transition-all"
+                        title="Change or replace this photo"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-[#0056b3]" />
+                        <span className="hidden sm:inline">Change Photo</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteCampusTarget(campusImages[activeGalleryIdx]);
+                        }}
+                        className="p-2 rounded-xl bg-red-600/90 hover:bg-red-600 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-md cursor-pointer backdrop-blur-md transition-all"
+                        title="Delete this classroom photo"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Delete Photo</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Navigation Arrows */}
+                  {campusImages.length > 1 && (
+                    <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveGalleryIdx((prev) => (prev === 0 ? campusImages.length - 1 : prev - 1));
+                        }}
+                        className="p-2.5 rounded-full bg-black/50 hover:bg-black/80 text-white backdrop-blur-md cursor-pointer transition-colors shadow-md"
                         aria-label="Previous Photo"
                       >
                         <ChevronLeft className="w-4 h-4" />
                       </button>
                       <button
                         type="button"
-                        onClick={() =>
-                          setActiveGalleryIdx((prev) => (prev === campusImages.length - 1 ? 0 : prev + 1))
-                        }
-                        className="p-2.5 rounded-full bg-black/50 hover:bg-black/80 text-white backdrop-blur-md cursor-pointer transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveGalleryIdx((prev) => (prev === campusImages.length - 1 ? 0 : prev + 1));
+                        }}
+                        className="p-2.5 rounded-full bg-black/50 hover:bg-black/80 text-white backdrop-blur-md cursor-pointer transition-colors shadow-md"
                         aria-label="Next Photo"
                       >
                         <ChevronRight className="w-4 h-4" />
                       </button>
                     </div>
                   )}
+
+                  {/* Dots Auto-play Indicators (Pure visual dots, no names) */}
+                  {campusImages.length > 1 && (
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-full">
+                      {campusImages.map((_, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveGalleryIdx(idx);
+                          }}
+                          className={`h-2 rounded-full transition-all cursor-pointer ${
+                            activeGalleryIdx === idx
+                              ? 'w-6 bg-[#ea580c]'
+                              : 'w-2 bg-white/60 hover:bg-white'
+                          }`}
+                          aria-label={`Slide ${idx + 1}`}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                {/* Thumbnails Row */}
+                {/* Thumbnails Row: Pure images without names or text */}
                 {campusImages.length > 1 && (
-                  <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-none">
+                  <div className="flex items-center gap-3 overflow-x-auto py-2 scrollbar-none">
                     {campusImages.map((img, idx) => (
                       <button
                         key={img.id || idx}
@@ -440,15 +539,12 @@ export default function HomePage() {
                         onClick={() => setActiveGalleryIdx(idx)}
                         className={`relative rounded-2xl overflow-hidden shrink-0 w-28 sm:w-36 h-20 border-2 transition-all cursor-pointer ${
                           activeGalleryIdx === idx
-                            ? 'border-[#ea580c] ring-2 ring-orange-400 shadow-md scale-102'
-                            : 'border-white/20 opacity-70 hover:opacity-100'
+                            ? 'border-[#0056b3] ring-2 ring-blue-300 shadow-md scale-102'
+                            : 'border-slate-200 opacity-70 hover:opacity-100 hover:border-slate-400'
                         }`}
+                        title="Click to view"
                       >
-                        <img src={img.url} alt={img.title} className="w-full h-full object-cover" />
-                        <div className="absolute inset-0 bg-black/20" />
-                        <span className="absolute bottom-1 left-1.5 right-1.5 text-[10px] font-bold text-white truncate drop-shadow">
-                          {img.title}
-                        </span>
+                        <img src={img.url} alt="Classroom thumbnail" className="w-full h-full object-cover" />
                       </button>
                     ))}
                   </div>
@@ -994,7 +1090,74 @@ export default function HomePage() {
         onConfirm={handleConfirmDeleteCampusPhoto}
       />
 
-      {/* Admin Campus & Classroom Photo Upload Modal */}
+      {/* Full-View Lightbox Modal - Click Any Image to View Full Image */}
+      {fullViewImageIdx !== null && campusImages[fullViewImageIdx] && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/92 backdrop-blur-md p-4 animate-in fade-in duration-200"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setFullViewImageIdx(null)}
+        >
+          {/* Top Bar Controls */}
+          <div className="absolute top-4 left-4 right-4 z-10 flex items-center justify-between text-white pointer-events-none">
+            <span className="bg-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-full text-xs font-bold text-white/90">
+              {fullViewImageIdx + 1} / {campusImages.length}
+            </span>
+            <button
+              type="button"
+              onClick={() => setFullViewImageIdx(null)}
+              className="pointer-events-auto p-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white cursor-pointer backdrop-blur-md transition-colors shadow-lg"
+              title="Close Full View (Esc)"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Left Navigation Arrow */}
+          {campusImages.length > 1 && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setFullViewImageIdx((prev) => (prev === 0 ? campusImages.length - 1 : (prev ?? 0) - 1));
+              }}
+              className="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full bg-black/50 hover:bg-black/80 text-white cursor-pointer backdrop-blur-md transition-colors shadow-xl"
+              aria-label="Previous image"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+          )}
+
+          {/* Right Navigation Arrow */}
+          {campusImages.length > 1 && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setFullViewImageIdx((prev) => (prev === campusImages.length - 1 ? 0 : (prev ?? 0) + 1));
+              }}
+              className="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full bg-black/50 hover:bg-black/80 text-white cursor-pointer backdrop-blur-md transition-colors shadow-xl"
+              aria-label="Next image"
+            >
+              <ChevronRight className="w-6 h-6" />
+            </button>
+          )}
+
+          {/* Full Image Container */}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative max-w-6xl max-h-[90vh] flex items-center justify-center p-2"
+          >
+            <img
+              src={campusImages[fullViewImageIdx]?.url}
+              alt="Classroom full view"
+              className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Admin Campus & Classroom Photo Upload / Change Modal - STRICTLY Admin Only */}
       {isAdmin && showCampusUploadModal && (
         <div
           className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-xs"
@@ -1012,7 +1175,7 @@ export default function HomePage() {
                 </div>
                 <div>
                   <h3 className="text-base font-extrabold text-[#0a0e2a]">
-                    Upload Classroom / Institution Photo
+                    {editingCampusPhoto ? 'Change / Replace Classroom Photo' : 'Upload Classroom Photo'}
                   </h3>
                   <p className="text-[11px] text-slate-500">
                     Photos are automatically compressed to lossless WebP format before posting.
@@ -1021,16 +1184,36 @@ export default function HomePage() {
               </div>
               <button
                 type="button"
-                onClick={() => setShowCampusUploadModal(false)}
+                onClick={() => {
+                  setShowCampusUploadModal(false);
+                  setEditingCampusPhoto(null);
+                }}
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-700 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
+            {/* Current photo preview if editing */}
+            {editingCampusPhoto && !compressedResult && (
+              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-center gap-3">
+                <img
+                  src={editingCampusPhoto.url}
+                  alt="Current photo"
+                  className="w-16 h-12 object-cover rounded-xl border border-slate-300 shrink-0"
+                />
+                <div className="text-[11px] text-slate-600">
+                  <span className="font-bold text-slate-900 block">Current Photo Active</span>
+                  <span>Select a new file below to replace this image, or click Update.</span>
+                </div>
+              </div>
+            )}
+
             {/* File Selector */}
             <div className="space-y-2">
-              <label className="font-bold text-slate-700 block">Select Image File *</label>
+              <label className="font-bold text-slate-700 block">
+                {editingCampusPhoto ? 'Select Replacement Image File (Optional)' : 'Select Image File *'}
+              </label>
               <input
                 ref={campusFileInputRef}
                 type="file"
@@ -1045,7 +1228,11 @@ export default function HomePage() {
               >
                 <Upload className="w-6 h-6 text-[#0056b3]" />
                 <span className="text-xs font-bold text-[#0056b3]">
-                  {isCompressing ? 'Compressing high-res photo…' : 'Click to Select Classroom Photo'}
+                  {isCompressing
+                    ? 'Compressing high-res photo…'
+                    : editingCampusPhoto
+                    ? 'Click to Select New Replacement Photo'
+                    : 'Click to Select Classroom Photo'}
                 </span>
                 <span className="text-[10px] text-slate-500">
                   JPG, PNG, or WebP. Auto-compressed without quality loss.
@@ -1085,46 +1272,27 @@ export default function HomePage() {
               </div>
             )}
 
-            {/* Title & Caption */}
-            <div className="space-y-3">
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Photo Title *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Science Batch Smart Classroom Lecture"
-                  value={campusPhotoTitle}
-                  onChange={(e) => setCampusPhotoTitle(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-[#0056b3]"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Optional Caption / Details</label>
-                <textarea
-                  rows={2}
-                  placeholder="e.g. Daily interactive problem solving and mock discussion with students."
-                  value={campusPhotoCaption}
-                  onChange={(e) => setCampusPhotoCaption(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-[#0056b3]"
-                />
-              </div>
-            </div>
-
             <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
               <button
                 type="button"
-                onClick={() => setShowCampusUploadModal(false)}
+                onClick={() => {
+                  setShowCampusUploadModal(false);
+                  setEditingCampusPhoto(null);
+                }}
                 className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs hover:bg-slate-200 cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                disabled={!compressedResult || isSavingCampusPhoto}
+                disabled={(!editingCampusPhoto && !compressedResult) || isSavingCampusPhoto}
                 className="px-5 py-2 rounded-xl bg-[#ea580c] hover:bg-orange-600 text-white font-bold text-xs shadow-sm cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
               >
-                {isSavingCampusPhoto ? 'Publishing…' : 'Publish to Front Banner'}
+                {isSavingCampusPhoto
+                  ? 'Saving…'
+                  : editingCampusPhoto
+                  ? 'Update Photo'
+                  : 'Publish to Front Banner'}
               </button>
             </div>
           </form>
