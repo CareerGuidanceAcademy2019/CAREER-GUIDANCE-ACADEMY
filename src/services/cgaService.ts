@@ -466,6 +466,9 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 let dbCache: { data: CgaDatabase; timestamp: number; sessionKey: string } | null = null;
 let pendingLoadPromise: Promise<CgaDatabase> | null = null;
 
+let _lastSessionCheckTime = 0;
+let _lastSessionCheckResult = true;
+
 export function invalidateDbCache(): void {
   dbCache = null;
   if (typeof window !== 'undefined') {
@@ -1075,12 +1078,18 @@ export const cgaService = {
     await this.client().auth.signOut();
   },
 
-  /** Check if current session ID is still valid in auth.sessions */
-  async isSessionActive(): Promise<boolean> {
+  /** Check if current session ID is still valid in auth.sessions (throttled to avoid log flooding) */
+  async isSessionActive(force = false): Promise<boolean> {
+    const now = Date.now();
+    if (!force && now - _lastSessionCheckTime < 15000) {
+      return _lastSessionCheckResult;
+    }
     try {
       const { data, error } = await this.client().rpc('is_current_session_active');
       if (error) return true; // Fail-open on transient network/RPC error
-      return data !== false;
+      _lastSessionCheckResult = data !== false;
+      _lastSessionCheckTime = now;
+      return _lastSessionCheckResult;
     } catch {
       return true;
     }

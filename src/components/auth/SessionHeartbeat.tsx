@@ -64,12 +64,12 @@ export function SessionHeartbeat() {
       checkSession();
     }, 1500);
 
-    // Heartbeat timers: 45s active tab, 5m hidden tab
+    // Heartbeat timers: 3 minutes active tab, 10 minutes hidden tab
     let intervalId: NodeJS.Timeout | null = null;
 
     const setupInterval = () => {
       if (intervalId) clearInterval(intervalId);
-      const delay = document.hidden ? 300000 : 45000;
+      const delay = document.hidden ? 600000 : 180000;
       intervalId = setInterval(() => checkSession(false), delay);
     };
 
