@@ -222,7 +222,12 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
   const showToast = useCallback(
     (title: string, message?: string, type: 'success' | 'error' | 'info' = 'success') => {
       const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      setToasts((prev) => [...prev, { id, title, message, type }]);
+      // Collapse identical toasts so one action never shows the same notice repeatedly
+      setToasts((prev) =>
+        prev.some((t) => t.title === title && t.message === message && t.type === type)
+          ? prev
+          : [...prev, { id, title, message, type }]
+      );
       setTimeout(() => {
         setToasts((prev) => prev.filter((t) => t.id !== id));
       }, 4200);
@@ -1064,28 +1069,31 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
     async (m: StudyMaterial, isNew: boolean) => {
       const isCa = m.type === 'Current Affairs' || Boolean(m.caCategory);
       setDb((prev) => {
-        const idx = (prev.studyMaterials || []).findIndex((x) => x.id === m.id);
+        const existing = (prev.studyMaterials || []).filter((x, i, arr) => arr.findIndex((y) => y.id === x.id) === i);
+        const idx = existing.findIndex((x) => x.id === m.id);
         const next = idx >= 0
-          ? prev.studyMaterials.map((x, i) => (i === idx ? m : x))
-          : [m, ...(prev.studyMaterials || [])];
+          ? existing.map((x, i) => (i === idx ? m : x))
+          : [m, ...existing];
         return { ...prev, studyMaterials: next };
       });
-      await run(cgaService.upsertMaterial(m), {
-        title: isCa
-          ? isNew
-            ? 'Current Affairs Announced'
-            : 'Current Affairs Updated'
-          : isNew
-            ? 'Study Material Uploaded'
-            : 'Study Material Updated',
-        message: isCa
-          ? `"${m.title}" (${m.caCategory || 'Domestic'}) published for ${
-              m.accessScope === 'all_logged_in' ? 'All Login Students' : 'Enrolled Students'
-            }.`
+      // Persist once. Optimistic state above is already correct, so no full reload on success.
+      const res = await cgaService.upsertMaterial(m);
+      if (!res.success) {
+        showToast('Save Failed', res.error || 'Could not save study material.', 'error');
+        await refresh(true);
+        return;
+      }
+      showToast(
+        isCa
+          ? isNew ? 'Current Affairs Announced' : 'Current Affairs Updated'
+          : isNew ? 'Study Material Uploaded' : 'Study Material Updated',
+        isCa
+          ? `"${m.title}" (${m.caCategory || 'Domestic'}) published for ${m.accessScope === 'all_logged_in' ? 'All Login Students' : 'Enrolled Students'}.`
           : `"${m.title}" mapped to ${m.courseName}.`,
-      });
+        'success'
+      );
     },
-    [run]
+    [refresh, showToast]
   );
   const deleteMaterial = useCallback(
     async (id: string) => {

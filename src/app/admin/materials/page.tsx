@@ -160,8 +160,11 @@ Confidential Master Copy. Distribution restricted.`;
     });
   };
 
+  const savingRef = React.useRef(false);
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    if (savingRef.current) return;
     if (!editing || !editing.title.trim()) {
       showToast('Title Required', 'Please enter a title for the study material.', 'error');
       return;
@@ -179,13 +182,14 @@ Confidential Master Copy. Distribution restricted.`;
           ? editing.previewSections
           : [{ heading: sectionHeading || 'Chapter 1', body: sectionBody || editing.description }],
     };
-    saveMaterial(finalMat, isNew);
+    savingRef.current = true;
     setEditing(null);
-    showToast(isNew ? 'Study Material Posted' : 'Study Material Updated', `Saved "${finalMat.title}".`, 'success');
+    void saveMaterial(finalMat, isNew).finally(() => { savingRef.current = false; });
   };
 
   const handleSaveCurrentAffairs = (e: React.FormEvent) => {
     e.preventDefault();
+    if (savingRef.current) return;
     if (!editingCa || !editingCa.title.trim()) {
       showToast('Title Required', 'Please enter a title for the Current Affairs series.', 'error');
       return;
@@ -214,14 +218,10 @@ Confidential Master Copy. Distribution restricted.`;
         },
       ],
     };
-    saveMaterial(finalCa, isNewCa);
+    savingRef.current = true;
     setEditingCa(null);
     setActiveSubsection('current_affairs');
-    showToast(
-      isNewCa ? 'Current Affairs Published' : 'Current Affairs Updated',
-      `"${finalCa.title}" (${priceNum === 0 ? 'Free' : `₹${priceNum}`}) is now live.`,
-      'success'
-    );
+    void saveMaterial(finalCa, isNewCa).finally(() => { savingRef.current = false; });
   };
 
   const handleCopyDriveLink = (id: string, link?: string) => {

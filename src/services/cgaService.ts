@@ -467,6 +467,17 @@ export function invalidateDbCache(): void {
 }
 
 // ---------------------------------------------------------------- service
+/** Removes a material id from the local "deleted" tombstone list. */
+function forgetLocalDeletedMaterial(id: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    const raw = localStorage.getItem('cga_deleted_materials');
+    if (!raw) return;
+    const next = (JSON.parse(raw) as string[]).filter((x) => x !== id);
+    localStorage.setItem('cga_deleted_materials', JSON.stringify(next));
+  } catch {}
+}
+
 export const cgaService = {
   client(): SupabaseClient {
     return getSupabase();
@@ -2844,12 +2855,17 @@ export const cgaService = {
       });
       if (res.ok) {
         invalidateDbCache();
+        forgetLocalDeletedMaterial(id);
         return { success: true };
       }
     } catch {}
 
     // 3. Fallback direct database delete
     const { error } = await this.client().from('study_materials').delete().eq('id', id);
+    // Server is the source of truth: drop the local tombstone so the list can never
+    // hide a row that still exists (failed delete) or grow forever (successful delete).
+    forgetLocalDeletedMaterial(id);
+    if (!error) invalidateDbCache();
     return error ? { success: false, error: msg(error, 'Delete failed.') } : { success: true };
   },
 
