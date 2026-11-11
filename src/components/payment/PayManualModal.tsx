@@ -127,17 +127,28 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
           : (db.seriesEnrollments?.some((se) => se.studentId === currentStudent.id && se.seriesId === target.itemId) ||
               currentStudent.enrollments.some((e) => e.courseId === target.itemId) ||
               (currentStudent as any).seriesEnrolled))) ||
-        (target.itemType === 'course' && currentStudent.enrollments.some((e) => e.courseId === target.itemId)))
+        (target.itemType === 'course' && currentStudent.enrollments.some((e) => e.courseId === target.itemId)) ||
+        (target.itemType === 'material' &&
+          (db.feePayments?.some(
+            (p) =>
+              (p.studentId === currentStudent.id || p.studentId === 'me' || (currentStudent.phone && p.studentId === currentStudent.phone)) &&
+              (p.itemId === target.itemId || p.courseId === target.itemId || p.remarks?.includes(target.itemId)) &&
+              p.status === 'Verified'
+          ) ||
+            currentStudent.enrollments.some((e) => {
+              const mat = (db.studyMaterials || []).find((m) => m.id === target.itemId);
+              return mat && e.courseId === mat.courseId;
+            }))))
   );
 
-  // Check if payment verification is already pending for this course or mock series
+  // Check if payment verification is already pending for this course, mock series, or study material
   const existingPendingPayment = Boolean(
     currentStudent &&
       target &&
       db.feePayments?.some(
         (p) =>
-          p.studentId === currentStudent.id &&
-          (p.courseId === target.itemId || (p as any).itemId === target.itemId) &&
+          (p.studentId === currentStudent.id || p.studentId === 'me' || (currentStudent.phone && p.studentId === currentStudent.phone)) &&
+          (p.courseId === target.itemId || (p as any).itemId === target.itemId || p.remarks?.includes(target.itemId)) &&
           p.status === 'Pending'
       )
   );

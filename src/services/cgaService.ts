@@ -2461,6 +2461,10 @@ export const cgaService = {
         targetItemType === 'mock_series' ||
         targetSeriesId?.startsWith('series-') ||
         raw.remarks?.includes('mock_series');
+      const isMaterial =
+        targetItemType === 'material' ||
+        targetSeriesId?.startsWith('mat-') ||
+        raw.remarks?.includes('material');
 
       if (isSeries && targetStudentId && targetSeriesId) {
         const isCaSeries = targetSeriesId === 'series-current-affairs';
@@ -2502,6 +2506,39 @@ export const cgaService = {
                 accessValidUntil: validUntilIso,
               });
               localStorage.setItem('cga_series_enrollments', JSON.stringify(seList));
+            }
+          }
+        } catch {}
+      } else if (isMaterial && targetStudentId && targetSeriesId) {
+        // Study Material direct purchase unlocking
+        try {
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw.id);
+          await sb.from('material_access').upsert(
+            {
+              student_id: targetStudentId,
+              material_id: targetSeriesId,
+              granted_via: 'purchase',
+              payment_request_id: isUuid ? raw.id : null,
+              granted_at: new Date().toISOString(),
+            },
+            { onConflict: 'student_id, material_id' }
+          );
+        } catch {}
+
+        try {
+          if (typeof window !== 'undefined') {
+            const storedMa = localStorage.getItem('cga_material_access');
+            const maList = storedMa ? JSON.parse(storedMa) : [];
+            if (!maList.some((e: any) => e.studentId === targetStudentId && e.materialId === targetSeriesId)) {
+              maList.push({
+                id: `mat-acc-${Date.now()}`,
+                studentId: targetStudentId,
+                materialId: targetSeriesId,
+                grantedVia: 'purchase',
+                paymentRequestId: raw.id,
+                grantedAt: new Date().toISOString(),
+              });
+              localStorage.setItem('cga_material_access', JSON.stringify(maList));
             }
           }
         } catch {}

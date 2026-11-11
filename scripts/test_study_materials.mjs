@@ -74,3 +74,4 @@ assert.equal(JSON.parse(fs.readFileSync('vercel.json', 'utf8')).regions[0], 'sin
 ok('T10 serverless functions pinned to sin1 (same region as Supabase ap-southeast-1)');
 
 console.log(`\nALL ${passed} TESTS PASSED`);
+

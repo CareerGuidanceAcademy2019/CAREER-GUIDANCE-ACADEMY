@@ -734,9 +734,35 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
             prev.mockSeries.some((s) => s.id === targetItemId) ||
             targetPayment.remarks?.includes('mock_series');
 
+          const isMaterial =
+            targetPayment.itemType === 'material' ||
+            targetItemId.startsWith('mat-') ||
+            prev.studyMaterials.some((m) => m.id === targetItemId) ||
+            targetPayment.remarks?.includes('material');
+
+          if (isMaterial && targetItemId) {
+            try {
+              if (typeof window !== 'undefined') {
+                const storedMa = localStorage.getItem('cga_material_access');
+                const maList = storedMa ? JSON.parse(storedMa) : [];
+                if (!maList.some((m: any) => m.studentId === targetPayment!.studentId && m.materialId === targetItemId)) {
+                  maList.push({
+                    id: `mat-acc-${Date.now()}`,
+                    studentId: targetPayment!.studentId,
+                    materialId: targetItemId,
+                    grantedVia: 'purchase',
+                    paymentRequestId: targetPayment!.id,
+                    grantedAt: new Date().toISOString(),
+                  });
+                  localStorage.setItem('cga_material_access', JSON.stringify(maList));
+                }
+              }
+            } catch {}
+          }
+
           const crs = prev.courses.find((c) => c.id === targetItemId);
           const nextStudents = prev.students.map((st) => {
-            if (st.id === targetPayment.studentId && !isSeries && targetItemId) {
+            if (st.id === targetPayment.studentId && !isSeries && !isMaterial && targetItemId) {
               const existingEnr = st.enrollments.find((e) => e.courseId === targetItemId);
               if (existingEnr) {
                 const newPaid = existingEnr.paidAmount + targetPayment.amount;

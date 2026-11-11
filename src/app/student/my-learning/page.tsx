@@ -290,38 +290,79 @@ export default function StudentMyLearningPage() {
   // 5. Unlocked Digital Study Materials & Notes (excluding Current Affairs)
   const unlockedStudyMaterials = useMemo(() => {
     const enrolledCourseIds = enrolledCourses.map((e) => e.courseId);
-    const purchasedMaterialIds = (db.feePayments || [])
-      .filter(
-        (p) =>
-          (p.studentId === currentStudent.id || p.studentId === 'me') &&
-          p.status === 'Verified' &&
-          p.itemType === 'material'
-      )
-      .map((p) => (p as any).itemId || p.courseId);
+
+    const studentMatches = (stId?: string) =>
+      stId === currentStudent.id ||
+      stId === 'me' ||
+      (currentStudent.phone && stId === currentStudent.phone) ||
+      (currentStudent.email && stId === currentStudent.email);
+
+    const purchasedMaterialIds = new Set<string>();
+    (db.feePayments || []).forEach((p) => {
+      if (studentMatches(p.studentId) && p.status === 'Verified') {
+        const iId = (p as any).itemId || p.courseId;
+        if (iId) purchasedMaterialIds.add(iId);
+      }
+    });
+
+    let localAccessIds = new Set<string>();
+    if (typeof window !== 'undefined') {
+      try {
+        const maList = JSON.parse(localStorage.getItem('cga_material_access') || '[]');
+        maList.forEach((m: any) => {
+          if (studentMatches(m.studentId) && m.materialId) {
+            localAccessIds.add(m.materialId);
+          }
+        });
+
+        const customP = JSON.parse(localStorage.getItem('cga_custom_payments') || '[]');
+        customP.forEach((p: any) => {
+          if (studentMatches(p.studentId) && p.status === 'Verified') {
+            const iId = p.itemId || p.courseId;
+            if (iId) purchasedMaterialIds.add(iId);
+          }
+        });
+      } catch {}
+    }
 
     return (db.studyMaterials || []).filter((mat) => {
       if (mat.type === 'Current Affairs' || mat.caCategory) return false;
-      return (
-        enrolledCourseIds.includes(mat.courseId) ||
-        purchasedMaterialIds.includes(mat.id) ||
-        mat.price === 0
-      );
+      const isAdmin = session?.role === 'ADMIN';
+      const isFree = mat.price === 0 || mat.accessScope === 'all_logged_in';
+      const isEnrolledInCourse = enrolledCourseIds.includes(mat.courseId);
+      const isPurchased =
+        purchasedMaterialIds.has(mat.id) ||
+        localAccessIds.has(mat.id) ||
+        (db.feePayments || []).some(
+          (p) =>
+            studentMatches(p.studentId) &&
+            p.status === 'Verified' &&
+            p.remarks?.includes(mat.id)
+        );
+      return isAdmin || isFree || isEnrolledInCourse || isPurchased;
     });
-  }, [db.studyMaterials, enrolledCourses, db.feePayments, currentStudent.id]);
+  }, [db.studyMaterials, enrolledCourses, db.feePayments, currentStudent.id, currentStudent.phone, currentStudent.email, session?.role]);
 
   // 6. Pending Payments awaiting Admin verification
   const pendingPayments: FeePayment[] = useMemo(() => {
+    const studentMatches = (stId?: string) =>
+      stId === currentStudent.id ||
+      stId === 'me' ||
+      (currentStudent.phone && stId === currentStudent.phone) ||
+      (currentStudent.email && stId === currentStudent.email);
+
     const isEnrolledInItem = (itemId?: string) => {
       if (!itemId) return false;
       return (
         enrolledSeriesIds.includes(itemId) ||
-        enrollments.some((e) => e.courseId === itemId)
+        enrollments.some((e) => e.courseId === itemId) ||
+        unlockedStudyMaterials.some((m) => m.id === itemId)
       );
     };
 
     const listFromDb = (db.feePayments || []).filter(
       (p) =>
-        (p.studentId === currentStudent.id || p.studentId === 'me') &&
+        studentMatches(p.studentId) &&
         p.status === 'Pending' &&
         !isEnrolledInItem(p.courseId || (p as any).itemId)
     );
@@ -334,7 +375,7 @@ export default function StudentMyLearningPage() {
           const parsed = JSON.parse(stored) as FeePayment[];
           localCustom = parsed.filter(
             (p) =>
-              (p.studentId === currentStudent.id || p.studentId === 'me') &&
+              studentMatches(p.studentId) &&
               p.status === 'Pending' &&
               !isEnrolledInItem(p.courseId || (p as any).itemId)
           );
@@ -346,7 +387,7 @@ export default function StudentMyLearningPage() {
     listFromDb.forEach((p) => map.set(p.id, p));
     localCustom.forEach((p) => map.set(p.id, p));
     return Array.from(map.values());
-  }, [db.feePayments, currentStudent.id, enrolledSeriesIds, enrollments]);
+  }, [db.feePayments, currentStudent.id, currentStudent.phone, currentStudent.email, enrolledSeriesIds, enrollments, unlockedStudyMaterials]);
 
   // Copy helpers
   const handleCopyLink = (test: MockTest) => {

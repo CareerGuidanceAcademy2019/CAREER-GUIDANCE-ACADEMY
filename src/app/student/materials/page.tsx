@@ -21,6 +21,7 @@ import {
   Bell,
   Tag,
   Sparkles,
+  Clock,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
 import { StudyMaterial } from '@/data/initialSeedData';
@@ -145,18 +146,108 @@ export default function StudentStudyMaterialsPage() {
   if (!currentStudent) return null;
 
   const materialsWithAccess = rawCourseMaterials.map((mat) => {
+    // 1. Admin always has full access
+    if (session?.role === 'ADMIN') {
+      return {
+        ...mat,
+        isEnrolled: true,
+        isPurchased: false,
+        isExpired: false,
+        isUnlocked: true,
+        isPendingVerification: false,
+        pendingPaymentRef: undefined,
+        validUntil: undefined,
+      };
+    }
+
+    // 2. Free material check (price === 0 or accessScope === 'all_logged_in')
+    const isFree = (mat as any).price === 0 || mat.accessScope === 'all_logged_in';
+    if (isFree) {
+      return {
+        ...mat,
+        isEnrolled: false,
+        isPurchased: false,
+        isExpired: false,
+        isUnlocked: true,
+        isPendingVerification: false,
+        pendingPaymentRef: undefined,
+        validUntil: undefined,
+      };
+    }
+
+    // 3. Check enrollment in parent course batch
     const matchingEnrollment = currentStudent.enrollments.find((e) => e.courseId === mat.courseId);
-    const isEnrolled = !!matchingEnrollment;
-    const isExpired = Boolean(
+    const isCourseEnrolled = Boolean(matchingEnrollment);
+    const isCourseExpired = Boolean(
       matchingEnrollment?.accessValidUntil &&
         new Date(matchingEnrollment.accessValidUntil).getTime() < currentTime
     );
-    const isUnlocked = isEnrolled && !isExpired;
+
+    // 4. Check direct purchase in verified fee payments
+    const studentMatches = (stId?: string) =>
+      stId === currentStudent.id ||
+      stId === 'me' ||
+      (currentStudent.phone && stId === currentStudent.phone) ||
+      (currentStudent.email && stId === currentStudent.email);
+
+    const verifiedPayment = (db.feePayments || []).find(
+      (p) =>
+        studentMatches(p.studentId) &&
+        p.status === 'Verified' &&
+        ((p as any).itemId === mat.id || p.courseId === mat.id || (p.remarks && p.remarks.includes(mat.id)))
+    );
+
+    let hasLocalAccess = false;
+    let localVerified = false;
+    let localPending = false;
+    let localPendingRef = '';
+
+    if (typeof window !== 'undefined') {
+      try {
+        const maList = JSON.parse(localStorage.getItem('cga_material_access') || '[]');
+        hasLocalAccess = maList.some(
+          (m: any) => studentMatches(m.studentId) && m.materialId === mat.id
+        );
+
+        const customP = JSON.parse(localStorage.getItem('cga_custom_payments') || '[]');
+        const localP = customP.find(
+          (p: any) =>
+            studentMatches(p.studentId) &&
+            (p.itemId === mat.id || p.courseId === mat.id || (p.remarks && p.remarks.includes(mat.id)))
+        );
+        if (localP) {
+          if (localP.status === 'Verified') localVerified = true;
+          if (localP.status === 'Pending') {
+            localPending = true;
+            localPendingRef = localP.receiptNo || localP.utr || 'Pending';
+          }
+        }
+      } catch {}
+    }
+
+    const isPurchased = Boolean(verifiedPayment || hasLocalAccess || localVerified);
+
+    // 5. Check pending payment awaiting admin verification
+    const pendingPayment = (db.feePayments || []).find(
+      (p) =>
+        studentMatches(p.studentId) &&
+        p.status === 'Pending' &&
+        ((p as any).itemId === mat.id || p.courseId === mat.id || (p.remarks && p.remarks.includes(mat.id)))
+    );
+
+    const isUnlocked = (isCourseEnrolled && !isCourseExpired) || isPurchased;
+    const isExpired = isCourseEnrolled && isCourseExpired && !isPurchased;
+    const isPendingVerification = !isUnlocked && Boolean(pendingPayment || localPending);
+    const pendingPaymentRef = pendingPayment?.receiptNo || pendingPayment?.utr || localPendingRef;
+
     return {
       ...mat,
-      isEnrolled,
+      isEnrolled: isCourseEnrolled,
+      isPurchased,
       isExpired,
       isUnlocked,
+      isPendingVerification,
+      pendingPaymentRef,
       validUntil: matchingEnrollment?.accessValidUntil,
     };
   });
@@ -319,13 +410,17 @@ export default function StudentStudyMaterialsPage() {
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
                           <Unlock className="w-3 h-3" /> Unlocked
                         </span>
+                      ) : mat.isPendingVerification ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 text-[11px] font-bold">
+                          <Clock className="w-3 h-3 text-amber-600" /> Verification Pending
+                        </span>
                       ) : mat.isExpired ? (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-red-50 text-[#dc2626] border border-red-200 text-[11px] font-bold">
                           <Lock className="w-3 h-3" /> Access Expired
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-[#ea580c] border border-amber-200 text-[11px] font-bold">
-                          <Lock className="w-3 h-3" /> Enrol to Unlock
+                          <Lock className="w-3 h-3" /> Pay to Unlock
                         </span>
                       )}
                     </div>
@@ -383,7 +478,7 @@ export default function StudentStudyMaterialsPage() {
                           <Eye className="w-3.5 h-3.5" /> Read Online
                         </button>
                       </div>
-                      {mat.validUntil && (
+                      {mat.validUntil ? (
                         <p className="text-[10px] text-center text-slate-500 font-medium">
                           Batch access active till{' '}
                           {new Date(mat.validUntil).toLocaleDateString('en-IN', {
@@ -392,7 +487,21 @@ export default function StudentStudyMaterialsPage() {
                             year: 'numeric',
                           })}
                         </p>
-                      )}
+                      ) : mat.isPurchased ? (
+                        <p className="text-[10px] text-center text-emerald-700 font-bold">
+                          ✓ Full Lifetime Access Unlocked (Paid &amp; Verified)
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : mat.isPendingVerification ? (
+                    <div className="space-y-2">
+                      <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-300 text-[11px] text-amber-900 font-semibold text-center flex items-center justify-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-amber-600 animate-pulse shrink-0" />
+                        <span>Payment Verification Pending{mat.pendingPaymentRef ? ` (Ref: ${mat.pendingPaymentRef})` : ''}</span>
+                      </div>
+                      <p className="text-[10px] text-center text-slate-500 font-medium">
+                        Our administrative desk is verifying your payment UTR. Drive PDF link will unlock immediately after admin approval.
+                      </p>
                     </div>
                   ) : mat.isExpired ? (
                     <div className="space-y-2">
@@ -412,28 +521,35 @@ export default function StudentStudyMaterialsPage() {
                       </a>
                     </div>
                   ) : (
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setPayTarget({
-                            itemType: 'material',
-                            itemId: mat.id,
-                            title: `${mat.title} (${mat.courseName || 'Notes PDF'})`,
-                            fullAmount: (mat as any).price || 199,
-                            paymentType: 'full',
-                          })
-                        }
-                        className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-bold cursor-pointer transition-all shadow-2xs"
-                      >
-                        <CreditCard className="w-3.5 h-3.5" /> Buy Notes (₹{(mat as any).price || 199})
-                      </button>
-                      <Link
-                        href="/student/courses"
-                        className="inline-flex items-center justify-center gap-1 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all"
-                      >
-                        Enrol Course <ArrowRight className="w-3.5 h-3.5" />
-                      </Link>
+                    <div className="space-y-2">
+                      <div className="p-2 rounded-xl bg-slate-100 border border-slate-200 text-[11px] text-slate-700 font-semibold flex items-center justify-center gap-1.5">
+                        <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                        <span>Pay fee to unlock Google Drive PDF</span>
+                      </div>
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setPayTarget({
+                              itemType: 'material',
+                              itemId: mat.id,
+                              title: `${mat.title} (${mat.courseName || 'Notes PDF'})`,
+                              fullAmount: (mat as any).price || 199,
+                              paymentType: 'full',
+                              category: 'Study Material & Notes',
+                            })
+                          }
+                          className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-bold cursor-pointer transition-all shadow-2xs flex-1"
+                        >
+                          <CreditCard className="w-3.5 h-3.5" /> Buy Notes (₹{(mat as any).price || 199})
+                        </button>
+                        <Link
+                          href="/student/courses"
+                          className="inline-flex items-center justify-center gap-1 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all"
+                        >
+                          Enrol Course <ArrowRight className="w-3.5 h-3.5" />
+                        </Link>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -825,56 +941,90 @@ export default function StudentStudyMaterialsPage() {
               </span>
             </div>
 
-            {/* Watermarked Document Canvas */}
-            <div
-              className="flex-1 overflow-y-auto bg-slate-200 p-4 sm:p-8 space-y-6 select-none"
-              onCopy={(e) => e.preventDefault()}
-              onCut={(e) => e.preventDefault()}
-            >
-              {viewingMaterial.previewSections.map((sec, idx) => (
-                <div
-                  key={idx}
-                  className="bg-white rounded-2xl shadow-md border border-slate-300 p-8 sm:p-12 max-w-3xl mx-auto relative overflow-hidden"
-                >
-                  {/* Diagonal Repeating Student Name Watermark Overlay */}
-                  <div className="cga-watermark-overlay absolute inset-0 flex flex-col items-center justify-around -rotate-18 opacity-[0.07] pointer-events-none select-none">
-                    {Array.from({ length: 4 }).map((_, wIdx) => (
-                      <p
-                        key={wIdx}
-                        className="text-lg sm:text-xl font-black uppercase tracking-widest text-[#0056b3] whitespace-nowrap"
-                      >
-                        {currentStudent.name} • {currentStudent.studentCode} • C.G.A UDAIPUR •
-                        VIEW-ONLY
-                      </p>
-                    ))}
-                  </div>
-
-                  <div className="relative z-10 space-y-4">
-                    <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#0056b3]">
-                        Career Guidance Academy (C.G.A) • Official Study Material
-                      </span>
-                      <span className="text-[11px] font-bold text-slate-400">
-                        Section {idx + 1} of {viewingMaterial.previewSections.length}
-                      </span>
-                    </div>
-
-                    <h4 className="text-lg sm:text-xl font-extrabold text-[#0a0e2a]">
-                      {sec.heading}
-                    </h4>
-
-                    <p className="text-xs sm:text-sm text-slate-700 leading-relaxed whitespace-pre-line">
-                      {sec.body}
-                    </p>
-
-                    <div className="pt-6 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
-                      <span>Licensed to: {currentStudent.name}</span>
-                      <span>© C.G.A Academic Wing, Udaipur</span>
-                    </div>
-                  </div>
+            {/* Watermarked Document Canvas or Access Barrier */}
+            {!materialsWithAccess.find((m) => m.id === viewingMaterial.id)?.isUnlocked ? (
+              <div className="flex-1 overflow-y-auto bg-slate-50 p-8 sm:p-12 flex flex-col items-center justify-center text-center space-y-4">
+                <div className="w-16 h-16 rounded-3xl bg-amber-100 text-amber-600 flex items-center justify-center shadow-xs">
+                  <Lock className="w-8 h-8" />
                 </div>
-              ))}
-            </div>
+                <div className="space-y-1">
+                  <h3 className="text-lg font-extrabold text-[#0a0e2a]">
+                    Study Material Access Restricted
+                  </h3>
+                  <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto">
+                    This material requires fee payment of ₹{(viewingMaterial as any).price || 199}. Pay the fee to unlock both the in-browser reader and Google Drive PDF.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const mat = viewingMaterial;
+                    setViewingMaterial(null);
+                    setPayTarget({
+                      itemType: 'material',
+                      itemId: mat.id,
+                      title: `${mat.title} (${mat.courseName || 'Notes PDF'})`,
+                      fullAmount: (mat as any).price || 199,
+                      paymentType: 'full',
+                      category: 'Study Material & Notes',
+                    });
+                  }}
+                  className="px-6 py-3 rounded-2xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs sm:text-sm font-bold inline-flex items-center gap-2 shadow-sm cursor-pointer transition-colors"
+                >
+                  <CreditCard className="w-4 h-4" /> Pay ₹{(viewingMaterial as any).price || 199} to Unlock Notes
+                </button>
+              </div>
+            ) : (
+              <div
+                className="flex-1 overflow-y-auto bg-slate-200 p-4 sm:p-8 space-y-6 select-none"
+                onCopy={(e) => e.preventDefault()}
+                onCut={(e) => e.preventDefault()}
+              >
+                {viewingMaterial.previewSections.map((sec, idx) => (
+                  <div
+                    key={idx}
+                    className="bg-white rounded-2xl shadow-md border border-slate-300 p-8 sm:p-12 max-w-3xl mx-auto relative overflow-hidden"
+                  >
+                    {/* Diagonal Repeating Student Name Watermark Overlay */}
+                    <div className="cga-watermark-overlay absolute inset-0 flex flex-col items-center justify-around -rotate-18 opacity-[0.07] pointer-events-none select-none">
+                      {Array.from({ length: 4 }).map((_, wIdx) => (
+                        <p
+                          key={wIdx}
+                          className="text-lg sm:text-xl font-black uppercase tracking-widest text-[#0056b3] whitespace-nowrap"
+                        >
+                          {currentStudent.name} • {currentStudent.studentCode} • C.G.A UDAIPUR •
+                          VIEW-ONLY
+                        </p>
+                      ))}
+                    </div>
+
+                    <div className="relative z-10 space-y-4">
+                      <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#0056b3]">
+                          Career Guidance Academy (C.G.A) • Official Study Material
+                        </span>
+                        <span className="text-[11px] font-bold text-slate-400">
+                          Section {idx + 1} of {viewingMaterial.previewSections.length}
+                        </span>
+                      </div>
+
+                      <h4 className="text-lg sm:text-xl font-extrabold text-[#0a0e2a]">
+                        {sec.heading}
+                      </h4>
+
+                      <p className="text-xs sm:text-sm text-slate-700 leading-relaxed whitespace-pre-line">
+                        {sec.body}
+                      </p>
+
+                      <div className="pt-6 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
+                        <span>Licensed to: {currentStudent.name}</span>
+                        <span>© C.G.A Academic Wing, Udaipur</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
