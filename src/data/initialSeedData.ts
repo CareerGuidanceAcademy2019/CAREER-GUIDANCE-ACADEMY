@@ -63,6 +63,10 @@ export interface Course {
   featured?: boolean;
   linkedMaterialIds: string[];
   materialDelivery?: string; // e.g. 'Printed Physical Copies + View-Only Softcopy' | 'View-Only Softcopy'
+  onlineClassLink?: string; // Meeting link for online classes (Google Meet, Zoom, etc.)
+  bundledMaterialIds?: string[]; // IDs of study materials bundled in this course package
+  bundledTestIds?: string[]; // IDs of mock tests or series bundled in this course package
+  isPackageBundle?: boolean; // True if this batch is a combined package
 }
 
 export interface FacultyMember {

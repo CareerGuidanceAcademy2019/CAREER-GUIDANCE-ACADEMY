@@ -375,3 +375,4 @@ runTest('Modal prevents duplicate payment if student already owns material', () 
 });
 
 console.log(`\n--- ALL ${passedTests}/${totalTests} TESTS PASSED SUCCESSFULLY! ---`);
+

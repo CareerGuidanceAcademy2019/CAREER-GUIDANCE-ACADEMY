@@ -110,8 +110,9 @@ interface CgaContextType {
   }) => Promise<TestAttempt | null>;
 
   // Admin actions
-  saveCourse: (course: Course, isNew: boolean) => Promise<void>;
-  deleteCourse: (courseId: string) => Promise<void>;
+  saveCourse: (course: Course, isNew: boolean) => Promise<boolean>;
+  deleteCourse: (courseId: string) => Promise<boolean>;
+  updateOnlineClassLink: (courseId: string, link: string) => Promise<boolean>;
   updateBatchStatus: (
     courseId: string,
     updates: {
@@ -884,22 +885,68 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
   // ---------------- Admin ----------------
   const saveCourse = useCallback(
     async (course: Course, isNew: boolean) => {
-      await run(cgaService.upsertCourse(course), {
-        title: isNew ? 'Course Added to Catalogue' : 'Course Updated',
-        message: `${course.name} is now live across the platform.`,
+      setDb((prev) => {
+        const existing = (prev.courses || []).filter((x, i, arr) => arr.findIndex((y) => y.id === x.id) === i);
+        const idx = existing.findIndex((x) => x.id === course.id);
+        const next = idx >= 0
+          ? existing.map((x, i) => (i === idx ? course : x))
+          : [course, ...existing];
+        return { ...prev, courses: next };
       });
+      const res = await cgaService.upsertCourse(course);
+      if (!res.success) {
+        showToast('Save Failed', res.error || 'Could not save course.', 'error');
+        await refresh(true);
+        return false;
+      }
+      showToast(
+        isNew ? 'Course Added to Catalogue' : 'Course Updated',
+        `${course.name} is now live across the platform.`,
+        'success'
+      );
+      return true;
     },
-    [run]
+    [refresh, showToast]
   );
+
   const deleteCourse = useCallback(
     async (id: string) => {
-      await run(cgaService.deleteCourse(id), {
-        title: 'Course Deleted',
-        message: 'The course has been removed from the catalogue.',
-        type: 'info',
-      });
+      setDb((prev) => ({
+        ...prev,
+        courses: prev.courses.filter((c) => c.id !== id),
+      }));
+      const res = await cgaService.deleteCourse(id);
+      if (!res.success) {
+        showToast('Delete Failed', res.error || 'Could not delete course.', 'error');
+        await refresh(true);
+        return false;
+      }
+      showToast('Course Deleted', 'The course has been removed from the catalogue.', 'info');
+      return true;
     },
-    [run]
+    [refresh, showToast]
+  );
+
+  const updateOnlineClassLink = useCallback(
+    async (courseId: string, link: string) => {
+      setDb((prev) => ({
+        ...prev,
+        courses: prev.courses.map((c) => (c.id === courseId ? { ...c, onlineClassLink: link.trim() || undefined } : c)),
+      }));
+      const res = await cgaService.updateOnlineClassLink(courseId, link);
+      if (!res.success) {
+        showToast('Class Link Error', res.error || 'Could not update online class link.', 'error');
+        await refresh(true);
+        return false;
+      }
+      showToast(
+        'Online Class Link Published',
+        link.trim() ? 'Live lecture link shared with enrolled students.' : 'Live lecture link cleared.',
+        'success'
+      );
+      return true;
+    },
+    [refresh, showToast]
   );
   const updateBatchStatus = useCallback<CgaContextType['updateBatchStatus']>(
     async (courseId, updates) => {
@@ -1553,6 +1600,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         submitMockTestAttempt,
         saveCourse,
         deleteCourse,
+        updateOnlineClassLink,
         updateBatchStatus,
         updateBatchDuration,
         extendBatchDuration,

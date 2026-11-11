@@ -195,7 +195,7 @@ const toCourse = (r: Row, facultyName: string, materialIds: string[]): Course =>
   instalmentAvailable: r.instalment_available,
   firstInstalment: Number(r.first_instalment),
   facultyId: r.faculty_id ?? '',
-  facultyName,
+  facultyName: r.faculty_name || facultyName,
   batchName: r.batch_name,
   batchSize: r.batch_size,
   seatsAvailable: r.seats_available,
@@ -207,6 +207,10 @@ const toCourse = (r: Row, facultyName: string, materialIds: string[]): Course =>
   featured: r.featured,
   linkedMaterialIds: materialIds,
   materialDelivery: r.material_delivery ?? (r.mode === 'Online' ? 'View-Only Softcopy' : 'Printed Physical Copies + View-Only Softcopy'),
+  onlineClassLink: r.online_class_link ?? undefined,
+  bundledMaterialIds: r.bundled_material_ids ?? [],
+  bundledTestIds: r.bundled_test_ids ?? [],
+  isPackageBundle: Boolean(r.is_package_bundle),
 });
 
 const fromCourse = (c: Course): Row => ({
@@ -224,6 +228,7 @@ const fromCourse = (c: Course): Row => ({
   instalment_available: c.instalmentAvailable,
   first_instalment: c.firstInstalment,
   faculty_id: c.facultyId || null,
+  faculty_name: c.facultyName || null,
   batch_name: c.batchName,
   batch_size: c.batchSize,
   seats_available: c.seatsAvailable,
@@ -234,6 +239,10 @@ const fromCourse = (c: Course): Row => ({
   status: c.status,
   featured: !!c.featured,
   material_delivery: c.materialDelivery ?? null,
+  online_class_link: c.onlineClassLink ?? null,
+  bundled_material_ids: c.bundledMaterialIds ?? [],
+  bundled_test_ids: c.bundledTestIds ?? [],
+  is_package_bundle: Boolean(c.isPackageBundle),
 });
 
 const toMaterial = (r: Row, courseName: string): StudyMaterial => {
@@ -2744,15 +2753,66 @@ export const cgaService = {
   // ============ ADMIN CRUD (RLS enforces admin-only) ============
   async upsertCourse(c: Course): Promise<ServiceResult> {
     invalidateDbCache();
+    // 1. Try serverless admin route with service-role privileges
+    try {
+      if (typeof window !== 'undefined') {
+        const resp = await fetch('/api/admin/courses', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(c),
+        });
+        if (resp.ok) {
+          const json = await resp.json();
+          if (json.success) return { success: true };
+        }
+      }
+    } catch {}
+
+    // 2. Direct client fallback
     const row = fromCourse(c);
-    // let Postgres assign ids for brand-new records created with temporary client ids
     const { error } = await this.client().from('courses').upsert(row);
     return error ? { success: false, error: msg(error, 'Save failed.') } : { success: true };
   },
-  async deleteCourse(id: string) {
+
+  async deleteCourse(id: string): Promise<ServiceResult> {
     invalidateDbCache();
+    try {
+      if (typeof window !== 'undefined') {
+        const resp = await fetch(`/api/admin/courses?id=${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+        });
+        if (resp.ok) {
+          const json = await resp.json();
+          if (json.success) return { success: true };
+        }
+      }
+    } catch {}
+
     const { error } = await this.client().from('courses').delete().eq('id', id);
     return error ? { success: false, error: msg(error, 'Delete failed.') } : { success: true };
+  },
+
+  async updateOnlineClassLink(id: string, onlineClassLink: string): Promise<ServiceResult> {
+    invalidateDbCache();
+    try {
+      if (typeof window !== 'undefined') {
+        const resp = await fetch('/api/admin/courses', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, onlineClassLink }),
+        });
+        if (resp.ok) {
+          const json = await resp.json();
+          if (json.success) return { success: true };
+        }
+      }
+    } catch {}
+
+    const { error } = await this.client()
+      .from('courses')
+      .update({ online_class_link: onlineClassLink.trim() || null })
+      .eq('id', id);
+    return error ? { success: false, error: msg(error, 'Update class link failed.') } : { success: true };
   },
   async updateBatch(
     id: string,

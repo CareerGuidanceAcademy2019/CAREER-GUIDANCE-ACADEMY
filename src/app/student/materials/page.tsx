@@ -175,8 +175,12 @@ export default function StudentStudyMaterialsPage() {
       };
     }
 
-    // 3. Check enrollment in parent course batch
-    const matchingEnrollment = currentStudent.enrollments.find((e) => e.courseId === mat.courseId);
+    // 3. Check enrollment in parent course batch or bundled package course
+    const matchingEnrollment = currentStudent.enrollments.find((e) => {
+      if (e.courseId === mat.courseId) return true;
+      const crs = db.courses.find((c) => c.id === e.courseId);
+      return crs?.bundledMaterialIds && Array.isArray(crs.bundledMaterialIds) && crs.bundledMaterialIds.includes(mat.id);
+    });
     const isCourseEnrolled = Boolean(matchingEnrollment);
     const isCourseExpired = Boolean(
       matchingEnrollment?.accessValidUntil &&

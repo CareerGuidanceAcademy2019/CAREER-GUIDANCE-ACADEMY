@@ -12,6 +12,7 @@ import {
   ArrowRight,
   Printer,
   BookOpen,
+  Layers,
 } from 'lucide-react';
 import { Course } from '@/data/initialSeedData';
 import { CustomWaitlistSvg } from '@/components/ui/CustomIcons';
@@ -74,6 +75,11 @@ export function CourseCard({
             >
               {course.mode === 'Online' ? 'Online Live' : 'Offline Classroom'}
             </span>
+            {course.isPackageBundle && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border whitespace-nowrap bg-purple-50 text-purple-700 border-purple-200">
+                <Layers className="w-3 h-3" /> Combined Package
+              </span>
+            )}
           </div>
 
           {isOpen ? (
@@ -105,7 +111,7 @@ export function CourseCard({
         </p>
 
         {/* Material Delivery Notice */}
-        <div className="mb-3">
+        <div className="mb-3 space-y-1.5">
           {course.mode === 'Offline' ? (
             <div className="text-[11px] font-semibold text-emerald-800 bg-emerald-50/90 px-2.5 py-1.5 rounded-xl border border-emerald-200/80 flex items-center gap-1.5">
               <Printer className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
@@ -115,6 +121,13 @@ export function CourseCard({
             <div className="text-[11px] font-semibold text-blue-800 bg-blue-50/90 px-2.5 py-1.5 rounded-xl border border-blue-200/80 flex items-center gap-1.5">
               <BookOpen className="w-3.5 h-3.5 text-[#0056b3] shrink-0" />
               <span>Digital study material in secure View-Only Reader mode</span>
+            </div>
+          )}
+
+          {course.isPackageBundle && ((course.bundledMaterialIds && course.bundledMaterialIds.length > 0) || (course.bundledTestIds && course.bundledTestIds.length > 0)) && (
+            <div className="text-[11px] font-bold text-purple-900 bg-purple-50/90 px-2.5 py-1.5 rounded-xl border border-purple-200/80 flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-purple-700 shrink-0" />
+              <span>Includes {(course.bundledMaterialIds?.length || 0)} study notes + {(course.bundledTestIds?.length || 0)} CBT mock tests</span>
             </div>
           )}
         </div>

@@ -112,6 +112,13 @@ export default function StudentMockTestsPage() {
     );
     if (inVerifiedPayments) return true;
 
+    // Check if any enrolled course bundles this test series
+    const isBundledInCourse = currentStudent.enrollments.some((e) => {
+      const crs = db.courses.find((c) => c.id === e.courseId);
+      return crs?.bundledTestIds && Array.isArray(crs.bundledTestIds) && crs.bundledTestIds.includes(seriesId);
+    });
+    if (isBundledInCourse) return true;
+
     // Check course enrollment matching this series
     const matchingCourses = SERIES_TO_COURSES[seriesId] || [seriesId];
     const match = currentStudent.enrollments.find((e) => matchingCourses.includes(e.courseId));
@@ -127,6 +134,19 @@ export default function StudentMockTestsPage() {
   const isStudentEnrolledInTest = (test: any) => {
     if (!currentStudent) return false;
     if (currentStudent.email === 'angatsaha825@gmail.com') return true;
+
+    // Check if test ID or series is bundled in any enrolled course
+    const isBundledTest = currentStudent.enrollments.some((e) => {
+      const crs = db.courses.find((c) => c.id === e.courseId);
+      return (
+        crs?.bundledTestIds &&
+        Array.isArray(crs.bundledTestIds) &&
+        (crs.bundledTestIds.includes(test.id) ||
+          (test.seriesId && crs.bundledTestIds.includes(test.seriesId)) ||
+          (test.courseId && crs.bundledTestIds.includes(test.courseId)))
+      );
+    });
+    if (isBundledTest) return true;
 
     const sId = test.seriesId || test.series_id;
     if (sId && sId !== 'all') {

@@ -14,6 +14,11 @@ import {
   EyeOff,
   Award,
   Clock,
+  Video,
+  ExternalLink,
+  Layers,
+  BookOpen,
+  ClipboardCheck,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
 import { Course, CourseCategory, CourseMode, StandalonePackage } from '@/data/initialSeedData';
@@ -27,6 +32,7 @@ export default function AdminCoursesAndBatchesPage() {
     updateBatchStatus,
     updateBatchDuration,
     extendBatchDuration,
+    updateOnlineClassLink,
     updateSiteContent,
     showToast,
   } = useCga();
@@ -38,6 +44,11 @@ export default function AdminCoursesAndBatchesPage() {
   const [batchValidUntil, setBatchValidUntil] = useState('');
   const [busyDuration, setBusyDuration] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Course | null>(null);
+
+  // Quick Online Class Link Modal State
+  const [onlineLinkModalCourse, setOnlineLinkModalCourse] = useState<Course | null>(null);
+  const [quickOnlineLink, setQuickOnlineLink] = useState('');
+  const [busyLink, setBusyLink] = useState(false);
 
   // Standalone Package State
   const [editingPackage, setEditingPackage] = useState<StandalonePackage | null>(null);
@@ -79,6 +90,20 @@ export default function AdminCoursesAndBatchesPage() {
     setBusyDuration(false);
   };
 
+  const handleOpenOnlineLinkModal = (course: Course) => {
+    setOnlineLinkModalCourse(course);
+    setQuickOnlineLink(course.onlineClassLink || '');
+  };
+
+  const handleSaveOnlineLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!onlineLinkModalCourse) return;
+    setBusyLink(true);
+    await updateOnlineClassLink(onlineLinkModalCourse.id, quickOnlineLink);
+    setBusyLink(false);
+    setOnlineLinkModalCourse(null);
+  };
+
   const handleOpenAdd = () => {
     setIsNew(true);
     setEditingCourse({
@@ -102,11 +127,15 @@ export default function AdminCoursesAndBatchesPage() {
       seatsAvailable: 50,
       waitingListCount: 0,
       duration: '1 Year',
-      startDate: '2026-11-01',
+      startDate: new Date().toISOString().slice(0, 10),
       schedule: 'Mon to Fri — 10:00 AM to 1:00 PM',
       status: 'Open for Admission',
       featured: true,
       linkedMaterialIds: [],
+      onlineClassLink: '',
+      bundledMaterialIds: [],
+      bundledTestIds: [],
+      isPackageBundle: false,
     });
   };
 
@@ -257,7 +286,7 @@ export default function AdminCoursesAndBatchesPage() {
                 return (
                   <tr key={course.id} className="hover:bg-slate-50/80">
                     <td className="py-3.5 px-4 max-w-xs">
-                      <div className="flex items-center gap-1.5 mb-1">
+                      <div className="flex flex-wrap items-center gap-1.5 mb-1">
                         <span className="inline-block px-2 py-0.5 rounded bg-blue-50 text-[#0056b3] font-bold text-[10px]">
                           {course.subCategory}
                         </span>
@@ -268,15 +297,52 @@ export default function AdminCoursesAndBatchesPage() {
                               : 'bg-amber-50 text-amber-800 border border-amber-200'
                           }`}
                         >
-                          {course.mode === 'Online' ? 'Online' : 'Offline'}
+                          {course.mode === 'Online' ? 'Online Live' : 'Offline Center'}
                         </span>
+                        {course.isPackageBundle && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-extrabold">
+                            <Layers className="w-3 h-3" /> Bundle Package
+                          </span>
+                        )}
                       </div>
                       <p className="font-extrabold text-slate-900 line-clamp-1">{course.name}</p>
                       <p className="text-[11px] text-slate-400">{course.category}</p>
+
+                      {/* Online Class Link Status Indicator */}
+                      {course.mode === 'Online' && (
+                        <div className="mt-1.5">
+                          {course.onlineClassLink ? (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenOnlineLinkModal(course)}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold hover:bg-emerald-100 cursor-pointer"
+                              title="Active live class meeting link. Click to view or change."
+                            >
+                              <Video className="w-3 h-3 text-emerald-600 animate-pulse" /> Live Class Link Active
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenOnlineLinkModal(course)}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-bold hover:bg-slate-200 cursor-pointer"
+                              title="Click to post/share live lecture link with enrolled students"
+                            >
+                              <Video className="w-3 h-3 text-slate-400" /> + Post Class Link
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Bundle Items Summary */}
+                      {course.isPackageBundle && (
+                        <p className="text-[10px] text-purple-800 font-semibold mt-1">
+                          Includes: {course.bundledMaterialIds?.length || 0} Notes + {course.bundledTestIds?.length || 0} Mock Series
+                        </p>
+                      )}
                     </td>
                     <td className="py-3.5 px-4">
                       <p className="font-bold text-slate-800">{course.batchName}</p>
-                      <p className="text-slate-500">{course.facultyName}</p>
+                      <p className="text-slate-500 font-medium">{course.facultyName || 'Faculty Assigned'}</p>
                       <p className="text-[11px] text-slate-400 whitespace-nowrap">
                         {course.duration} • Starts {course.startDate}
                       </p>
@@ -323,6 +389,16 @@ export default function AdminCoursesAndBatchesPage() {
                     </td>
                     <td className="py-3.5 px-4 text-right whitespace-nowrap">
                       <div className="inline-flex items-center gap-1.5">
+                        {course.mode === 'Online' && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenOnlineLinkModal(course)}
+                            className="p-2 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 cursor-pointer"
+                            title="Share / Update Online Live Class Link"
+                          >
+                            <Video className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => handleOpenBatchModal(course)}
@@ -335,7 +411,12 @@ export default function AdminCoursesAndBatchesPage() {
                           type="button"
                           onClick={() => {
                             setIsNew(false);
-                            setEditingCourse({ ...course });
+                            setEditingCourse({
+                              ...course,
+                              bundledMaterialIds: course.bundledMaterialIds || [],
+                              bundledTestIds: course.bundledTestIds || [],
+                              isPackageBundle: Boolean(course.isPackageBundle),
+                            });
                           }}
                           className="p-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer"
                           title="Edit Course Details"
@@ -667,6 +748,92 @@ export default function AdminCoursesAndBatchesPage() {
         </div>
       )}
 
+      {/* ==================== QUICK LIVE CLASS LINK MODAL ==================== */}
+      {onlineLinkModalCourse && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/65 p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <form
+            onSubmit={handleSaveOnlineLink}
+            className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-200 text-xs"
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="p-2 rounded-xl bg-indigo-50 text-indigo-700">
+                  <Video className="w-4 h-4" />
+                </span>
+                <div>
+                  <h3 className="text-base font-extrabold text-[#0a0e2a]">Share Live Online Class Link</h3>
+                  <p className="text-[11px] text-slate-500">{onlineLinkModalCourse.name}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOnlineLinkModalCourse(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Post or update the Google Meet, Zoom, or YouTube live stream link for this online batch. Enrolled students will only see this link and the &quot;Join Live Class&quot; button after you save it here.
+              </p>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">
+                  Live Class Meeting URL (Google Meet / Zoom / MS Teams)
+                </label>
+                <input
+                  type="url"
+                  value={quickOnlineLink}
+                  onChange={(e) => setQuickOnlineLink(e.target.value)}
+                  placeholder="https://meet.google.com/xyz-abcd-efg"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  Leave empty if class is not yet scheduled; students will see &quot;Live Class Link Pending&quot; until posted.
+                </span>
+              </div>
+
+              {quickOnlineLink && (
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] flex items-center justify-between">
+                  <span className="truncate pr-2 font-medium">Link ready to post for enrolled students</span>
+                  <a
+                    href={quickOnlineLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 font-bold underline hover:text-emerald-900"
+                  >
+                    Test Link ↗
+                  </a>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setOnlineLinkModalCourse(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold cursor-pointer hover:bg-slate-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={busyLink}
+                className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer disabled:opacity-50"
+              >
+                {busyLink ? 'Saving...' : 'Post Live Class Link'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* ==================== ADD / EDIT COURSE MODAL ==================== */}
       {editingCourse && (
         <div
@@ -765,25 +932,69 @@ export default function AdminCoursesAndBatchesPage() {
 
               <div>
                 <label className="font-bold text-slate-700 block mb-1">Assigned Faculty</label>
-                <select
-                  value={editingCourse.facultyId}
-                  onChange={(e) => {
-                    const fac = db.faculty.find((f) => f.id === e.target.value);
-                    setEditingCourse({
-                      ...editingCourse,
-                      facultyId: e.target.value,
-                      facultyName: fac?.name || editingCourse.facultyName,
-                    });
-                  }}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
-                >
-                  {db.faculty.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.name} ({f.subject})
-                    </option>
-                  ))}
-                </select>
+                <div className="space-y-1.5">
+                  <select
+                    value={editingCourse.facultyId}
+                    onChange={(e) => {
+                      const fac = db.faculty.find((f) => f.id === e.target.value);
+                      setEditingCourse({
+                        ...editingCourse,
+                        facultyId: e.target.value,
+                        facultyName: fac?.name || editingCourse.facultyName,
+                      });
+                    }}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
+                  >
+                    <option value="">Select Existing Faculty Profile</option>
+                    {db.faculty.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name} ({f.subject})
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    value={editingCourse.facultyName || ''}
+                    onChange={(e) => setEditingCourse({ ...editingCourse, facultyName: e.target.value })}
+                    placeholder="Or enter faculty name directly"
+                    className="w-full px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold"
+                  />
+                </div>
               </div>
+
+              {/* Online Class Link Section */}
+              {editingCourse.mode === 'Online' && (
+                <div className="sm:col-span-2 p-3.5 rounded-2xl bg-indigo-50 border border-indigo-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="font-extrabold text-indigo-950 flex items-center gap-1.5 text-xs">
+                      <Video className="w-4 h-4 text-indigo-600" />
+                      <span>Online Live Class Meeting URL</span>
+                    </label>
+                    {editingCourse.onlineClassLink && (
+                      <a
+                        href={editingCourse.onlineClassLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[11px] font-bold text-indigo-600 hover:underline inline-flex items-center gap-1"
+                      >
+                        <ExternalLink className="w-3 h-3" /> Test Meeting Link
+                      </a>
+                    )}
+                  </div>
+                  <input
+                    type="url"
+                    value={editingCourse.onlineClassLink || ''}
+                    onChange={(e) =>
+                      setEditingCourse({ ...editingCourse, onlineClassLink: e.target.value })
+                    }
+                    placeholder="https://meet.google.com/abc-defg-hij or Zoom meeting URL"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-indigo-300 bg-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <p className="text-[11px] text-indigo-800 leading-relaxed">
+                    💡 This link will be shown to enrolled students in their <strong>My Learning</strong> section so they can join live lectures. You can also update or post this link anytime directly from the batch table.
+                  </p>
+                </div>
+              )}
 
               <div>
                 <label className="font-bold text-slate-700 block mb-1">Admission Fee (₹)</label>
@@ -893,6 +1104,139 @@ export default function AdminCoursesAndBatchesPage() {
                   <option value="Open for Admission">Open for Admission</option>
                   <option value="Batch Closed">Batch Closed</option>
                 </select>
+              </div>
+
+              {/* Package Bundling Control */}
+              <div className="sm:col-span-2 p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="font-extrabold text-slate-900 flex items-center gap-2 text-xs">
+                      <Layers className="w-4 h-4 text-[#0056b3]" />
+                      <span>Combine Study Materials &amp; Mock Tests (All-in-One Package)</span>
+                    </label>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Bundle specific notes or mock test series into this batch. Enrolled students will automatically gain full access to all bundled items in their My Learning portal!
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(editingCourse.isPackageBundle)}
+                      onChange={(e) =>
+                        setEditingCourse({
+                          ...editingCourse,
+                          isPackageBundle: e.target.checked,
+                        })
+                      }
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#0056b3]"></div>
+                  </label>
+                </div>
+
+                {editingCourse.isPackageBundle && (
+                  <div className="space-y-4 pt-3 border-t border-slate-200/80">
+                    {/* Bundled Study Materials */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
+                          <BookOpen className="w-3.5 h-3.5 text-[#0056b3]" />
+                          <span>Select Study Materials to Bundle:</span>
+                        </span>
+                        <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
+                          {editingCourse.bundledMaterialIds?.length || 0} selected
+                        </span>
+                      </div>
+                      <div className="max-h-40 overflow-y-auto space-y-1.5 bg-white p-2.5 rounded-xl border border-slate-200">
+                        {db.studyMaterials
+                          .filter((m) => m.type !== 'Current Affairs' && !m.caCategory)
+                          .map((mat) => {
+                            const isChecked = (editingCourse.bundledMaterialIds || []).includes(mat.id);
+                            return (
+                              <label
+                                key={mat.id}
+                                className={`flex items-center justify-between p-2 rounded-lg text-xs cursor-pointer transition-colors ${
+                                  isChecked ? 'bg-blue-50 text-[#0056b3] font-bold' : 'hover:bg-slate-50 text-slate-700'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 min-w-0 pr-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={(e) => {
+                                      const prevList = editingCourse.bundledMaterialIds || [];
+                                      const nextList = e.target.checked
+                                        ? [...prevList, mat.id]
+                                        : prevList.filter((id) => id !== mat.id);
+                                      setEditingCourse({
+                                        ...editingCourse,
+                                        bundledMaterialIds: nextList,
+                                      });
+                                    }}
+                                    className="rounded text-[#0056b3]"
+                                  />
+                                  <span className="truncate">{mat.title}</span>
+                                </div>
+                                <span className="text-[10px] text-slate-400 shrink-0 font-normal">
+                                  {mat.type} • {mat.subject || 'Notes'}
+                                </span>
+                              </label>
+                            );
+                          })}
+                      </div>
+                    </div>
+
+                    {/* Bundled Mock Tests & Series */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
+                          <ClipboardCheck className="w-3.5 h-3.5 text-[#ea580c]" />
+                          <span>Select Mock Test Series to Bundle:</span>
+                        </span>
+                        <span className="text-[10px] font-bold text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full">
+                          {editingCourse.bundledTestIds?.length || 0} selected
+                        </span>
+                      </div>
+                      <div className="max-h-40 overflow-y-auto space-y-1.5 bg-white p-2.5 rounded-xl border border-slate-200">
+                        {db.mockSeries
+                          .filter((ms) => ms.id !== 'series-current-affairs')
+                          .map((series) => {
+                            const isChecked = (editingCourse.bundledTestIds || []).includes(series.id);
+                            return (
+                              <label
+                                key={series.id}
+                                className={`flex items-center justify-between p-2 rounded-lg text-xs cursor-pointer transition-colors ${
+                                  isChecked ? 'bg-orange-50 text-[#ea580c] font-bold' : 'hover:bg-slate-50 text-slate-700'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 min-w-0 pr-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={(e) => {
+                                      const prevList = editingCourse.bundledTestIds || [];
+                                      const nextList = e.target.checked
+                                        ? [...prevList, series.id]
+                                        : prevList.filter((id) => id !== series.id);
+                                      setEditingCourse({
+                                        ...editingCourse,
+                                        bundledTestIds: nextList,
+                                      });
+                                    }}
+                                    className="rounded text-[#ea580c]"
+                                  />
+                                  <span className="truncate">{series.name}</span>
+                                </div>
+                                <span className="text-[10px] text-slate-400 shrink-0 font-normal">
+                                  ₹{series.price}
+                                </span>
+                              </label>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="sm:col-span-2">
