@@ -498,15 +498,36 @@ export const cgaService = {
   // ============ AUTH ============
   async getSession(): Promise<AuthSession | null> {
     const sb = this.client();
-    const { data } = await sb.auth.getUser();
-    if (!data.user) return null;
+    let user: any = null;
+    try {
+      // Fast 0ms local session read first to avoid GoTrue network bottleneck during rush hour
+      const { data: localSession } = await sb.auth.getSession();
+      user = localSession?.session?.user ?? null;
+      if (!user) {
+        const { data } = await sb.auth.getUser();
+        user = data?.user ?? null;
+      }
+    } catch {
+      // If a transient network error occurs during rush hour, preserve cached session if available
+      if (typeof window !== 'undefined') {
+        try {
+          const cached = sessionStorage.getItem('cga_auth_session');
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (parsed && parsed.userId) return parsed as AuthSession;
+          }
+        } catch {}
+      }
+      return null;
+    }
+    if (!user) return null;
 
     let p: Row | null = null;
     try {
       const res = await sb
         .from('profiles')
         .select('id,role,name,email,status')
-        .eq('id', data.user.id)
+        .eq('id', user.id)
         .maybeSingle();
       p = res.data;
     } catch {
@@ -529,28 +550,28 @@ export const cgaService = {
     // Fallback if profile row is temporarily unavailable:
     // Only verified institute director and administrator emails can assume administrative role
     const isKnownAdmin =
-      data.user.email === 'angatsaha825@gmail.com' ||
-      data.user.email === 'careerguidanceacademy2019@gmail.com';
+      user.email === 'angatsaha825@gmail.com' ||
+      user.email === 'careerguidanceacademy2019@gmail.com';
     const role: PortalRole = isKnownAdmin ? 'ADMIN' : 'STUDENT';
-    const meta = data.user.user_metadata || {};
+    const meta = user.user_metadata || {};
     const name =
       meta.name ||
-      (data.user.email === 'careerguidanceacademy2019@gmail.com'
+      (user.email === 'careerguidanceacademy2019@gmail.com'
         ? 'S Banik'
-        : data.user.email === 'angatsaha825@gmail.com'
+        : user.email === 'angatsaha825@gmail.com'
         ? 'Angat Saha'
-        : data.user.email?.split('@')[0] || 'User');
-    const email = data.user.email || '';
+        : user.email?.split('@')[0] || 'User');
+    const email = user.email || '';
 
     return {
       role,
-      userId: data.user.id,
+      userId: user.id,
       name,
       email,
     };
   },
 
-  /** Sign in with registered email address and password strictly. */
+  /** Sign in with registered email address and password strictly. Optimized for 100+ concurrent logins. */
   async login(identifier: string, password: string): Promise<ServiceResult<{ session: AuthSession; isUnconfirmed?: boolean; email?: string }>> {
     const sb = this.client();
     const cleanEmail = identifier.trim().toLowerCase();
@@ -558,7 +579,19 @@ export const cgaService = {
       return { success: false, error: 'Invalid email address or password. Please check your credentials.' };
     }
 
-    const { error } = await sb.auth.signInWithPassword({ email: cleanEmail, password });
+    // Retry signInWithPassword up to 2 times if a transient network/503 blip happens during rush hour
+    let signInData: any = null;
+    let error: any = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const res = await sb.auth.signInWithPassword({ email: cleanEmail, password });
+      signInData = res.data;
+      error = res.error;
+      if (!error) break;
+      const isInvalidCreds = /invalid login credentials|email not confirmed|not confirmed/i.test(error.message || '');
+      if (isInvalidCreds) break;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+
     if (error) {
       const isUnconfirmed =
         error.message === 'Email not confirmed' ||
@@ -575,30 +608,30 @@ export const cgaService = {
       };
     }
 
+    const authUser = signInData?.user ?? (await sb.auth.getUser().catch(() => ({ data: { user: null } }))).data?.user;
+    if (!authUser) {
+      return {
+        success: false,
+        error: 'Authentication failed. Please verify your credentials or contact the C.G.A office.',
+      };
+    }
+
+    // Single fast indexed profile lookup (replaces 5 redundant sequential RPC/Auth roundtrips)
+    let p: Row | null = null;
     try {
-      let role: string | undefined;
-      let status: string | undefined;
+      const { data: prof } = await sb
+        .from('profiles')
+        .select('id,role,name,email,status')
+        .eq('id', authUser.id)
+        .maybeSingle();
+      p = prof;
+    } catch {}
 
-      const { data: state } = await sb.rpc('my_account_state');
-      const row = (Array.isArray(state) ? state[0] : state) as { role?: string; status?: string } | null;
-      if (row) {
-        role = row.role;
-        status = row.status;
-      } else {
-        const u = (await sb.auth.getUser()).data.user;
-        if (u) {
-          const { data: p } = await sb.from('profiles').select('role, status').eq('id', u.id).maybeSingle();
-          if (p) {
-            role = p.role;
-            status = p.status;
-          }
-        }
-      }
-
-      if (status === 'Pending') {
+    if (p) {
+      if (p.status === 'Pending') {
         await sb.auth.signOut();
         const pendingMsg =
-          role === 'admin'
+          p.role === 'admin'
             ? 'Your administrator registration is awaiting verification and approval from an existing C.G.A administrator. You will be able to log in and use the site in the admin portal once approved.'
             : 'Your faculty registration is awaiting approval from the C.G.A administrator. You can sign in once it is approved.';
         return {
@@ -606,23 +639,39 @@ export const cgaService = {
           error: pendingMsg,
         };
       }
-    } catch {}
-
-    // Enforce single active session: invalidate older sessions on other devices
-    try {
-      await sb.auth.signOut({ scope: 'others' });
-    } catch {}
-    try {
-      await sb.rpc('enforce_single_session');
-    } catch {}
-
-    const session = await this.getSession();
-    if (!session) {
-      return {
-        success: false,
-        error: 'Authentication failed. Please verify your credentials or contact the C.G.A office.',
-      };
+      if (p.status && p.status !== 'Active') {
+        await sb.auth.signOut();
+        return {
+          success: false,
+          error: 'Your account is currently inactive. Please contact the C.G.A office.',
+        };
+      }
     }
+
+    const isKnownAdmin =
+      authUser.email === 'angatsaha825@gmail.com' ||
+      authUser.email === 'careerguidanceacademy2019@gmail.com';
+    const meta = authUser.user_metadata || {};
+    const session: AuthSession = p
+      ? {
+          role: ROLE_MAP[p.role] ?? 'STUDENT',
+          userId: p.id,
+          name: p.name,
+          email: p.email,
+        }
+      : {
+          role: isKnownAdmin ? 'ADMIN' : 'STUDENT',
+          userId: authUser.id,
+          name:
+            meta.name ||
+            (authUser.email === 'careerguidanceacademy2019@gmail.com'
+              ? 'S Banik'
+              : authUser.email === 'angatsaha825@gmail.com'
+              ? 'Angat Saha'
+              : authUser.email?.split('@')[0] || 'User'),
+          email: authUser.email || cleanEmail,
+        };
+
     return { success: true, session };
   },
 
@@ -1309,12 +1358,20 @@ export const cgaService = {
     }
 
     const sb = this.client();
-    const one = async (q: PromiseLike<{ data: Row[] | null; error: unknown }>): Promise<Row[]> =>
-      ((await q).data ?? []) as Row[];
+    const one = async (q: PromiseLike<{ data: Row[] | null; error: unknown }>): Promise<Row[]> => {
+      try {
+        return ((await q).data ?? []) as Row[];
+      } catch {
+        return [];
+      }
+    };
+
+    const isStudentOnly = Boolean(session && session.role === 'STUDENT' && session.userId);
+    const stuId = session?.userId ?? '';
 
     const loadTask = (async () => {
       try {
-        // Fire all queries in a single parallel batch across Supabase REST
+        // Fire all queries in a single parallel batch across Supabase REST (student-scoped for 100+ concurrent user speed)
         const [
           site,
           faculty,
@@ -1352,7 +1409,7 @@ export const cgaService = {
           Row[],
           Row[]
         ] = await Promise.all([
-          sb.from('site_content').select('content').eq('id', 1).maybeSingle(),
+          Promise.resolve(sb.from('site_content').select('content').eq('id', 1).maybeSingle()).catch(() => ({ data: null })),
           one(sb.from('faculty').select('*').order('name')),
           one(sb.from('courses').select('*').order('name')),
           one(sb.from('achievements').select('*')),
@@ -1361,15 +1418,39 @@ export const cgaService = {
           session ? one(sb.from('study_materials').select('*').order('uploaded_date', { ascending: false })) : Promise.resolve([] as Row[]),
           one(sb.from('mock_tests').select('*')),
           session ? one(sb.from('announcements').select('*').order('date', { ascending: false })) : Promise.resolve([] as Row[]),
-          session ? one(sb.from('profiles').select('*').order('created_at', { ascending: false })) : Promise.resolve([] as Row[]),
-          session ? one(sb.from('enrollments').select('*')) : Promise.resolve([] as Row[]),
-          session ? one(sb.from('fee_payments').select('*').order('date', { ascending: false })) : Promise.resolve([] as Row[]),
-          session ? one(sb.from('test_attempts').select('*').order('submitted_at', { ascending: false })) : Promise.resolve([] as Row[]),
+          session
+            ? isStudentOnly
+              ? one(sb.from('profiles').select('*').eq('id', stuId))
+              : one(sb.from('profiles').select('*').order('created_at', { ascending: false }))
+            : Promise.resolve([] as Row[]),
+          session
+            ? isStudentOnly
+              ? one(sb.from('enrollments').select('*').eq('student_id', stuId))
+              : one(sb.from('enrollments').select('*'))
+            : Promise.resolve([] as Row[]),
+          session
+            ? isStudentOnly
+              ? one(sb.from('fee_payments').select('*').eq('student_id', stuId).order('date', { ascending: false }))
+              : one(sb.from('fee_payments').select('*').order('date', { ascending: false }))
+            : Promise.resolve([] as Row[]),
+          session
+            ? isStudentOnly
+              ? one(sb.from('test_attempts').select('*').eq('student_id', stuId).order('submitted_at', { ascending: false }))
+              : one(sb.from('test_attempts').select('*').order('submitted_at', { ascending: false }))
+            : Promise.resolve([] as Row[]),
           session && session.role === 'ADMIN'
             ? one(sb.from('enquiries').select('*').order('created_at', { ascending: false }))
             : Promise.resolve([] as Row[]),
-          session ? one(sb.from('series_enrollments').select('*')) : Promise.resolve([] as Row[]),
-          session ? one(sb.from('mock_attempts').select('*').order('submitted_at', { ascending: false })) : Promise.resolve([] as Row[]),
+          session
+            ? isStudentOnly
+              ? one(sb.from('series_enrollments').select('*').eq('student_id', stuId))
+              : one(sb.from('series_enrollments').select('*'))
+            : Promise.resolve([] as Row[]),
+          session
+            ? isStudentOnly
+              ? one(sb.from('mock_attempts').select('*').eq('student_id', stuId).order('submitted_at', { ascending: false }))
+              : one(sb.from('mock_attempts').select('*').order('submitted_at', { ascending: false }))
+            : Promise.resolve([] as Row[]),
           session && session.role === 'STUDENT'
             ? (async (): Promise<Row[]> => {
                 try {
@@ -2652,62 +2733,68 @@ export const cgaService = {
   ): Promise<ServiceResult<{ attempt: TestAttempt }>> {
     const session = await this.getSession().catch(() => null);
     const stuId = session?.userId || 'me';
+    const timeTakenSeconds = Math.max(1, Math.round(timeTakenMinutes * 60));
 
-    // Multi-Attempt Check: Check against configured attempts allowed
-    if (typeof window !== 'undefined') {
+    // Authoritative server-side scoring via `submit_mock_attempt` RPC with automatic retry & API fallback
+    let rpcData: Record<string, unknown> | null = null;
+    let lastErrorMsg = '';
+
+    for (let tryIdx = 0; tryIdx < 2; tryIdx++) {
       try {
-        const existing = localStorage.getItem('cga_test_attempts');
-        const arr: TestAttempt[] = existing ? JSON.parse(existing) : [];
-        const pastCount = arr.filter(
-          (item) => item.testId === testId && (item.studentId === stuId || item.studentId === 'me') && Boolean(item.submittedAt)
-        ).length;
-        
-        // Find configured attempts
-        const customTestsStr = localStorage.getItem('cga_custom_tests');
-        const customList: MockTest[] = customTestsStr ? JSON.parse(customTestsStr) : [];
-        const foundTest = customList.find((t) => t.id === testId);
-        const maxAttempts = foundTest?.attemptsAllowed || 1;
+        const sb = this.client();
+        const { data, error } = await sb.rpc('submit_mock_attempt', {
+          p_test_id: testId,
+          p_answers: answers,
+          p_time_taken_seconds: timeTakenSeconds,
+        });
+        if (!error && data) {
+          rpcData = data as Record<string, unknown>;
+          break;
+        }
+        if (error) {
+          lastErrorMsg = error.message || '';
+          if (/Maximum attempts reached/i.test(lastErrorMsg)) break;
+        }
+      } catch (e) {
+        lastErrorMsg = e instanceof Error ? e.message : '';
+      }
+      await new Promise((r) => setTimeout(r, 300));
+    }
 
-        if (pastCount >= maxAttempts) {
-          return {
-            success: false,
-            error: `Attempt Limit Reached: You have completed all ${maxAttempts} permitted attempt(s) for this mock test.`,
-          };
+    // Fallback to serverless API route (/api/mock-tests/submit) if client RPC failed during rush hour
+    if (!rpcData && typeof window !== 'undefined') {
+      try {
+        const apiRes = await fetch('/api/mock-tests/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            testId,
+            answers,
+            timeTakenSeconds,
+          }),
+        });
+        const apiJson = await apiRes.json().catch(() => ({}));
+        if (apiRes.ok && apiJson && (apiJson.attemptId || apiJson.score !== undefined)) {
+          rpcData = apiJson as Record<string, unknown>;
+        } else if (apiJson?.error) {
+          lastErrorMsg = String(apiJson.error);
         }
       } catch {}
     }
 
-    // Authoritative server-side scoring via the deployed `submit_mock_attempt` RPC.
-    let rpcData: Record<string, unknown> | null = null;
-    try {
-      const sb = this.client();
-      const { data, error } = await sb.rpc('submit_mock_attempt', {
-        p_test_id: testId,
-        p_answers: answers,
-        p_time_taken_seconds: Math.max(1, Math.round(timeTakenMinutes * 60)),
-      });
-      if (error) {
-        const raw = error.message || '';
-        if (/Maximum attempts reached/i.test(raw) || /already been submitted/i.test(raw)) {
-          return {
-            success: false,
-            error: raw.includes('Maximum attempts') ? raw : 'Attempt Limit Reached: Maximum allowed attempts completed for this mock test.',
-          };
-        }
-        if (/SESSION_REVOKED/i.test(raw)) {
-          return { success: false, error: 'Your account has been signed in on another device. Please log in again.' };
-        }
-        if (/Attempt not initiated/i.test(raw)) {
-          return { success: false, error: 'This attempt was not started properly. Please re-open the test and start it again.' };
-        }
-        return { success: false, error: msg(error, 'Test submission failed. Please try again.') };
-      }
-      rpcData = (data ?? null) as Record<string, unknown> | null;
-    } catch (e) {
-      return { success: false, error: e instanceof Error ? e.message : 'Test submission failed. Please try again.' };
-    }
     if (!rpcData) {
-      return { success: false, error: 'Test submission failed. Please try again.' };
+      if (/Maximum attempts reached/i.test(lastErrorMsg) || /already been submitted/i.test(lastErrorMsg)) {
+        return {
+          success: false,
+          error: lastErrorMsg.includes('Maximum attempts')
+            ? lastErrorMsg
+            : 'Attempt Limit Reached: Maximum allowed attempts completed for this mock test.',
+        };
+      }
+      return {
+        success: false,
+        error: lastErrorMsg || 'Test submission failed due to network interruption. Your answers are auto-saved — please click Submit again.',
+      };
     }
 
     let courseId = '';
@@ -2724,7 +2811,7 @@ export const cgaService = {
       if (!totalMarks && t?.total_marks) totalMarks = Number(t.total_marks);
     } catch {}
 
-    const secs = Number(rpcData.timeTakenSeconds ?? timeTakenMinutes * 60);
+    const secs = Number(rpcData.timeTakenSeconds ?? timeTakenSeconds);
     const attempt: TestAttempt = {
       id: String(rpcData.attemptId ?? `att-${Date.now()}`),
       testId,
@@ -2749,10 +2836,9 @@ export const cgaService = {
       if (typeof window !== 'undefined') {
         const existing = localStorage.getItem('cga_test_attempts');
         const arr: TestAttempt[] = existing ? JSON.parse(existing) : [];
-        if (!arr.some((item) => item.id === attempt.id)) {
-          arr.unshift(attempt);
-          localStorage.setItem('cga_test_attempts', JSON.stringify(arr));
-        }
+        const filtered = arr.filter((item) => item.id !== attempt.id);
+        filtered.unshift(attempt);
+        localStorage.setItem('cga_test_attempts', JSON.stringify(filtered));
       }
     } catch {}
 
@@ -3459,40 +3545,29 @@ export const cgaService = {
 
   async getSeriesTestQuestions(testId: string): Promise<ServiceResult<QuestionsData>> {
     const sb = this.client();
-    const user = (await sb.auth.getUser()).data.user;
-    if (user?.id) {
-      const { data: rl } = await sb.rpc('check_rate_limit', {
-        p_key: `mock_start_${user.id}`,
-        p_limit: 10,
-        p_window_seconds: 60,
-      });
-      if (rl && !rl.allowed) {
-        return { success: false, error: 'Too many test launch attempts. Please wait a minute before launching another test.' };
-      }
-    }
     const { data, error } = await sb.rpc('get_test_questions', { p_test_id: testId });
     if (error) return { success: false, error: msg(error, 'Failed to fetch test questions.') };
     return { success: true, ...(data as QuestionsData) };
   },
 
   async saveAttemptProgress(testId: string, answers: Record<string, number>): Promise<void> {
-    const sb = this.client();
-    const user = (await sb.auth.getUser()).data.user;
-    if (user?.id) {
-      const { data: rl } = await sb.rpc('check_rate_limit', {
-        p_key: `mock_save_${user.id}`,
-        p_limit: 60,
-        p_window_seconds: 60,
-      });
-      if (rl && !rl.allowed) {
-        // Capped / throttled silently to avoid spamming the database
-        return;
-      }
+    if (typeof window !== 'undefined') {
+      try {
+        const res = await fetch('/api/mock-tests/save-progress', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ testId, answers }),
+        });
+        if (res.ok) return;
+      } catch {}
     }
-    await sb.rpc('save_attempt_progress', {
-      p_test_id: testId,
-      p_answers: answers,
-    });
+    try {
+      const sb = this.client();
+      await sb.rpc('save_attempt_progress', {
+        p_test_id: testId,
+        p_answers: answers,
+      });
+    } catch {}
   },
 
   async submitMockAttempt(params: {
@@ -3501,17 +3576,6 @@ export const cgaService = {
     timeTakenSeconds?: number;
   }): Promise<ServiceResult<SeriesAttempt & { totalMarks?: number }>> {
     const sb = this.client();
-    const user = (await sb.auth.getUser()).data.user;
-    if (user?.id) {
-      const { data: rl } = await sb.rpc('check_rate_limit', {
-        p_key: `mock_submit_${user.id}`,
-        p_limit: 5,
-        p_window_seconds: 60,
-      });
-      if (rl && !rl.allowed) {
-        return { success: false, error: 'Submission rate limit reached. Please wait before retrying.' };
-      }
-    }
     const { data, error } = await sb.rpc('submit_mock_attempt', {
       p_test_id: params.testId,
       p_answers: params.answers,

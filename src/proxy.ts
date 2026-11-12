@@ -6,7 +6,7 @@ const edgeRateLimitMap = new Map<string, { count: number; resetAt: number }>();
 
 function checkEdgeRateLimit(
   ip: string,
-  limit = 120,
+  limit = 1500,
   windowMs = 60000
 ): { allowed: boolean; retryAfter: number; limit: number } {
   const now = Date.now();
@@ -100,11 +100,11 @@ export async function proxy(request: NextRequest) {
   const isApi = path.startsWith('/api/');
   const hasAuthCookie = request.cookies.getAll().some((c) => c.name.includes('-auth-token'));
 
-  // 2. Abuse Protection: General API Rate Limit ceiling (120 req/min per IP via fast in-memory token bucket)
+  // 2. Abuse Protection: General API Rate Limit ceiling (1500 req/min per IP via fast in-memory token bucket; supports 100+ students on shared CGNAT/campus Wi-Fi)
   if (isApi) {
     const forwarded = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || '127.0.0.1';
     const clientIp = forwarded.split(',')[0].trim();
-    const rl = checkEdgeRateLimit(clientIp, 120, 60000);
+    const rl = checkEdgeRateLimit(clientIp, 1500, 60000);
     if (!rl.allowed) {
       return NextResponse.json(
         {
@@ -127,28 +127,37 @@ export async function proxy(request: NextRequest) {
   }
 
   let user = null;
-  let supabase = null;
 
-  // Only initialize Supabase client and fetch user when route is protected or accessing protected API
-  const needsAuth = isProtected || (isApi && hasAuthCookie);
-  if (needsAuth) {
-    supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      key,
-      {
-        cookies: {
-          getAll: () => request.cookies.getAll(),
-          setAll: (list) => {
-            list.forEach(({ name, value }) => request.cookies.set(name, value));
-            response = NextResponse.next({ request });
-            list.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
-          },
-        },
-      }
-    );
+  // Only initialize Supabase client and verify user in middleware for protected page navigations.
+  // Protected API routes perform their own authentication directly, avoiding double GoTrue roundtrips during rush hour.
+  if (isProtected) {
     if (hasAuthCookie) {
-      const { data } = await supabase.auth.getUser();
-      user = data.user;
+      const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        key,
+        {
+          cookies: {
+            getAll: () => request.cookies.getAll(),
+            setAll: (list) => {
+              list.forEach(({ name, value }) => request.cookies.set(name, value));
+              response = NextResponse.next({ request });
+              list.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+            },
+          },
+        }
+      );
+      try {
+        const { data, error } = await supabase.auth.getUser();
+        if (data?.user) {
+          user = data.user;
+        } else if (error && (error.status === 0 || error.status === 500 || error.status === 502 || error.status === 503 || error.status === 504)) {
+          // Fail-open on transient network/GoTrue timeout during rush hour so active students are not kicked out
+          user = { id: 'transient-pass' } as any;
+        }
+      } catch {
+        // Fail-open on transient network timeout when cookie is present
+        user = { id: 'transient-pass' } as any;
+      }
     }
   }
 
@@ -159,35 +168,6 @@ export async function proxy(request: NextRequest) {
     }
     return '/';
   };
-
-  // 3. Single-Session Enforcement: Reject invalidated sessions on protected pages and APIs
-  if (user && supabase) {
-    const isActive = await verifySessionActiveWithCache(supabase, user.id);
-    if (!isActive) {
-      sessionActiveCache.delete(user.id);
-      if (isProtected) {
-        const url = request.nextUrl.clone();
-        url.pathname = '/login';
-        url.search = '';
-        url.searchParams.set('reason', 'other_device');
-        const redirectRes = NextResponse.redirect(url);
-        request.cookies.getAll().forEach((c) => {
-          if (c.name.includes('-auth-token')) {
-            redirectRes.cookies.delete(c.name);
-          }
-        });
-        return redirectRes;
-      } else if (isApi && !path.startsWith('/api/auth/')) {
-        return NextResponse.json(
-          {
-            error: 'SESSION_REVOKED',
-            message: 'You were signed out because your account was used on another device.',
-          },
-          { status: 401 }
-        );
-      }
-    }
-  }
 
   if (isProtected && !user) {
     const url = request.nextUrl.clone();

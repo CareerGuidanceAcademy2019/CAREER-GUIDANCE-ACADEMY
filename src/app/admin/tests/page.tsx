@@ -808,6 +808,7 @@ export default function AdminMockTestsPage() {
           question: q.question,
           options: q.options as any,
           correctOptionIndex: q.correctOptionIndex,
+          selectedCorrectOptions: q.selectedCorrectOptions || [q.correctOptionIndex],
           explanation: q.explanation || '',
           groupId: newGrpId,
           passageText: pText,
@@ -815,7 +816,7 @@ export default function AdminMockTestsPage() {
           passageImagePath: null,
           imagePath: q.imagePath || null,
           imageAlt: q.imageAlt || null,
-        }));
+        } as any));
         updatedGroups = [...updatedGroups, newGroup];
         updatedQuestions = [...updatedQuestions, ...linkedQs];
         addedPassageQsCount = linkedQs.length;
@@ -1191,6 +1192,7 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
       question: q.question,
       options: q.options as any,
       correctOptionIndex: q.correctOptionIndex,
+      selectedCorrectOptions: q.selectedCorrectOptions || [q.correctOptionIndex],
       explanation: q.explanation || '',
       groupId: newGrpId,
       passageText: pText,
@@ -1198,7 +1200,7 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
       passageImagePath: null,
       imagePath: q.imagePath || null,
       imageAlt: q.imageAlt || null,
-    }));
+    } as any));
 
     const updatedGroups = [...(editingTest.questionGroups || []), newGroup];
     const updatedQuestions = [...editingTest.questions, ...linkedQs];
@@ -1370,11 +1372,30 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
     }
   };
 
-  const handleUpdateQuestionCorrectOpt = (qId: string, optIndex: number) => {
+  const handleUpdateQuestionCorrectOpt = (qId: string, optIndex: number, toggleMulti = false) => {
     if (!editingTest) return;
-    const updated = editingTest.questions.map((q) =>
-      q.id === qId ? { ...q, correctOptionIndex: optIndex } : q
-    );
+    const updated = editingTest.questions.map((q: any) => {
+      if (q.id !== qId) return q;
+      if (!toggleMulti) {
+        return { ...q, correctOptionIndex: optIndex, selectedCorrectOptions: [optIndex] };
+      }
+      const prevList: number[] =
+        Array.isArray(q.selectedCorrectOptions) && q.selectedCorrectOptions.length > 0
+          ? [...q.selectedCorrectOptions]
+          : [q.correctOptionIndex ?? 0];
+      let nextList: number[];
+      if (prevList.includes(optIndex)) {
+        nextList = prevList.filter((x) => x !== optIndex);
+        if (nextList.length === 0) nextList = [optIndex];
+      } else {
+        nextList = [...prevList, optIndex].sort();
+      }
+      return {
+        ...q,
+        correctOptionIndex: nextList[0],
+        selectedCorrectOptions: nextList,
+      };
+    });
     setEditingTest({ ...editingTest, questions: updated });
   };
 
@@ -1387,6 +1408,24 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
 
     // Automatically commit any pending passage or pasted questions in the input boxes before saving
     const finalEditingTest = flushPendingInputsIntoTest(editingTest, true);
+
+    // Block saving if any question has more than one correct answer selected
+    const multiAnsIdx = (finalEditingTest.questions || []).findIndex(
+      (q: any) => Array.isArray(q.selectedCorrectOptions) && q.selectedCorrectOptions.length > 1
+    );
+    if (multiAnsIdx !== -1) {
+      const badQ: any = finalEditingTest.questions[multiAnsIdx];
+      const labels = (badQ.selectedCorrectOptions || [])
+        .map((i: number) => String.fromCharCode(65 + i))
+        .join(', ');
+      setEditingTest(finalEditingTest);
+      showToast(
+        'Multiple Correct Answers Selected',
+        `Question Q${multiAnsIdx + 1} has multiple correct answers selected (Options ${labels}). Every question must have ONLY ONE correct answer.`,
+        'error'
+      );
+      return;
+    }
 
     if (finalEditingTest.status === 'Published' && finalEditingTest.questions.length === 0) {
       showToast('No Questions Added', 'Please upload questions before publishing live, or set status to Draft.', 'error');
@@ -4424,43 +4463,107 @@ Explanation: Paragraph 1 highlights exponential industrial growth and urban expa
                               )}
                             </div>
 
-                            {/* Options Grid with Clickable Correct Answer Selector */}
-                            <div className="grid grid-cols-2 gap-1.5">
-                              {q.options.map((opt, oIdx) => {
-                                const isCorrect = q.correctOptionIndex === oIdx;
-                                const optBn = q.optionsBn?.[oIdx];
-                                return (
-                                  <button
-                                    key={oIdx}
-                                    type="button"
-                                    onClick={() => handleUpdateQuestionCorrectOpt(q.id, oIdx)}
-                                    className={`p-2 rounded-xl text-left border flex items-center gap-2 cursor-pointer transition-all ${
-                                      isCorrect
-                                        ? 'bg-emerald-50 border-emerald-500 text-emerald-800 font-bold'
-                                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
-                                    }`}
-                                  >
-                                    <span
-                                      className={`w-5 h-5 rounded-full text-[10px] font-extrabold flex items-center justify-center shrink-0 ${
-                                        isCorrect ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700'
-                                      }`}
+                            {/* Highlighted Warning if more than one correct answer is selected */}
+                            {(() => {
+                              const selectedList: number[] =
+                                Array.isArray((q as any).selectedCorrectOptions) &&
+                                (q as any).selectedCorrectOptions.length > 0
+                                  ? (q as any).selectedCorrectOptions
+                                  : [q.correctOptionIndex ?? 0];
+                              const hasMultiple = selectedList.length > 1;
+                              const selectedLabels = selectedList
+                                .map((i) => `Option ${String.fromCharCode(65 + i)}`)
+                                .join(', ');
+
+                              return (
+                                <>
+                                  {hasMultiple && (
+                                    <div
+                                      role="alert"
+                                      className="p-3 rounded-xl bg-amber-100 border-2 border-red-500 text-red-950 space-y-2 shadow-2xs"
                                     >
-                                      {String.fromCharCode(65 + oIdx)}
-                                    </span>
-                                    <div className="truncate flex-1">
-                                      <div className="truncate block text-xs">
-                                        <MathText text={getOptionText(opt)} isOption />
+                                      <div className="flex items-start gap-2">
+                                        <span className="px-2 py-0.5 rounded bg-red-600 text-white text-[10px] font-black uppercase tracking-wider shrink-0">
+                                          Highlight Warning
+                                        </span>
+                                        <p className="text-xs font-extrabold text-red-900">
+                                          More than one correct answer selected ({selectedLabels})! Every question in the mock test must have <strong>ONLY ONE</strong> correct answer.
+                                        </p>
                                       </div>
-                                      {optBn && (
-                                        <div className="truncate block text-[10px] text-slate-500">
-                                          <MathText text={getOptionText(optBn)} isOption />
-                                        </div>
-                                      )}
+                                      <div className="flex flex-wrap items-center gap-1.5">
+                                        {selectedList.map((selIdx) => (
+                                          <button
+                                            key={selIdx}
+                                            type="button"
+                                            onClick={() => handleUpdateQuestionCorrectOpt(q.id, selIdx, false)}
+                                            className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-extrabold cursor-pointer"
+                                          >
+                                            Keep Only Option {String.fromCharCode(65 + selIdx)}
+                                          </button>
+                                        ))}
+                                      </div>
                                     </div>
-                                  </button>
-                                );
-                              })}
-                            </div>
+                                  )}
+
+                                  {/* Options Grid with Clickable Correct Answer Selector */}
+                                  <div className="grid grid-cols-2 gap-1.5">
+                                    {q.options.map((opt, oIdx) => {
+                                      const isSelectedInList = selectedList.includes(oIdx);
+                                      const isCorrect = q.correctOptionIndex === oIdx || isSelectedInList;
+                                      const optBn = q.optionsBn?.[oIdx];
+                                      return (
+                                        <div
+                                          key={oIdx}
+                                          className={`p-2 rounded-xl text-left border flex items-center gap-2 transition-all ${
+                                            isSelectedInList && hasMultiple
+                                              ? 'bg-amber-100 border-2 border-red-500 text-red-900 font-bold'
+                                              : isCorrect
+                                              ? 'bg-emerald-50 border-emerald-500 text-emerald-800 font-bold'
+                                              : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                                          }`}
+                                        >
+                                          <button
+                                            type="button"
+                                            onClick={() => handleUpdateQuestionCorrectOpt(q.id, oIdx, false)}
+                                            className={`w-5 h-5 rounded-full text-[10px] font-extrabold flex items-center justify-center shrink-0 cursor-pointer ${
+                                              isSelectedInList && hasMultiple
+                                                ? 'bg-red-600 text-white'
+                                                : isCorrect
+                                                ? 'bg-emerald-600 text-white'
+                                                : 'bg-slate-200 text-slate-700'
+                                            }`}
+                                            title={`Set Option ${String.fromCharCode(65 + oIdx)} as the single correct answer`}
+                                          >
+                                            {String.fromCharCode(65 + oIdx)}
+                                          </button>
+                                          <input
+                                            type="checkbox"
+                                            checked={isSelectedInList}
+                                            onChange={() => handleUpdateQuestionCorrectOpt(q.id, oIdx, true)}
+                                            title={`Toggle Option ${String.fromCharCode(65 + oIdx)}`}
+                                            className="w-3.5 h-3.5 rounded accent-emerald-600 cursor-pointer shrink-0"
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() => handleUpdateQuestionCorrectOpt(q.id, oIdx, false)}
+                                            className="truncate flex-1 text-left cursor-pointer"
+                                          >
+                                            <div className="truncate block text-xs">
+                                              <MathText text={getOptionText(opt)} isOption />
+                                            </div>
+                                            {optBn && (
+                                              <div className="truncate block text-[10px] text-slate-500">
+                                                <MathText text={getOptionText(optBn)} isOption />
+                                              </div>
+                                            )}
+                                          </button>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </>
+                              );
+                            })()}
                           </div>
                         )}
                       </React.Fragment>

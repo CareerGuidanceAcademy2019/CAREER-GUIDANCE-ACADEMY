@@ -1190,6 +1190,24 @@ export default function AdminMockTestQuestionsPage() {
       return;
     }
 
+    const multiAnsQIdx = questions.findIndex(
+      (q) => Array.isArray(q.selectedCorrectOptions) && q.selectedCorrectOptions.length > 1
+    );
+    if (multiAnsQIdx !== -1) {
+      const badQ = questions[multiAnsQIdx];
+      const labels = (badQ.selectedCorrectOptions || [])
+        .map((idx) => String.fromCharCode(65 + idx))
+        .join(', ');
+      setActiveQIndex(multiAnsQIdx);
+      setActiveTab('review');
+      showToast(
+        'Multiple Correct Answers Selected',
+        `Question ${multiAnsQIdx + 1} has multiple correct answers selected (Options ${labels}). Every question in the mock test must have only ONE correct answer.`,
+        'error'
+      );
+      return;
+    }
+
     setSaving(true);
     try {
       const grpMap = new Map(questionGroups.map((g) => [g.id, g]));
@@ -1812,76 +1830,189 @@ export default function AdminMockTestQuestionsPage() {
                 </div>
 
                 {/* Options 4 Normal Text Choices Editor */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700">
-                      Option Choices (Normal Text — Click letter to set correct answer)
-                    </label>
-                    <span className="text-[11px] font-extrabold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-300">
-                      Correct Answer: Option {String.fromCharCode(65 + currentQ.correctOptionIndex)}
-                    </span>
-                  </div>
+                {(() => {
+                  const selectedCorrectList: number[] =
+                    Array.isArray(currentQ.selectedCorrectOptions) && currentQ.selectedCorrectOptions.length > 0
+                      ? currentQ.selectedCorrectOptions
+                      : [typeof currentQ.correctOptionIndex === 'number' ? currentQ.correctOptionIndex : 0];
+                  const hasMultipleCorrect = selectedCorrectList.length > 1;
+                  const selectedLabels = selectedCorrectList
+                    .map((idx) => `Option ${String.fromCharCode(65 + idx)}`)
+                    .join(', ');
 
-                  <div className="space-y-2.5">
-                    {currentQ.options.map((opt, optIdx) => {
-                      const isCorrect = currentQ.correctOptionIndex === optIdx;
-                      const optText = getOptionText(opt);
+                  return (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700">
+                          Option Choices (Click letter to set single answer, or checkbox to toggle)
+                        </label>
+                        {hasMultipleCorrect ? (
+                          <span className="text-[11px] font-black text-red-900 bg-amber-200 px-3 py-1 rounded-lg border-2 border-red-500 animate-pulse">
+                            ⚠️ Multiple Answers Selected: {selectedLabels}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] font-extrabold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-300">
+                            Correct Answer: Option {String.fromCharCode(65 + currentQ.correctOptionIndex)}
+                          </span>
+                        )}
+                      </div>
 
-                      return (
+                      {/* Highlighted Warning Banner when more than 1 correct answer is selected */}
+                      {hasMultipleCorrect && (
                         <div
-                          key={optIdx}
-                          className={`p-2.5 rounded-2xl border transition-all flex items-center gap-3 ${
-                            isCorrect
-                              ? 'border-2 border-emerald-500 bg-emerald-50/70 shadow-2xs'
-                              : 'border-slate-200 bg-white hover:border-slate-300'
-                          }`}
+                          role="alert"
+                          className="p-4 rounded-2xl bg-amber-100 border-2 border-red-500 text-red-950 shadow-sm space-y-2.5"
                         >
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setQuestions((prev) => {
-                                const copy = [...prev];
-                                copy[activeQIndex] = { ...copy[activeQIndex], correctOptionIndex: optIdx };
-                                return copy;
-                              });
-                            }}
-                            className={`w-8 h-8 rounded-xl text-xs font-black flex items-center justify-center shrink-0 cursor-pointer transition-all ${
-                              isCorrect
-                                ? 'bg-emerald-600 text-white shadow-xs scale-105'
-                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                            }`}
-                            title={`Set Option ${String.fromCharCode(65 + optIdx)} as correct answer`}
-                          >
-                            {String.fromCharCode(65 + optIdx)}
-                          </button>
-
-                          <input
-                            type="text"
-                            value={optText}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setQuestions((prev) => {
-                                const copy = [...prev];
-                                const opts = [...copy[activeQIndex].options];
-                                opts[optIdx] = val;
-                                copy[activeQIndex] = { ...copy[activeQIndex], options: opts };
-                                return copy;
-                              });
-                            }}
-                            placeholder={`Enter text for Option ${String.fromCharCode(65 + optIdx)}`}
-                            className="flex-1 px-3.5 py-2 rounded-xl border border-slate-200 text-xs sm:text-sm font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                          />
-
-                          {isCorrect && (
-                            <span className="text-xs font-extrabold text-emerald-700 bg-emerald-100 px-3 py-1 rounded-xl shrink-0 inline-flex items-center gap-1">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Correct Choice
+                          <div className="flex items-start gap-2.5">
+                            <span className="px-2 py-0.5 rounded-md bg-red-600 text-white text-[10px] font-black uppercase tracking-wider shrink-0 mt-0.5">
+                              Highlight Warning
                             </span>
-                          )}
+                            <div className="space-y-1 text-xs">
+                              <p className="font-black text-red-900 text-sm">
+                                More than one correct answer is selected ({selectedLabels})!
+                              </p>
+                              <p className="font-semibold text-red-800">
+                                Every question in the mock test must have <strong>ONLY ONE</strong> correct answer. Please select which single option should be kept as the official answer key:
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 pt-1">
+                            {selectedCorrectList.map((idx) => (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => {
+                                  setQuestions((prev) => {
+                                    const copy = [...prev];
+                                    copy[activeQIndex] = {
+                                      ...copy[activeQIndex],
+                                      correctOptionIndex: idx,
+                                      selectedCorrectOptions: [idx],
+                                      warnings: (copy[activeQIndex].warnings || []).filter(
+                                        (w) => !w.toLowerCase().includes('multiple correct answers')
+                                      ),
+                                    };
+                                    return copy;
+                                  });
+                                }}
+                                className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold cursor-pointer shadow-2xs"
+                              >
+                                Keep Only Option {String.fromCharCode(65 + idx)}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                      )}
+
+                      <div className="space-y-2.5">
+                        {currentQ.options.map((opt, optIdx) => {
+                          const isSelectedInList = selectedCorrectList.includes(optIdx);
+                          const isPrimaryCorrect = currentQ.correctOptionIndex === optIdx;
+                          const optText = getOptionText(opt);
+
+                          return (
+                            <div
+                              key={optIdx}
+                              className={`p-2.5 rounded-2xl border transition-all flex items-center gap-3 ${
+                                isSelectedInList && hasMultipleCorrect
+                                  ? 'border-2 border-amber-500 bg-amber-50/90 shadow-2xs'
+                                  : isSelectedInList || isPrimaryCorrect
+                                  ? 'border-2 border-emerald-500 bg-emerald-50/70 shadow-2xs'
+                                  : 'border-slate-200 bg-white hover:border-slate-300'
+                              }`}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setQuestions((prev) => {
+                                    const copy = [...prev];
+                                    copy[activeQIndex] = {
+                                      ...copy[activeQIndex],
+                                      correctOptionIndex: optIdx,
+                                      selectedCorrectOptions: [optIdx],
+                                      warnings: (copy[activeQIndex].warnings || []).filter(
+                                        (w) => !w.toLowerCase().includes('multiple correct answers')
+                                      ),
+                                    };
+                                    return copy;
+                                  });
+                                }}
+                                className={`w-8 h-8 rounded-xl text-xs font-black flex items-center justify-center shrink-0 cursor-pointer transition-all ${
+                                  isSelectedInList && hasMultipleCorrect
+                                    ? 'bg-amber-600 text-white shadow-xs scale-105'
+                                    : isSelectedInList || isPrimaryCorrect
+                                    ? 'bg-emerald-600 text-white shadow-xs scale-105'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                }`}
+                                title={`Set Option ${String.fromCharCode(65 + optIdx)} as the single correct answer`}
+                              >
+                                {String.fromCharCode(65 + optIdx)}
+                              </button>
+
+                              <input
+                                type="checkbox"
+                                checked={isSelectedInList}
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  setQuestions((prev) => {
+                                    const copy = [...prev];
+                                    const cur = copy[activeQIndex];
+                                    const prevList =
+                                      Array.isArray(cur.selectedCorrectOptions) && cur.selectedCorrectOptions.length > 0
+                                        ? [...cur.selectedCorrectOptions]
+                                        : [cur.correctOptionIndex];
+                                    let nextList: number[];
+                                    if (checked) {
+                                      nextList = prevList.includes(optIdx) ? prevList : [...prevList, optIdx].sort();
+                                    } else {
+                                      nextList = prevList.filter((x) => x !== optIdx);
+                                      if (nextList.length === 0) nextList = [optIdx];
+                                    }
+                                    copy[activeQIndex] = {
+                                      ...cur,
+                                      correctOptionIndex: nextList[0],
+                                      selectedCorrectOptions: nextList,
+                                    };
+                                    return copy;
+                                  });
+                                }}
+                                title={`Toggle Option ${String.fromCharCode(65 + optIdx)} selection`}
+                                className="w-4 h-4 rounded accent-emerald-600 cursor-pointer shrink-0"
+                              />
+
+                              <input
+                                type="text"
+                                value={optText}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setQuestions((prev) => {
+                                    const copy = [...prev];
+                                    const opts = [...copy[activeQIndex].options];
+                                    opts[optIdx] = val;
+                                    copy[activeQIndex] = { ...copy[activeQIndex], options: opts };
+                                    return copy;
+                                  });
+                                }}
+                                placeholder={`Enter text for Option ${String.fromCharCode(65 + optIdx)}`}
+                                className="flex-1 px-3.5 py-2 rounded-xl border border-slate-200 text-xs sm:text-sm font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                              />
+
+                              {isSelectedInList && hasMultipleCorrect ? (
+                                <span className="text-xs font-extrabold text-red-800 bg-amber-200 border border-red-400 px-3 py-1 rounded-xl shrink-0 inline-flex items-center gap-1">
+                                  ⚠️ Multiple Selected
+                                </span>
+                              ) : (isSelectedInList || isPrimaryCorrect) ? (
+                                <span className="text-xs font-extrabold text-emerald-700 bg-emerald-100 px-3 py-1 rounded-xl shrink-0 inline-flex items-center gap-1">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Correct Choice
+                                </span>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Explanation */}
                 <div

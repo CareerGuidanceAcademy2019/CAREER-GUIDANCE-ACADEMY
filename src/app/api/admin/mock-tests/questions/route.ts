@@ -205,11 +205,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing testId.' }, { status: 400 });
     }
 
+    for (let idx = 0; idx < questions.length; idx++) {
+      const q = questions[idx];
+      if (Array.isArray(q?.selectedCorrectOptions) && q.selectedCorrectOptions.length > 1) {
+        return NextResponse.json(
+          {
+            error: `Question #${idx + 1} has multiple correct answers selected (${q.selectedCorrectOptions
+              .map((o: number) => String.fromCharCode(65 + o))
+              .join(', ')}). Every question in a mock test must have only ONE correct answer.`,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     const supabaseAdmin = createAdminSupabase();
 
     // 1. Fetch existing image paths to track any deletions
     const [existingQRes, existingGroupRes, existingKeyRes] = await Promise.all([
-      supabaseAdmin.from('mock_questions').select('id, image_path, options, options_bn').eq('test_id', testId),
+      supabaseAdmin.from('mock_questions').select('id, position, image_path, options, options_bn').eq('test_id', testId).order('position', { ascending: true }),
       supabaseAdmin.from('mock_question_groups').select('id, image_path').eq('test_id', testId),
       supabaseAdmin
         .from('mock_question_keys')
@@ -302,10 +316,15 @@ export async function POST(request: Request) {
     }
 
     // 5. Insert questions and their answer keys
+    const existingOrderedQs = existingQRes.data || [];
     let savedQIds: string[] = [];
     if (questions.length > 0) {
       const qRows = questions.map((q: any, idx: number) => {
-        const qId = q.id && !q.id.startsWith('temp-') ? q.id : `q-${Date.now()}-${idx}`;
+        const existingIdAtPos = existingOrderedQs[idx]?.id;
+        const qId =
+          q.id && !String(q.id).startsWith('temp-')
+            ? q.id
+            : existingIdAtPos || `q-${Date.now()}-${idx}`;
         savedQIds.push(qId);
         const mappedGroupId = q.groupId ? groupInsertMap.get(q.groupId) || q.groupId : null;
 
@@ -354,6 +373,7 @@ export async function POST(request: Request) {
       if (keyErr) {
         throw new Error(`Failed to save question keys: ${keyErr.message}`);
       }
+      await supabaseAdmin.rpc('recalculate_test_attempts', { p_test_id: testId });
     }
 
     // 6. Update question_count, total_marks, and self-contained questions array on mock_tests

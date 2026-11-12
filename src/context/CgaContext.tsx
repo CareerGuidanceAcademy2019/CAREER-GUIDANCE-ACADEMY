@@ -265,7 +265,8 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         } catch {}
       }
       setIsHydrated(true);
-      await refresh(Boolean(next && next.role === 'ADMIN'));
+      // Trigger database load without blocking login redirect so 100+ concurrent logins navigate immediately
+      void refresh(Boolean(next && next.role === 'ADMIN'));
     },
     [refresh]
   );
@@ -859,27 +860,32 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
 
   const submitMockTestAttempt = useCallback<CgaContextType['submitMockTestAttempt']>(
     async ({ testId, answers, timeTakenMinutes }) => {
-      const res = await withSingleSubmit(async () => {
-        const r = await cgaService.submitAttempt(testId, answers, timeTakenMinutes);
-        if (!r.success || !r.attempt) {
-          showToast('Could not submit test', r.error, 'error');
-          return null;
-        }
-        const attempt: TestAttempt = {
-          ...r.attempt,
-          studentName: sessionRef.current?.name ?? '',
-        };
-        await refresh();
-        showToast(
-          'Mock Test Submitted!',
-          `You scored ${attempt.score}/${attempt.totalMarks}. Check your Batch Rank & solutions below.`,
-          'success'
-        );
-        return attempt;
-      });
-      return res ?? null;
+      const r = await cgaService.submitAttempt(testId, answers, timeTakenMinutes);
+      if (!r.success || !r.attempt) {
+        showToast('Could not submit test', r.error, 'error');
+        return null;
+      }
+      const attempt: TestAttempt = {
+        ...r.attempt,
+        studentName: sessionRef.current?.name || r.attempt.studentName || 'Student',
+      };
+      // Optimistically append attempt into db.testAttempts immediately so scorecard renders in 0ms
+      setDb((prev) => ({
+        ...prev,
+        testAttempts: [
+          attempt,
+          ...(prev.testAttempts || []).filter((a) => a.id !== attempt.id),
+        ],
+      }));
+      void refresh(true);
+      showToast(
+        'Mock Test Submitted!',
+        `You scored ${attempt.score}/${attempt.totalMarks}. Check your Batch Rank & solutions below.`,
+        'success'
+      );
+      return attempt;
     },
-    [refresh, showToast, withSingleSubmit]
+    [refresh, showToast]
   );
 
   // ---------------- Admin ----------------

@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
 
 export interface RateLimitResult {
   allowed: boolean;
@@ -15,21 +14,24 @@ export interface RateLimitConfig {
 }
 
 export const RATE_LIMIT_RULES = {
-  LOGIN_ACCOUNT: { limit: 5, windowSeconds: 900 }, // 5 per 15 min per account
-  LOGIN_IP: { limit: 20, windowSeconds: 900 },      // 20 per 15 min per IP
-  REGISTER_IP: { limit: 5, windowSeconds: 3600 },   // 5 per hour per IP
-  FORGOT_PW_EMAIL: { limit: 3, windowSeconds: 3600 }, // 3 per hour per email
-  FORGOT_PW_IP: { limit: 10, windowSeconds: 3600 },   // 10 per hour per IP
-  ENQUIRY_IP: { limit: 5, windowSeconds: 3600 },    // 5 per hour per IP
-  PAYMENT_REQUEST: { limit: 5, windowSeconds: 3600 }, // 5 per hour per student
-  PAYMENT_PROOF: { limit: 10, windowSeconds: 3600 },  // 10 per hour
-  MOCK_SAVE_ANSWER: { limit: 60, windowSeconds: 60 }, // 60 per minute per student
-  MOCK_START: { limit: 10, windowSeconds: 60 },       // 10 per min per student
-  MOCK_SUBMIT: { limit: 5, windowSeconds: 60 },       // 5 per min per student
-  ADMIN_ACTION: { limit: 60, windowSeconds: 60 },     // 60 per min
-  ADMIN_EXPORT: { limit: 10, windowSeconds: 60 },     // 10 per min
-  GENERAL_API: { limit: 120, windowSeconds: 60 },     // 120 per min per IP
+  LOGIN_ACCOUNT: { limit: 15, windowSeconds: 900 },    // 15 per 15 min per account
+  LOGIN_IP: { limit: 500, windowSeconds: 900 },        // 500 per 15 min per IP (supports 100+ users on shared Wi-Fi/CGNAT)
+  REGISTER_IP: { limit: 100, windowSeconds: 3600 },    // 100 per hour per IP
+  FORGOT_PW_EMAIL: { limit: 10, windowSeconds: 3600 }, // 10 per hour per email
+  FORGOT_PW_IP: { limit: 100, windowSeconds: 3600 },   // 100 per hour per IP
+  ENQUIRY_IP: { limit: 30, windowSeconds: 3600 },      // 30 per hour per IP
+  PAYMENT_REQUEST: { limit: 30, windowSeconds: 3600 }, // 30 per hour per student
+  PAYMENT_PROOF: { limit: 30, windowSeconds: 3600 },   // 30 per hour
+  MOCK_SAVE_ANSWER: { limit: 180, windowSeconds: 60 }, // 180 per minute per student
+  MOCK_START: { limit: 60, windowSeconds: 60 },        // 60 per min per student
+  MOCK_SUBMIT: { limit: 30, windowSeconds: 60 },       // 30 per min per student
+  ADMIN_ACTION: { limit: 180, windowSeconds: 60 },     // 180 per min
+  ADMIN_EXPORT: { limit: 30, windowSeconds: 60 },      // 30 per min
+  GENERAL_API: { limit: 1500, windowSeconds: 60 },     // 1500 per min per IP
 } as const;
+
+// Fast 0ms in-memory rate limit bucket store (avoids extra DB roundtrips during rush hour)
+const memoryBuckets = new Map<string, { count: number; resetAt: number }>();
 
 /**
  * Extract client IP from headers safely
@@ -52,7 +54,7 @@ export function getClientIp(req: Request): string {
 
 /**
  * Atomic sliding window rate limiter
- * Backed by Supabase check_rate_limit RPC (or optional Upstash Redis)
+ * Uses fast 0ms in-memory buckets (or optional Upstash Redis) with zero DB write amplification.
  */
 export async function checkRateLimit(
   key: string,
@@ -85,7 +87,6 @@ export async function checkRateLimit(
         let ttl = results[1]?.result;
 
         if (currentCount === 1 || ttl === -1) {
-          // Set expiry
           await fetch(`${upstashUrl}/EXPIRE/${sanitizedKey}/${windowSeconds}`, {
             headers: { Authorization: `Bearer ${upstashToken}` },
           });
@@ -105,46 +106,41 @@ export async function checkRateLimit(
         };
       }
     } catch {
-      // Fallback to database
+      // Fallback to in-memory limiter
     }
   }
 
-  // 2. Primary Serverless Engine: Supabase atomic sliding window RPC
-  try {
-    const sb = createAdminSupabase();
-    const { data, error } = await sb.rpc('check_rate_limit', {
-      p_key: sanitizedKey,
-      p_limit: limit,
-      p_window_seconds: windowSeconds,
-    });
-
-    if (error || !data) {
-      // In case of transient db error, fail open for normal requests with warning
-      return {
-        allowed: true,
-        limit,
-        remaining: limit - 1,
-        resetSeconds: windowSeconds,
-        retryAfter: 0,
-      };
+  // 2. High-concurrency 0ms in-memory limiter
+  const now = Date.now();
+  if (memoryBuckets.size > 5000) {
+    for (const [k, v] of memoryBuckets.entries()) {
+      if (now > v.resetAt) memoryBuckets.delete(k);
     }
+  }
 
-    return {
-      allowed: Boolean(data.allowed),
-      limit: Number(data.limit ?? limit),
-      remaining: Number(data.remaining ?? 0),
-      resetSeconds: Number(data.resetSeconds ?? windowSeconds),
-      retryAfter: Number(data.retryAfter ?? 0),
-    };
-  } catch {
+  const windowMs = windowSeconds * 1000;
+  const existing = memoryBuckets.get(sanitizedKey);
+  if (!existing || now > existing.resetAt) {
+    memoryBuckets.set(sanitizedKey, { count: 1, resetAt: now + windowMs });
     return {
       allowed: true,
       limit,
-      remaining: limit - 1,
+      remaining: Math.max(0, limit - 1),
       resetSeconds: windowSeconds,
       retryAfter: 0,
     };
   }
+
+  existing.count += 1;
+  const allowed = existing.count <= limit;
+  const resetSeconds = Math.max(1, Math.ceil((existing.resetAt - now) / 1000));
+  return {
+    allowed,
+    limit,
+    remaining: Math.max(0, limit - existing.count),
+    resetSeconds,
+    retryAfter: allowed ? 0 : resetSeconds,
+  };
 }
 
 /**

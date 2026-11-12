@@ -146,12 +146,32 @@ export async function POST(request: Request) {
       unifiedQuestions = [...fromDb, ...rawQList];
     }
 
+    // Validate single correct answer per question
+    for (let idx = 0; idx < unifiedQuestions.length; idx++) {
+      const q = unifiedQuestions[idx];
+      if (Array.isArray(q?.selectedCorrectOptions) && q.selectedCorrectOptions.length > 1) {
+        return NextResponse.json(
+          {
+            error: `Question #${idx + 1} has multiple correct answers selected (${q.selectedCorrectOptions
+              .map((o: number) => String.fromCharCode(65 + o))
+              .join(', ')}). Every question in a mock test must have only ONE correct answer.`,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     // Enrich every question with its passage metadata so JSONB is 100% self-contained
     const qList = unifiedQuestions.map((q: any, idx: number) => {
       const grp = q.groupId ? groupMap.get(q.groupId) : null;
+      const existingAtPos = existingDbQs[idx]?.id;
+      const resolvedId =
+        q.id && !String(q.id).startsWith('temp-')
+          ? q.id
+          : existingAtPos || `q-${Date.now()}-${idx}`;
       return {
         ...q,
-        id: q.id || `q-${Date.now()}-${idx}`,
+        id: resolvedId,
         position: idx + 1,
         question: q.question || q.questionText || '',
         questionBn: q.questionBn || q.questionTextBn || undefined,
@@ -279,6 +299,7 @@ export async function POST(request: Request) {
           explanation_image_alt: q.explanationImageAlt || null,
         }));
         await admin.from('mock_question_keys').insert(keyRows);
+        await admin.rpc('recalculate_test_attempts', { p_test_id: t.id });
       }
     } catch {
       // Non-fatal if relational sync encounters constraint issue; mock_tests.questions is already saved

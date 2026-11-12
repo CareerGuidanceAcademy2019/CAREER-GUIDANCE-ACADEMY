@@ -174,11 +174,11 @@ function getMatchingAllowedKeys(targetKey: string, title?: string): { keys: Set<
 
 export async function POST(request: Request) {
   try {
-    const active = await requireActiveSession();
+    const active = await requireActiveSession(request);
     if (!active) {
-      return NextResponse.json({ error: 'Unauthorized or session revoked on another device.' }, { status: 401 });
+      return NextResponse.json({ error: 'Please sign in again to start the mock test.' }, { status: 401 });
     }
-    const { user, supabase } = active;
+    const { user, role } = active;
 
     const ip = getClientIp(request);
     const rateRes = await checkRateLimit(
@@ -199,15 +199,11 @@ export async function POST(request: Request) {
 
     // Authoritative Server-side Verification & Question Retrieval via Admin Client
     const admin = createAdminSupabase();
-
-    // Check if user is an administrator
-    const { data: profile } = await admin
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .maybeSingle();
-
-    const isAdmin = profile?.role === 'admin' || user.email === 'angatsaha825@gmail.com';
+    const isAdmin =
+      role === 'admin' ||
+      role === 'ADMIN' ||
+      user.email === 'angatsaha825@gmail.com' ||
+      user.email === 'careerguidanceacademy2019@gmail.com';
 
     // Retrieve test record
     const { data: dbTest } = await admin
@@ -265,79 +261,107 @@ export async function POST(request: Request) {
       }
     }
 
-    // 3. Strict Enrollment Verification (Course Isolation)
+    // 3. Strict Enrollment Verification (Course Isolation + Combined Course Bundles + Free Tests)
     if (!isAdmin) {
       const testCourseId = (testRecord.course_id || testRecord.courseId || '').toString();
       const testSeriesId = (testRecord.series_id || testRecord.seriesId || '').toString();
       const testTitle = (testRecord.title || '').toString();
+      const isFreeTest = Boolean(
+        (testRecord as any).is_free ||
+          (testRecord as any).isFree ||
+          Number((testRecord as any).price ?? 1) === 0
+      );
 
+      let hasValidEnrollment = isFreeTest;
       const { keys: allowedKeys, sectionLabel } = getMatchingAllowedKeys(testSeriesId || testCourseId, testTitle);
+      if (testId) allowedKeys.add(testId.toLowerCase());
+      if (testCourseId) allowedKeys.add(testCourseId.toLowerCase());
+      if (testSeriesId) allowedKeys.add(testSeriesId.toLowerCase());
 
-      // Check series enrollments
-      const { data: seriesEnrs } = await admin
-        .from('series_enrollments')
-        .select('series_id, access_valid_until')
-        .eq('student_id', user.id);
+      if (!hasValidEnrollment) {
+        // Fetch student enrollments, series enrollments, and verified payments in parallel
+        const [{ data: seriesEnrs }, { data: courseEnrs }, { data: verifiedPayments }] = await Promise.all([
+          admin.from('series_enrollments').select('series_id, access_valid_until').eq('student_id', user.id),
+          admin.from('enrollments').select('course_id, access_valid_until').eq('student_id', user.id),
+          admin
+            .from('fee_payments')
+            .select('item_id, course_id, status')
+            .eq('student_id', user.id)
+            .in('status', ['Verified', 'Paid', 'Approved']),
+        ]);
 
-      // Check course enrollments
-      const { data: courseEnrs } = await admin
-        .from('enrollments')
-        .select('course_id, access_valid_until')
-        .eq('student_id', user.id);
+        const now = Date.now();
+        const enrolledCourseIds = new Set<string>();
 
-      const now = Date.now();
-      let hasValidEnrollment = false;
-
-      // Verify series enrollment
-      if (seriesEnrs && seriesEnrs.length > 0) {
-        for (const se of seriesEnrs) {
-          if (allowedKeys.has(se.series_id?.toLowerCase())) {
-            if (!se.access_valid_until || new Date(se.access_valid_until).getTime() > now) {
-              hasValidEnrollment = true;
-              break;
+        if (seriesEnrs && seriesEnrs.length > 0) {
+          for (const se of seriesEnrs) {
+            const sid = se.series_id?.toLowerCase();
+            if (sid && allowedKeys.has(sid)) {
+              if (!se.access_valid_until || new Date(se.access_valid_until).getTime() > now) {
+                hasValidEnrollment = true;
+                break;
+              }
             }
           }
         }
-      }
 
-      // Verify course enrollment
-      if (!hasValidEnrollment && courseEnrs && courseEnrs.length > 0) {
-        for (const ce of courseEnrs) {
-          if (allowedKeys.has(ce.course_id?.toLowerCase())) {
+        if (!hasValidEnrollment && courseEnrs && courseEnrs.length > 0) {
+          for (const ce of courseEnrs) {
+            const cid = ce.course_id?.toLowerCase();
             if (!ce.access_valid_until || new Date(ce.access_valid_until).getTime() > now) {
-              hasValidEnrollment = true;
-              break;
+              if (ce.course_id) enrolledCourseIds.add(ce.course_id);
+              if (cid && allowedKeys.has(cid)) {
+                hasValidEnrollment = true;
+                break;
+              }
             }
           }
         }
-      }
 
-      // Verify fee_payments (direct verified payments fallback)
-      if (!hasValidEnrollment) {
-        const { data: verifiedPayments } = await admin
-          .from('fee_payments')
-          .select('item_id, course_id, status')
-          .eq('student_id', user.id)
-          .eq('status', 'Verified');
-
-        if (verifiedPayments && verifiedPayments.length > 0) {
+        if (!hasValidEnrollment && verifiedPayments && verifiedPayments.length > 0) {
           for (const vp of verifiedPayments) {
-            const key = (vp.item_id || vp.course_id || '').toLowerCase();
-            if (key && allowedKeys.has(key)) {
+            const itemKey = (vp.item_id || '').toLowerCase();
+            const courseKey = (vp.course_id || '').toLowerCase();
+            if (vp.course_id) enrolledCourseIds.add(vp.course_id);
+            if (vp.item_id) enrolledCourseIds.add(vp.item_id);
+            if ((itemKey && allowedKeys.has(itemKey)) || (courseKey && allowedKeys.has(courseKey))) {
               hasValidEnrollment = true;
               break;
             }
           }
         }
-      }
 
-      if (!hasValidEnrollment) {
-        return NextResponse.json(
-          {
-            error: `Access Restricted: You are not enrolled in ${sectionLabel}. Enrolling in a specific mock test series or course gives you access only to that specific section's tests.`,
-          },
-          { status: 403 }
-        );
+        // Check Combined Course Bundles (courses that bundle this mock test or series)
+        if (!hasValidEnrollment && enrolledCourseIds.size > 0) {
+          const { data: bundledCourses } = await admin
+            .from('courses')
+            .select('id, bundled_test_ids, bundled_series_ids')
+            .in('id', Array.from(enrolledCourseIds));
+
+          if (bundledCourses && bundledCourses.length > 0) {
+            for (const bc of bundledCourses) {
+              const bTests: string[] = Array.isArray(bc.bundled_test_ids) ? bc.bundled_test_ids : [];
+              const bSeries: string[] = Array.isArray(bc.bundled_series_ids) ? bc.bundled_series_ids : [];
+              if (
+                bTests.includes(testId) ||
+                (testSeriesId && bSeries.includes(testSeriesId)) ||
+                bSeries.some((s) => allowedKeys.has(String(s).toLowerCase()))
+              ) {
+                hasValidEnrollment = true;
+                break;
+              }
+            }
+          }
+        }
+
+        if (!hasValidEnrollment) {
+          return NextResponse.json(
+            {
+              error: `Access Restricted: You are not enrolled in ${sectionLabel}. Enrolling in a specific mock test series or course gives you access only to that specific section's tests.`,
+            },
+            { status: 403 }
+          );
+        }
       }
     }
 
@@ -458,8 +482,13 @@ export async function POST(request: Request) {
       };
     });
 
-    // 7. Ensure in-progress attempt is initiated in mock_attempts
-    let startedAt = new Date().toISOString();
+    // 7. Ensure in-progress attempt is initiated in mock_attempts (with smart timer recovery for disconnected students)
+    const serverNowDate = new Date();
+    const serverNowIso = serverNowDate.toISOString();
+    const durationMinutes = Number(testRecord.duration_minutes || testRecord.durationMinutes || 30);
+    const durationSeconds = Math.max(60, durationMinutes * 60);
+
+    let startedAt = serverNowIso;
     let savedAnswers: Record<string, number> = {};
     if (!isAdmin) {
       // Look for an existing in-progress (unsubmitted) attempt
@@ -474,8 +503,30 @@ export async function POST(request: Request) {
         .maybeSingle();
 
       if (inProgressAtt) {
-        startedAt = inProgressAtt.started_at || startedAt;
         savedAnswers = (inProgressAtt.answers as Record<string, number>) || {};
+        const hasSavedAnswers = Object.keys(savedAnswers).length > 0;
+        const prevStartMs = inProgressAtt.started_at ? new Date(inProgressAtt.started_at).getTime() : serverNowDate.getTime();
+        const elapsedSecs = Math.max(0, Math.floor((serverNowDate.getTime() - prevStartMs) / 1000));
+        const remainingSecs = durationSeconds - elapsedSecs;
+
+        if (!hasSavedAnswers && elapsedSecs > 60) {
+          // Student was disconnected earlier with 0 saved answers: reset started_at so they get the full duration!
+          startedAt = serverNowIso;
+          await admin
+            .from('mock_attempts')
+            .update({ started_at: startedAt })
+            .eq('id', inProgressAtt.id);
+        } else if (hasSavedAnswers && remainingSecs < 600) {
+          // Student had saved answers and was kicked out/disconnected: grant a 10-minute resume window so they don't auto-submit at 0s
+          const graceSeconds = Math.min(durationSeconds, 600);
+          startedAt = new Date(serverNowDate.getTime() - (durationSeconds - graceSeconds) * 1000).toISOString();
+          await admin
+            .from('mock_attempts')
+            .update({ started_at: startedAt })
+            .eq('id', inProgressAtt.id);
+        } else {
+          startedAt = inProgressAtt.started_at || serverNowIso;
+        }
       } else {
         const { count: prevCount } = await admin
           .from('mock_attempts')
@@ -507,10 +558,10 @@ export async function POST(request: Request) {
       success: true,
       testId: testRecord.id,
       title: testRecord.title,
-      durationMinutes: Number(testRecord.duration_minutes || testRecord.durationMinutes || 30),
+      durationMinutes,
       totalMarks: Number(testRecord.total_marks || testRecord.totalMarks || 30),
       negativeMarking: Number(testRecord.negative_marking ?? testRecord.negativeMarking ?? 0),
-      serverNow: new Date().toISOString(),
+      serverNow: serverNowIso,
       startedAt,
       savedAnswers,
       questionGroups: rawGroups,

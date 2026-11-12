@@ -66,6 +66,14 @@ export default function StudentMockTestsPage() {
   const [seriesPapers, setSeriesPapers] = useState<any[]>([]);
   const [loadingPapers, setLoadingPapers] = useState(false);
   const submittingRef = useRef(false);
+  const [isSubmittingExam, setIsSubmittingExam] = useState(false);
+  const [lastAutoSavedAt, setLastAutoSavedAt] = useState<string | null>(null);
+  const [isSavingProgress, setIsSavingProgress] = useState(false);
+  const [unlockedSolutions, setUnlockedSolutions] = useState<Record<string, any[]>>({});
+  const lastServerSavedJsonRef = useRef<string>('{}');
+
+  const getAutoSaveKey = (testId: string) =>
+    `cga_exam_autosave_${currentStudent?.id || 'anon'}_${testId}`;
 
   // Subject Question Posts state
   const [selectedSubjectTab, setSelectedSubjectTab] = useState<string>('all');
@@ -282,10 +290,26 @@ export default function StudentMockTestsPage() {
   const handleFinishTest = async () => {
     if (!activeTest || submittingRef.current) return;
     submittingRef.current = true;
+    setIsSubmittingExam(true);
     const elapsedMins = Math.max(
       1,
       Math.round((activeTest.durationMinutes * 60 - secondsLeft) / 60)
     );
+
+    // Ensure latest answers are persisted locally before submitting
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(
+          getAutoSaveKey(activeTest.id),
+          JSON.stringify({
+            answers: selectedAnswers,
+            markedForReview,
+            currentQIndex,
+            updatedAt: new Date().toISOString(),
+          })
+        );
+      } catch {}
+    }
 
     // Scoring happens authoritatively; the client only sends the chosen options.
     const saved = await submitMockTestAttempt({
@@ -294,10 +318,25 @@ export default function StudentMockTestsPage() {
       timeTakenMinutes: elapsedMins,
     });
     submittingRef.current = false;
+    setIsSubmittingExam(false);
+
     if (!saved) {
-      setSecondsLeft(0);
-      setActiveTest(null);
+      // NEVER wipe activeTest or selectedAnswers on a transient network error!
+      // Keep student in the exam with a 60s grace window so they can click Submit again without losing work.
+      setSecondsLeft((prev) => Math.max(prev, 60));
+      void fetch('/api/mock-tests/save-progress', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ testId: activeTest.id, answers: selectedAnswers }),
+      }).catch(() => {});
       return;
+    }
+
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem(getAutoSaveKey(activeTest.id));
+        sessionStorage.removeItem('cga_active_exam_id');
+      } catch {}
     }
 
     setActiveTest(null);
@@ -306,6 +345,100 @@ export default function StudentMockTestsPage() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
+
+  // Real-time local + server Auto-Save whenever student answers, flags, or navigates questions
+  useEffect(() => {
+    if (!activeTest?.id) return;
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem('cga_active_exam_id', activeTest.id);
+        localStorage.setItem(
+          getAutoSaveKey(activeTest.id),
+          JSON.stringify({
+            answers: selectedAnswers,
+            markedForReview,
+            currentQIndex,
+            updatedAt: new Date().toISOString(),
+          })
+        );
+        setLastAutoSavedAt(
+          new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        );
+      } catch {}
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTest?.id, selectedAnswers, markedForReview, currentQIndex]);
+
+  // Debounced background server auto-save every 6 seconds when answers change + on tab hide/unload
+  useEffect(() => {
+    if (!activeTest?.id) return;
+    const currentJson = JSON.stringify(selectedAnswers || {});
+    if (currentJson === lastServerSavedJsonRef.current) return;
+
+    const syncToServer = async () => {
+      try {
+        setIsSavingProgress(true);
+        const res = await fetch('/api/mock-tests/save-progress', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ testId: activeTest.id, answers: selectedAnswers }),
+          keepalive: true,
+        });
+        if (res.ok) {
+          lastServerSavedJsonRef.current = currentJson;
+          setLastAutoSavedAt(
+            new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+          );
+        }
+      } catch {
+        // LocalStorage already holds the latest snapshot
+      } finally {
+        setIsSavingProgress(false);
+      }
+    };
+
+    const timer = setTimeout(() => {
+      void syncToServer();
+    }, 3500);
+
+    const handleVisibilityOrUnload = () => {
+      if (document.visibilityState === 'hidden') {
+        void syncToServer();
+      }
+    };
+    window.addEventListener('visibilitychange', handleVisibilityOrUnload);
+    window.addEventListener('beforeunload', handleVisibilityOrUnload);
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('visibilitychange', handleVisibilityOrUnload);
+      window.removeEventListener('beforeunload', handleVisibilityOrUnload);
+    };
+  }, [activeTest?.id, selectedAnswers]);
+
+  // Fetch authoritative unmasked solutions whenever completedAttempt is shown
+  useEffect(() => {
+    if (!completedAttempt?.testId) return;
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetch(`/api/mock-tests/solutions?testId=${encodeURIComponent(completedAttempt.testId)}`, {
+          cache: 'no-store',
+        });
+        if (!res.ok || !active) return;
+        const data = await res.json();
+        if (active && Array.isArray(data.questions) && data.questions.length > 0) {
+          setUnlockedSolutions((prev) => ({
+            ...prev,
+            [completedAttempt.testId]: data.questions,
+          }));
+        }
+      } catch {}
+    })();
+    return () => {
+      active = false;
+    };
+  }, [completedAttempt?.testId]);
 
   // Countdown timer effect when a test is active
   useEffect(() => {
@@ -326,7 +459,7 @@ export default function StudentMockTestsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTest]);
 
-  // Real-time heartbeat effect: immediately eject candidate if test is unpublished by admin
+  // Gentle 30-second heartbeat effect: only close if administrator explicitly unpublished the test (never on network/rate-limit blips)
   useEffect(() => {
     if (!activeTest?.id) return;
 
@@ -336,27 +469,22 @@ export default function StudentMockTestsPage() {
         const res = await fetch(`/api/mock-tests/status?id=${encodeURIComponent(activeTest.id)}`, {
           cache: 'no-store',
         });
-        if (!isMounted) return;
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          if (!data.isPublished || !data.isLive) {
-            ejectActiveTest('Test Session Expired', 'The administrator has unpublished or removed this test session. Your test window has expired immediately.');
-          }
-          return;
-        }
-        const data = await res.json();
-        if (!data.isPublished || !data.isLive) {
-          ejectActiveTest('Test Window Closed', 'The administrator has unpublished this test. No students are permitted to remain in an unpublished test window.');
+        if (!isMounted || !res.ok) return;
+        const data = await res.json().catch(() => null);
+        if (!data || data.transientError) return;
+        if (data.explicitlyClosed === true && (!data.isPublished || !data.isLive)) {
+          ejectActiveTest(
+            'Test Window Closed',
+            'The administrator has unpublished this test. Your progress has been auto-saved.'
+          );
         }
       } catch {
-        // Silently tolerate brief client network blips
+        // Silently tolerate client network blips without interrupting the student's exam
       }
     };
 
     const ejectActiveTest = (title: string, desc: string) => {
       setActiveTest(null);
-      setSelectedAnswers({});
-      setMarkedForReview({});
       setIsStartingTest(false);
       showToast(title, desc, 'error');
       if (typeof window !== 'undefined') {
@@ -364,8 +492,8 @@ export default function StudentMockTestsPage() {
       }
     };
 
-    // Heartbeat every 5 seconds
-    const interval = setInterval(checkLiveStatus, 5000);
+    // Heartbeat every 30 seconds (reduces rush-hour polling traffic by 6x)
+    const interval = setInterval(checkLiveStatus, 30000);
     return () => {
       isMounted = false;
       clearInterval(interval);
@@ -465,6 +593,37 @@ export default function StudentMockTestsPage() {
           return;
         }
 
+        // Merge server savedAnswers with local auto-save snapshot so no answered question is ever lost
+        let localSaved: {
+          answers?: Record<string, number>;
+          markedForReview?: Record<string, boolean>;
+          currentQIndex?: number;
+        } | null = null;
+        if (typeof window !== 'undefined') {
+          try {
+            const rawLocal = localStorage.getItem(getAutoSaveKey(test.id));
+            if (rawLocal) localSaved = JSON.parse(rawLocal);
+          } catch {}
+        }
+
+        const mergedAnswers: Record<string, number> = {
+          ...(data.savedAnswers || {}),
+          ...(localSaved?.answers || {}),
+        };
+        const restoredReview: Record<string, boolean> = localSaved?.markedForReview || {};
+
+        let initialQIndex = 0;
+        if (
+          typeof localSaved?.currentQIndex === 'number' &&
+          localSaved.currentQIndex >= 0 &&
+          localSaved.currentQIndex < questionsToUse.length
+        ) {
+          initialQIndex = localSaved.currentQIndex;
+        } else if (Object.keys(mergedAnswers).length > 0) {
+          const firstUnanswered = questionsToUse.findIndex((q: any) => mergedAnswers[q.id] === undefined);
+          initialQIndex = firstUnanswered !== -1 ? firstUnanswered : Math.max(0, questionsToUse.length - 1);
+        }
+
         setCompletedAttempt(null);
         setActiveTest({
           ...test,
@@ -475,12 +634,21 @@ export default function StudentMockTestsPage() {
           questionGroups: (data.questionGroups && data.questionGroups.length > 0) ? data.questionGroups : (test.questionGroups || []),
           questions: questionsToUse,
         });
-        setCurrentQIndex(0);
-        setSelectedAnswers(data.savedAnswers || {});
-        setMarkedForReview({});
+        setCurrentQIndex(initialQIndex);
+        setSelectedAnswers(mergedAnswers);
+        setMarkedForReview(restoredReview);
         setSecondsLeft(remaining);
         setLangView('both');
         setIsStartingTest(false);
+
+        const savedCount = Object.keys(mergedAnswers).length;
+        if (savedCount > 0) {
+          showToast(
+            'Auto-Saved Progress Restored!',
+            `Resumed from Question ${initialQIndex + 1} with ${savedCount} saved answer(s).`,
+            'info'
+          );
+        }
         return;
       } else {
         const errJson = await res.json().catch(() => null);
@@ -661,10 +829,18 @@ export default function StudentMockTestsPage() {
         {/* Exam Topbar */}
         <div className="bg-[#0a0e2a] text-white px-6 py-4 flex flex-wrap items-center justify-between gap-4">
           <div>
-            <span className="text-[11px] font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+            <span className="text-[11px] font-bold text-amber-300 uppercase tracking-wider flex flex-wrap items-center gap-1.5">
               <span>Live Timed CBT Exam • {activeTest.batchName}</span>
               <span className="bg-amber-400/20 text-amber-200 px-2 py-0.5 rounded text-[10px] normal-case">
                 Results locked until submit
+              </span>
+              <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 rounded text-[10px] normal-case inline-flex items-center gap-1">
+                <Check className="w-3 h-3" />
+                {isSavingProgress
+                  ? 'Auto-Saving...'
+                  : lastAutoSavedAt
+                  ? `Auto-Saved (${Object.keys(selectedAnswers).length} answered)`
+                  : 'Auto-Save Active'}
               </span>
             </span>
             <h1 className="text-base sm:text-lg font-extrabold">{activeTest.title}</h1>
@@ -682,10 +858,11 @@ export default function StudentMockTestsPage() {
 
             <button
               type="button"
+              disabled={isSubmittingExam}
               onClick={handleFinishTest}
-              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs font-extrabold cursor-pointer"
             >
-              Submit Test Now
+              {isSubmittingExam ? 'Submitting...' : 'Submit Test Now'}
             </button>
           </div>
         </div>
@@ -1069,8 +1246,14 @@ export default function StudentMockTestsPage() {
 
     let testObj = db.mockTests.find((t) => t.id === completedAttempt.testId);
 
-    // If questions in state are still masked (correctOptionIndex === -1), load master copy
-    if (!testObj || testObj.questions.some((q) => q.correctOptionIndex === -1)) {
+    // Prefer authoritative server solutions fetched from /api/mock-tests/solutions so answer keys are never -1 or stale
+    const serverSolutions = unlockedSolutions[completedAttempt.testId];
+    if (serverSolutions && serverSolutions.length > 0 && testObj) {
+      testObj = {
+        ...testObj,
+        questions: serverSolutions,
+      };
+    } else if (!testObj || testObj.questions.some((q) => q.correctOptionIndex === -1)) {
       if (typeof window !== 'undefined') {
         try {
           const ct = localStorage.getItem('cga_custom_tests');

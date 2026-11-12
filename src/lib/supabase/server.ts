@@ -41,31 +41,66 @@ export function createAdminSupabase() {
   });
 }
 
-/** Verifies that caller has an active single session and returns user id, role, user, and supabase client */
-export async function requireActiveSession(): Promise<{
+/** Verifies that caller has an active session and returns user id, role, user, and supabase client */
+export async function requireActiveSession(req?: Request): Promise<{
   userId: string;
   role: string;
   user: any;
   supabase: any;
 } | null> {
   const supabase = await createServerSupabase();
-  const { data } = await supabase.auth.getUser();
-  if (!data.user) return null;
+  let user: any = null;
 
-  // Single-session check: verify caller session ID is still active in auth.sessions
-  const { data: isActive, error: rpcErr } = await supabase.rpc('is_current_session_active');
-  if (!rpcErr && isActive === false) {
-    return null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data?.user ?? null;
+  } catch {}
+
+  // Optional fallback to Authorization Bearer header if cookies were not attached
+  if (!user && req) {
+    const authHeader = req.headers.get('authorization') || req.headers.get('Authorization');
+    if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
+      const token = authHeader.slice(7).trim();
+      if (token) {
+        try {
+          const admin = createAdminSupabase();
+          const { data: uData } = await admin.auth.getUser(token);
+          user = uData?.user ?? null;
+        } catch {}
+      }
+    }
   }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role,status')
-    .eq('id', data.user.id)
-    .single();
+  if (!user) return null;
 
-  if (!profile || profile.status !== 'Active') return null;
-  return { userId: data.user.id, role: profile.role, user: data.user, supabase };
+  let role = 'student';
+  try {
+    const admin = createAdminSupabase();
+    const { data: profile } = await admin
+      .from('profiles')
+      .select('role,status')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (profile) {
+      if (profile.status && profile.status !== 'Active') return null;
+      role = profile.role || 'student';
+    } else if (
+      user.email === 'angatsaha825@gmail.com' ||
+      user.email === 'careerguidanceacademy2019@gmail.com'
+    ) {
+      role = 'admin';
+    }
+  } catch {
+    if (
+      user.email === 'angatsaha825@gmail.com' ||
+      user.email === 'careerguidanceacademy2019@gmail.com'
+    ) {
+      role = 'admin';
+    }
+  }
+
+  return { userId: user.id, role, user, supabase };
 }
 
 /** Returns the caller's user id if they are an active admin with an active session, otherwise null. */

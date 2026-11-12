@@ -6,6 +6,7 @@ export interface ParsedMCQ {
   question: string;
   options: [MockQuestionOption, MockQuestionOption, MockQuestionOption, MockQuestionOption] | MockQuestionOption[];
   correctOptionIndex: number;
+  selectedCorrectOptions?: number[];
   explanation: string;
   explanationImagePath?: string | null;
   explanationImageAlt?: string | null;
@@ -25,6 +26,7 @@ export interface ParseValidationReport {
   expectedCount?: number;
   missingAnswersCount: number;
   invalidOptionsCount: number;
+  multipleAnswersCount?: number;
   duplicateCount: number;
   needsDiagramCount: number;
   hasErrors: boolean;
@@ -309,16 +311,26 @@ export function checkNeedsDiagram(text: string): boolean {
   return markers.some((m) => lower.includes(m));
 }
 
-/** Parses a separate answer key box */
+/** Parses a separate answer key box (returns primary index per question) */
 export function parseSeparateAnswerKey(keyText: string): Record<number, number> {
+  const multi = parseSeparateAnswerKeyMulti(keyText);
+  const map: Record<number, number> = {};
+  for (const [qNum, arr] of Object.entries(multi)) {
+    if (arr.length > 0) map[Number(qNum)] = arr[0];
+  }
+  return map;
+}
+
+/** Parses a separate answer key box and detects if multiple options were selected for any question */
+export function parseSeparateAnswerKeyMulti(keyText: string): Record<number, number[]> {
   if (!keyText || !keyText.trim()) return {};
 
   const cleanText = normalizeBengaliDigits(keyText);
-  const map: Record<number, number> = {};
+  const map: Record<number, number[]> = {};
 
-  // Matches formats: "1-B", "1:A", "1. (C)", "Q1: D", "1 | B"
-  // Ensures numeric ratios like "3:1" or "1:1:2" in text notes are NEVER matched as question-answer keys!
-  const regex = /(?:Q(?:uestion)?\.?\s*)?(\d+)[\.\:\-\|\)\s]+(?:\()?\[?(?:Option\s*)?([A-Da-d1-4])\]?(?:\))?/g;
+  // Matches formats: "1-B", "1:A", "1. (C)", "Q1: D", "1 | B", "1. A, B", "1: B & C"
+  const regex =
+    /(?:Q(?:uestion)?\.?\s*)?(\d+)[\.\:\-\|\)\s]+(?:\()?\[?(?:Option\s*)?([A-Da-dক-ঘ1-4])\]?(?:\))?(?:[ \t]*(?:,|&|\/|\band\b|\bor\b)[ \t]*(?:\()?\[?(?:Option\s*)?([A-Da-dক-ঘ1-4])\]?(?:\))?)*/gi;
   let m: RegExpExecArray | null;
 
   while ((m = regex.exec(cleanText)) !== null) {
@@ -326,28 +338,27 @@ export function parseSeparateAnswerKey(keyText: string): Record<number, number> 
     const qNum = parseInt(m[1], 10);
     const ansChar = m[2];
 
-    // Mathematical Ratio Protection:
-    // If the answer is a numeric digit (1-4) and the separator is a bare colon without whitespace (e.g. "3:1", "1:1"),
-    // this is a mathematical ratio, NOT an answer key!
     if (/^[1-4]$/.test(ansChar)) {
-      const isBareColon = rawMatch.includes(':') && !/q/i.test(rawMatch) && !/option/i.test(rawMatch) && !/\s+/.test(rawMatch);
+      const isBareColon =
+        rawMatch.includes(':') && !/q/i.test(rawMatch) && !/option/i.test(rawMatch) && !/\s+/.test(rawMatch);
       if (isBareColon) {
         continue;
       }
-      // Also check if followed by another ratio term like ":2" in "1:1:2"
       const afterMatch = cleanText.slice(m.index + rawMatch.length);
       if (/^\s*:\s*\d+/.test(afterMatch)) {
         continue;
       }
     }
 
-    const char = ansChar.toUpperCase();
-    let idx = 0;
-    if (char === 'A' || char === '1') idx = 0;
-    else if (char === 'B' || char === '2') idx = 1;
-    else if (char === 'C' || char === '3') idx = 2;
-    else if (char === 'D' || char === '4') idx = 3;
-    map[qNum] = idx;
+    const tailAfterQNum = rawMatch.replace(/^(?:Q(?:uestion)?\.?\s*)?\d+[\.\:\-\|\)\s]+/i, '');
+    const tokens = tailAfterQNum.match(/[A-Da-dক-ঘ1-4]/g) || [ansChar];
+    if (!map[qNum]) map[qNum] = [];
+    for (const tok of tokens) {
+      const idx = optionCharToIndex(tok);
+      if (idx !== -1 && !map[qNum].includes(idx)) {
+        map[qNum].push(idx);
+      }
+    }
   }
 
   return map;
@@ -381,8 +392,8 @@ function findOptionTokens(text: string, forceLetterOnly: boolean = false): Optio
     /(?:^|\n|[ \t]{2,})(?:\(\s*[A-Da-dক-ঘ]\s*\)|\[\s*[A-Da-dক-ঘ]\s*\]|[A-Da-dক-ঘ][\.\)\:])/.test(text);
 
   const optMarkerRegex = hasLetterOptions
-    ? /(?:^|\n|[ \t]+)(?:\(\s*([A-Da-dক-ঘ])\s*\)[:\.]?|\[\s*([A-Da-dক-ঘ])\s*\][:\.]?|([A-Da-dক-ঘ])[\.\)]|([A-Da-dক-ঘ]):(?!\d)(?![a-zA-Z0-9]\s*:))(?:\s+|(?=[0-9\(\$\u0980-\u09FF]))/g
-    : /(?:^|\n)\s*(?:\(\s*([1-4])\s*\)[:\.]?|\[\s*([1-4])\s*\][:\.]?)(?:\s+|(?=[0-9\(\$\u0980-\u09FF]))/g;
+    ? /(?:^|\n|[ \t]+)(?:\(\s*([A-Da-dক-ঘ])\s*\)[:\.]?[ \t]*|\[\s*([A-Da-dক-ঘ])\s*\][:\.]?[ \t]*|(?:([A-Da-dক-ঘ])[\.\)]|([A-Da-dক-ঘ]):(?!\d)(?![a-zA-Z0-9]\s*:))(?:\s+|(?=[0-9\(\$\u0980-\u09FF])))/g
+    : /(?:^|\n)\s*(?:\(\s*([1-4])\s*\)[:\.]?[ \t]*|\[\s*([1-4])\s*\][:\.]?[ \t]*)(?:\s*|(?=[0-9\(\$\u0980-\u09FF]))/g;
 
   const tokens: OptionToken[] = [];
   let m: RegExpExecArray | null;
@@ -544,14 +555,16 @@ export function parseRawQuestionsText(rawText: string, separateKeyText?: string)
   const text = normalizeBengaliDigits(normalizeMathAndWordPaste(rawText)).trim();
 
   // 1. Separate answer key priority, then embedded global key
-  const globalAnswerMap = separateKeyText ? parseSeparateAnswerKey(separateKeyText) : {};
+  const globalAnswerMultiMap: Record<number, number[]> = separateKeyText
+    ? parseSeparateAnswerKeyMulti(separateKeyText)
+    : {};
 
   if (!separateKeyText) {
     const globalKeyMatch = text.match(
       /(?:Answer\s*Key|Answers|Solutions?\s*Key)[\s\:\-\n]+([\s\S]+?)(?=\n\s*(?:Note|Instructions|Notice|C\.G\.A|Page|$))/i
     );
     if (globalKeyMatch) {
-      Object.assign(globalAnswerMap, parseSeparateAnswerKey(globalKeyMatch[1]));
+      Object.assign(globalAnswerMultiMap, parseSeparateAnswerKeyMulti(globalKeyMatch[1]));
     }
   }
 
@@ -631,36 +644,67 @@ export function parseRawQuestionsText(rawText: string, separateKeyText?: string)
     let confidence: 'high' | 'check' | 'low' = 'high';
 
     // Check for inline answer key: Ans: B, Answer: Option C, উত্তর: খ, etc.
-    let correctIdx = globalAnswerMap[qNum] ?? -1;
-    const ansMatch = chunk.match(
-      /(?:Ans(?:wer)?|Correct(?:\s*Option)?|Key|উত্তর)[\s\:\-\.]+(?:Option\s*)?([A-Da-dক-ঘ1-4]|\([A-Da-dক-ঘ1-4]\)|\[[A-Da-dক-ঘ1-4]\])/i
-    );
-    if (ansMatch) {
-      const char = ansMatch[1].replace(/[\(\)\[\]]/g, '').trim();
-      const upper = char.toUpperCase();
-      if (upper === 'A' || upper === '1' || char === 'ক') correctIdx = 0;
-      else if (upper === 'B' || upper === '2' || char === 'খ') correctIdx = 1;
-      else if (upper === 'C' || upper === '3' || char === 'গ') correctIdx = 2;
-      else if (upper === 'D' || upper === '4' || char === 'ঘ') correctIdx = 3;
+    // Strict boundary: MUST start at line beginning or after whitespace/punctuation, NEVER inside words like "means:", "organs", "monkey"!
+    const globalMulti = globalAnswerMultiMap[qNum] || [];
+    let correctIdx = globalMulti.length > 0 ? globalMulti[0] : -1;
+    const detectedCorrectIndices: number[] = [...globalMulti];
+
+    const ansRegex =
+      /(?:^|\n|[ \t]{2,}|[\.\;\|\)\]\}][ \t]*)(?:Ans(?:wer)?|Correct(?:\s*(?:Option|Answer))?|Key|উত্তর)[ \t]*[:\-\.][ \t]*([^\n]+)/gi;
+    let ansExec: RegExpExecArray | null;
+    const ansMatchesToStrip: string[] = [];
+
+    while ((ansExec = ansRegex.exec(chunk)) !== null) {
+      const tail = ansExec[1].trim();
+      // Extract option label tokens at the start of the answer declaration (supports single "B" or multiple "A, B", "(A) & (C)", "B or D")
+      const multiMatch = tail.match(
+        /^(?:Option(?:s)?[ \t]*)?((?:[\(\[]?[A-Da-dক-ঘ1-4][\)\]]?)(?:[ \t]*(?:,|&|\/|\band\b|\bor\b|এবং|বা)[ \t]*(?:Option[ \t]*)?[\(\[]?[A-Da-dক-ঘ1-4][\)\]]?)*)(?=$|[ \t\.\;\,\)\]\-\—])/i
+      );
+      if (multiMatch) {
+        const tokenMatches = multiMatch[1].match(/[A-Da-dক-ঘ1-4]/g) || [];
+        for (const ch of tokenMatches) {
+          const idx = optionCharToIndex(ch);
+          if (idx !== -1 && !detectedCorrectIndices.includes(idx)) {
+            detectedCorrectIndices.push(idx);
+          }
+        }
+        ansMatchesToStrip.push(ansExec[0]);
+      }
+    }
+
+    if (detectedCorrectIndices.length > 0) {
+      correctIdx = detectedCorrectIndices[0];
+      if (detectedCorrectIndices.length > 1) {
+        const labels = detectedCorrectIndices.map((idx) => String.fromCharCode(65 + idx)).join(', ');
+        warnings.push(
+          `Multiple correct answers selected (Options ${labels}). Every question in the mock test must have only ONE correct answer.`
+        );
+        confidence = 'check';
+      }
+    } else if (correctIdx !== -1) {
+      detectedCorrectIndices.push(correctIdx);
     }
 
     if (correctIdx === -1) {
       correctIdx = 0; // Default fallback to Option A
+      detectedCorrectIndices.push(0);
       warnings.push('No answer key found; defaulted to Option A.');
       confidence = 'check';
     }
 
-    // Detect Explanation
+    // Detect Explanation (Strict line/word boundary so words like "resolution" or "expression" NEVER match!)
     let explanation = 'Refer to C.G.A model solutions.';
-    const expMatch = chunk.match(/(?:Explanation|Exp|Solution|Reason|ব্যাখ্যা)[\s\:\-]+([^\n]+(?:\n[^\n]+)*)/i);
+    const expMatch = chunk.match(
+      /(?:^|\n|[ \t]{2,})(?:Explanation|Exp|Solution|Reason|ব্যাখ্যা)[ \t]*[:\-][ \t]*([^\n]+(?:\n[^\n]+)*)/i
+    );
     if (expMatch) {
       explanation = expMatch[1].trim();
     }
 
     // Clean body
     let body = chunk;
-    if (ansMatch) {
-      body = body.replace(ansMatch[0], '');
+    for (const rawAnsStr of ansMatchesToStrip) {
+      body = body.replace(rawAnsStr, '\n');
     }
     if (expMatch) {
       body = body.replace(expMatch[0], '');
@@ -743,6 +787,7 @@ export function parseRawQuestionsText(rawText: string, separateKeyText?: string)
         extractedOptions[3] || 'Option D',
       ],
       correctOptionIndex: correctIdx,
+      selectedCorrectOptions: detectedCorrectIndices.length > 0 ? detectedCorrectIndices : [correctIdx],
       explanation,
       needsDiagram,
       confidence,
@@ -762,13 +807,15 @@ export function validateParsedQuestions(
 ): ParseValidationReport {
   let missingAnswersCount = 0;
   let invalidOptionsCount = 0;
+  let multipleAnswersCount = 0;
   let needsDiagramCount = 0;
   const warnings: string[] = [];
 
   const seenStems = new Set<string>();
   let duplicateCount = 0;
 
-  for (const q of questions) {
+  for (let idx = 0; idx < questions.length; idx++) {
+    const q = questions[idx];
     if (
       q.options.length !== 4 ||
       q.options.some((o) => {
@@ -777,6 +824,13 @@ export function validateParsedQuestions(
       })
     ) {
       invalidOptionsCount++;
+    }
+    if (q.selectedCorrectOptions && q.selectedCorrectOptions.length > 1) {
+      multipleAnswersCount++;
+      const labels = q.selectedCorrectOptions.map((optIdx) => String.fromCharCode(65 + optIdx)).join(', ');
+      warnings.push(
+        `Q${idx + 1}: Multiple correct answers selected (${labels}). Only ONE correct answer is allowed per question.`
+      );
     }
     if (q.needsDiagram && !q.imagePath) {
       needsDiagramCount++;
@@ -802,9 +856,13 @@ export function validateParsedQuestions(
     expectedCount,
     missingAnswersCount,
     invalidOptionsCount,
+    multipleAnswersCount,
     duplicateCount,
     needsDiagramCount,
-    hasErrors: invalidOptionsCount > 0 || (expectedCount !== undefined && questions.length !== expectedCount),
+    hasErrors:
+      invalidOptionsCount > 0 ||
+      multipleAnswersCount > 0 ||
+      (expectedCount !== undefined && questions.length !== expectedCount),
     warnings,
   };
 }
