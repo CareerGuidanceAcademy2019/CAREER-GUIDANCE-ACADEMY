@@ -81,8 +81,8 @@ export function getHowToPayContent(settings: PaymentSettingsRecord): {
         },
         {
           number: 2,
-          title: 'Open Any UPI App or Bank Transfer',
-          description: `Open Google Pay, PhonePe, Paytm, BHIM, or your mobile banking app. Scan our official QR code, tap "Pay with UPI app" on mobile, or enter the UPI ID (${upiId}) manually.`,
+          title: 'Pay via UPI ID or Request QR on WhatsApp',
+          description: `Either copy the official UPI ID (${upiId}) and pay directly in Google Pay, PhonePe, Paytm, or BHIM — or click "Request QR on WhatsApp" to message Admin (${phone}) for the payment QR code.`,
           icon: 'QrCode',
         },
         {

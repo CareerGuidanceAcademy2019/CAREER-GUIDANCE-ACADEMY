@@ -22,9 +22,6 @@ import {
 import {
   PAYMENT_SETTINGS,
   PaymentSettingsRecord,
-  buildUpiDeepLink,
-  getUpiQrCodeUrl,
-  getOfficialQrCodeAsset,
 } from '@/config/paymentSettings';
 
 export interface PaymentTarget {
@@ -56,10 +53,9 @@ export function UpiPaymentModal({
   onClose,
   onSubmitVerification,
 }: UpiPaymentModalProps) {
-  const [tab, setTab] = useState<'upi' | 'bank'>('upi');
+  const [tab, setTab] = useState<'upi_id' | 'whatsapp_qr'>('upi_id');
   const [step, setStep] = useState<'pay' | 'proof' | 'success'>('pay');
   const [copiedField, setCopiedField] = useState<string | null>(null);
-  const [qrType, setQrType] = useState<'official' | 'dynamic'>('official');
 
   const [settings, setSettings] = useState<PaymentSettingsRecord>(() => {
     if (typeof window !== 'undefined') {
@@ -70,8 +66,6 @@ export function UpiPaymentModal({
     }
     return PAYMENT_SETTINGS;
   });
-
-  const [activeQrChoice, setActiveQrChoice] = useState<'primary' | 'backup'>('primary');
 
   useEffect(() => {
     let isMounted = true;
@@ -86,22 +80,13 @@ export function UpiPaymentModal({
             payeeName: data.payee_name || PAYMENT_SETTINGS.payeeName,
             upiId: data.upi_id || PAYMENT_SETTINGS.upiId,
             upiIdBackup: data.upi_id_backup || null,
-            qrImageUrl: data.qr_image_url || localStorage.getItem('cga_active_qr_image') || PAYMENT_SETTINGS.qrImageUrl,
-            qrImageUrlBackup: data.qr_image_url_backup || localStorage.getItem('cga_backup_qr_image') || null,
-            qrLabel: data.qr_label || 'Primary Institute QR',
-            qrLabelBackup: data.qr_label_backup || 'Secondary / Alternate QR',
-            bankTransferEnabled: data.bank_transfer_enabled ?? true,
-            bankAccountHolder: data.bank_account_holder || PAYMENT_SETTINGS.bankAccountHolder,
-            bankName: data.bank_name || PAYMENT_SETTINGS.bankName,
-            bankAccountNumber: data.bank_account_number || PAYMENT_SETTINGS.bankAccountNumber,
-            bankIfsc: data.bank_ifsc || PAYMENT_SETTINGS.bankIfsc,
+            supportPhoneWhatsapp:
+              data.support_phone_whatsapp || data.support_phone || PAYMENT_SETTINGS.supportPhoneWhatsapp,
             supportPhone: data.support_phone || PAYMENT_SETTINGS.supportPhone,
             supportEmail: data.support_email || PAYMENT_SETTINGS.supportEmail,
           };
           setSettings(s);
           localStorage.setItem('cga_payment_settings', JSON.stringify(s));
-          if (s.qrImageUrl) localStorage.setItem('cga_active_qr_image', s.qrImageUrl);
-          if (s.qrImageUrlBackup) localStorage.setItem('cga_backup_qr_image', s.qrImageUrlBackup);
         }
       } catch {}
     }
@@ -122,26 +107,18 @@ export function UpiPaymentModal({
 
   if (!target) return null;
 
-  const effectiveUpiId =
-    activeQrChoice === 'backup' && settings.upiIdBackup
-      ? settings.upiIdBackup
-      : settings.upiId;
-
-  const effectiveQrImage =
-    activeQrChoice === 'backup' && settings.qrImageUrlBackup
-      ? settings.qrImageUrlBackup
-      : settings.qrImageUrl || getOfficialQrCodeAsset(settings);
-
-  const upiDeepLink = buildUpiDeepLink({
-    amount: target.amount,
-    note: `${target.courseName.slice(0, 30)} - ${target.studentCode || 'CGA Student'}`,
-    customSettings: {
-      upiId: effectiveUpiId,
-      payeeName: settings.payeeName,
-    },
-  });
-
-  const qrCodeUrl = getUpiQrCodeUrl(upiDeepLink, 320);
+  const effectiveUpiId = settings.upiId;
+  const rawWhatsappDigits = (settings.supportPhoneWhatsapp || settings.supportPhone || '+917005929189').replace(/\D/g, '');
+  const whatsappNumber = rawWhatsappDigits.length === 10 ? `91${rawWhatsappDigits}` : rawWhatsappDigits || '917005929189';
+  const whatsappRequestText = [
+    `Hello Career Guidance Academy Admin,`,
+    `Please send me the official Payment QR Code to complete my payment.`,
+    ``,
+    `• Student: ${target.studentName || 'Student'}${target.studentCode ? ` (${target.studentCode})` : ''}`,
+    `• Item: ${target.courseName}`,
+    `• Amount: ₹${target.amount}`,
+  ].join('\n');
+  const whatsappRedirectUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(whatsappRequestText)}`;
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -186,10 +163,10 @@ export function UpiPaymentModal({
       const res = await onSubmitVerification({
         target,
         utr: cleanUtr,
-        paymentMode: tab === 'bank' ? 'Net Banking' : 'UPI',
+        paymentMode: 'UPI',
         paymentApp,
         screenshotUrl: screenshotDataUrl || undefined,
-        remarks: remarks.trim() || undefined,
+        remarks: remarks.trim() || (tab === 'whatsapp_qr' ? 'Requested QR on WhatsApp' : 'Paid via UPI ID'),
       });
 
       if (res.success) {
@@ -259,215 +236,76 @@ export function UpiPaymentModal({
               <div className="flex rounded-2xl bg-slate-100 p-1 border border-slate-200/80">
                 <button
                   type="button"
-                  onClick={() => setTab('upi')}
+                  onClick={() => setTab('upi_id')}
                   className={`flex-1 py-2 px-3 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                    tab === 'upi'
+                    tab === 'upi_id'
                       ? 'bg-white text-[#0056b3] shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  <QrCode className="w-4 h-4" /> UPI App &amp; Dynamic QR
+                  <CreditCard className="w-4 h-4" /> Option 1: Pay via UPI ID
                 </button>
                 <button
                   type="button"
-                  onClick={() => setTab('bank')}
+                  onClick={() => setTab('whatsapp_qr')}
                   className={`flex-1 py-2 px-3 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                    tab === 'bank'
-                      ? 'bg-white text-[#0056b3] shadow-xs'
+                    tab === 'whatsapp_qr'
+                      ? 'bg-white text-emerald-700 shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  <Building2 className="w-4 h-4" /> Bank Account (NEFT / IMPS)
+                  <Phone className="w-4 h-4" /> Option 2: Request QR on WhatsApp
                 </button>
               </div>
 
-              {tab === 'upi' ? (
+              {tab === 'upi_id' ? (
                 <div className="space-y-4">
-                  {/* Direct Mobile UPI Redirect Button */}
-                  <div className="p-4 rounded-2xl bg-blue-50/70 border border-blue-200 text-center space-y-3">
+                  <div className="p-4 rounded-2xl border border-blue-200 bg-blue-50/50 space-y-3">
                     <p className="text-xs font-bold text-slate-700">
-                      On Mobile? Tap below to open your installed UPI app with the exact amount pre-filled:
+                      Copy the official UPI ID below and pay <strong>₹{target.amount.toLocaleString('en-IN')}</strong> via Google Pay, PhonePe, Paytm, or BHIM:
                     </p>
-                    <a
-                      href={upiDeepLink}
-                      className="inline-flex items-center justify-center gap-2 w-full py-3.5 px-5 rounded-2xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-sm font-extrabold shadow-md shadow-blue-900/20 transition-all cursor-pointer"
-                    >
-                      <ExternalLink className="w-4 h-4" /> Pay ₹{target.amount.toLocaleString('en-IN')} via UPI App
-                    </a>
-                    <p className="text-[11px] font-semibold text-slate-500">
-                      Supports Google Pay, PhonePe, Paytm, BHIM, Cred, YONO &amp; other UPI apps
-                    </p>
-
-                    {/* Bank Limit Advisory */}
-                    <div className="p-3 rounded-xl bg-amber-50/90 border border-amber-300 text-left space-y-1">
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
-                        <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
-                        <span>Google Pay showing &quot;Exceeded bank limit&quot;?</span>
+                    <div className="flex items-center justify-between bg-white px-4 py-3 rounded-xl border-2 border-[#0056b3]/25 text-xs">
+                      <div>
+                        <span className="text-slate-400 font-semibold block">Official Payee UPI ID:</span>
+                        <strong className="text-[#0056b3] font-mono text-sm sm:text-base">{effectiveUpiId}</strong>
                       </div>
-                      <p className="text-[10px] text-amber-950 leading-relaxed">
-                        If Google Pay shows <em>&quot;You&apos;ve exceeded the bank limit for this payment&quot;</em>, simply <strong>Scan the QR code below directly</strong> with Google Pay or transfer to UPI ID <strong>{effectiveUpiId}</strong> directly.
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* QR Code Section */}
-                  <div className="p-4 rounded-2xl border border-slate-200 bg-white flex flex-col items-center text-center space-y-3">
-                    {/* Limit Protection / Multiple QR Switcher */}
-                    {settings.qrImageUrlBackup && (
-                      <div className="w-full p-3 rounded-2xl bg-amber-50/90 border border-amber-300 text-left space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-extrabold text-amber-950 flex items-center gap-1.5">
-                            <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
-                            <span>Select QR Code:</span>
-                          </span>
-                          <span className="text-[10px] font-bold text-amber-800 bg-amber-200/80 px-2 py-0.5 rounded-full">
-                            Limit Protection
-                          </span>
-                        </div>
-                        <div className="flex rounded-xl bg-white p-1 border border-amber-200 shadow-2xs">
-                          <button
-                            type="button"
-                            onClick={() => setActiveQrChoice('primary')}
-                            className={`flex-1 py-1.5 px-2 rounded-lg font-bold text-xs cursor-pointer transition-all ${
-                              activeQrChoice === 'primary'
-                                ? 'bg-[#0056b3] text-white shadow-xs'
-                                : 'text-slate-600 hover:text-slate-900'
-                            }`}
-                          >
-                            QR 1 ({settings.qrLabel || 'Primary'})
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setActiveQrChoice('backup')}
-                            className={`flex-1 py-1.5 px-2 rounded-lg font-bold text-xs cursor-pointer transition-all ${
-                              activeQrChoice === 'backup'
-                                ? 'bg-purple-700 text-white shadow-xs'
-                                : 'text-slate-600 hover:text-slate-900'
-                            }`}
-                          >
-                            QR 2 ({settings.qrLabelBackup || 'Alternate'})
-                          </button>
-                        </div>
-                        <p className="text-[10px] text-amber-900 leading-tight">
-                          💡 <strong>Showing &quot;Limit reached&quot; error in your UPI app?</strong> Switch to <strong>QR 2</strong> above to complete your enrollment without daily banking limits.
-                        </p>
-                      </div>
-                    )}
-
-                    <div className="flex items-center justify-between w-full max-w-xs">
-                      <span className="text-xs font-bold text-slate-700">Scan QR Code:</span>
-                      <div className="flex items-center gap-1 text-[11px]">
-                        <button
-                          type="button"
-                          onClick={() => setQrType('official')}
-                          className={`px-2 py-0.5 rounded font-bold cursor-pointer transition-all ${
-                            qrType === 'official' ? 'bg-[#0056b3] text-white' : 'bg-slate-200 text-slate-700'
-                          }`}
-                        >
-                          {activeQrChoice === 'backup' ? 'Alternate QR' : 'Official QR'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setQrType('dynamic')}
-                          className={`px-2 py-0.5 rounded font-bold cursor-pointer transition-all ${
-                            qrType === 'dynamic' ? 'bg-[#0056b3] text-white' : 'bg-slate-200 text-slate-700'
-                          }`}
-                        >
-                          Dynamic Amount
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="p-3 rounded-2xl bg-white border-2 border-[#0056b3]/25 shadow-sm inline-block">
-                      <img
-                        src={qrType === 'official' ? effectiveQrImage : qrCodeUrl}
-                        alt="CGA Official UPI QR Code"
-                        className="w-48 h-48 sm:w-52 sm:h-52 object-contain rounded-lg"
-                      />
-                    </div>
-                    <div className="flex items-center gap-2 bg-slate-50 px-3.5 py-1.5 rounded-xl border border-slate-200 text-xs">
-                      <span className="text-slate-500 font-semibold">Payee UPI ID:</span>
-                      <strong className="text-[#0a0e2a] font-mono">{effectiveUpiId}</strong>
                       <button
                         type="button"
                         onClick={() => copyToClipboard(effectiveUpiId, 'upi')}
-                        className="text-[#0056b3] hover:underline flex items-center gap-0.5 font-bold cursor-pointer ml-1"
+                        className="px-3.5 py-2 rounded-lg bg-[#0056b3] text-white font-bold flex items-center gap-1 cursor-pointer"
                       >
                         {copiedField === 'upi' ? (
-                          <span className="text-emerald-600 flex items-center gap-0.5">
-                            <Check className="w-3 h-3" /> Copied
+                          <span className="flex items-center gap-1">
+                            <Check className="w-3.5 h-3.5" /> Copied
                           </span>
                         ) : (
-                          <span className="flex items-center gap-0.5">
-                            <Copy className="w-3 h-3" /> Copy
+                          <span className="flex items-center gap-1">
+                            <Copy className="w-3.5 h-3.5" /> Copy
                           </span>
                         )}
                       </button>
                     </div>
                     <p className="text-[11px] text-slate-500">
-                      Verified Payee: <strong>{settings.payeeName}</strong>
+                      Verified Payee Name: <strong>{settings.payeeName}</strong>
                     </p>
                   </div>
                 </div>
               ) : (
-                /* Bank Transfer Details */
-                <div className="space-y-3 text-xs">
-                  <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200 space-y-2">
-                    <span className="text-[11px] font-extrabold text-amber-900 uppercase tracking-wide block">
-                      Direct Bank Transfer (NEFT / IMPS / RTGS)
-                    </span>
-                    <p className="text-slate-700 leading-relaxed">
-                      Transfer fees directly using NetBanking, IMPS, NEFT, or RTGS to the official academy account:
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
-                      <span className="text-[11px] text-slate-500 block">Bank &amp; Branch</span>
-                      <strong className="text-slate-900 text-xs sm:text-sm block mt-0.5">
-                        {settings.bankName}
-                      </strong>
-                    </div>
-
-                    <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
-                      <span className="text-[11px] text-slate-500 block">Account Holder Name</span>
-                      <strong className="text-slate-900 text-xs sm:text-sm block mt-0.5">
-                        {settings.bankAccountHolder}
-                      </strong>
-                    </div>
-
-                    <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                      <div>
-                        <span className="text-[11px] text-slate-500 block">Account Number</span>
-                        <strong className="text-slate-900 font-mono text-sm block mt-0.5">
-                          {settings.bankAccountNumber}
-                        </strong>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => copyToClipboard(settings.bankAccountNumber, 'acc')}
-                        className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-300 text-[11px] font-bold text-[#0056b3] hover:bg-slate-100 cursor-pointer"
-                      >
-                        {copiedField === 'acc' ? 'Copied!' : 'Copy'}
-                      </button>
-                    </div>
-
-                    <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                      <div>
-                        <span className="text-[11px] text-slate-500 block">IFSC Code</span>
-                        <strong className="text-slate-900 font-mono text-sm block mt-0.5">
-                          {settings.bankIfsc}
-                        </strong>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => copyToClipboard(settings.bankIfsc, 'ifsc')}
-                        className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-300 text-[11px] font-bold text-[#0056b3] hover:bg-slate-100 cursor-pointer"
-                      >
-                        {copiedField === 'ifsc' ? 'Copied!' : 'Copy'}
-                      </button>
-                    </div>
-                  </div>
+                <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 space-y-3 text-xs">
+                  <p className="font-bold text-emerald-950">
+                    Need a QR Code? Message Admin on WhatsApp to receive the official payment QR:
+                  </p>
+                  <p className="text-emerald-900">
+                    Admin WhatsApp: <strong className="font-mono">{settings.supportPhoneWhatsapp || '+91-7005929189'}</strong>
+                  </p>
+                  <a
+                    href={whatsappRedirectUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-2 w-full py-3.5 px-5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-extrabold shadow-md transition-all cursor-pointer"
+                  >
+                    <Phone className="w-4 h-4" /> Message Admin on WhatsApp for QR <ExternalLink className="w-4 h-4" />
+                  </a>
                 </div>
               )}
 
@@ -511,7 +349,7 @@ export function UpiPaymentModal({
                   onClick={() => setStep('pay')}
                   className="text-xs font-bold text-[#0056b3] hover:underline cursor-pointer"
                 >
-                  ← Back to QR &amp; Bank Details
+                  ← Back to Payment Options
                 </button>
               </div>
 

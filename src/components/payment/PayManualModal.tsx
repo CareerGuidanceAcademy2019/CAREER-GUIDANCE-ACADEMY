@@ -28,12 +28,9 @@ import {
 import {
   PAYMENT_SETTINGS,
   PaymentSettingsRecord,
-  buildUpiDeepLink,
-  getUpiQrCodeUrl,
-  getOfficialQrCodeAsset,
 } from '@/config/paymentSettings';
 import { HowToPayGuide } from '@/components/payment/HowToPayGuide';
-import { PaymentItemType, PaymentPlanType, PaymentChannelType } from '@/types/payments';
+import { PaymentItemType, PaymentPlanType } from '@/types/payments';
 import { useCga } from '@/context/CgaContext';
 
 export interface PayManualTarget {
@@ -67,8 +64,6 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
     return PAYMENT_SETTINGS;
   });
 
-  const [activeQrChoice, setActiveQrChoice] = useState<'primary' | 'backup'>('primary');
-
   useEffect(() => {
     let isMounted = true;
     async function loadPaymentSettings() {
@@ -82,22 +77,16 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
             payeeName: data.payee_name || PAYMENT_SETTINGS.payeeName,
             upiId: data.upi_id || PAYMENT_SETTINGS.upiId,
             upiIdBackup: data.upi_id_backup || null,
-            qrImageUrl: data.qr_image_url || localStorage.getItem('cga_active_qr_image') || PAYMENT_SETTINGS.qrImageUrl,
-            qrImageUrlBackup: data.qr_image_url_backup || localStorage.getItem('cga_backup_qr_image') || null,
-            qrLabel: data.qr_label || 'Primary Institute QR',
-            qrLabelBackup: data.qr_label_backup || 'Secondary / Alternate QR',
-            bankTransferEnabled: data.bank_transfer_enabled ?? true,
-            bankAccountHolder: data.bank_account_holder || PAYMENT_SETTINGS.bankAccountHolder,
-            bankName: data.bank_name || PAYMENT_SETTINGS.bankName,
-            bankAccountNumber: data.bank_account_number || PAYMENT_SETTINGS.bankAccountNumber,
-            bankIfsc: data.bank_ifsc || PAYMENT_SETTINGS.bankIfsc,
+            supportPhoneWhatsapp:
+              data.support_phone_whatsapp || data.support_phone || PAYMENT_SETTINGS.supportPhoneWhatsapp,
             supportPhone: data.support_phone || PAYMENT_SETTINGS.supportPhone,
             supportEmail: data.support_email || PAYMENT_SETTINGS.supportEmail,
+            paymentInstructionsExtra:
+              data.payment_instructions_extra || PAYMENT_SETTINGS.paymentInstructionsExtra,
+            refundPolicyText: data.refund_policy_text || PAYMENT_SETTINGS.refundPolicyText,
           };
           setSettings(s);
           localStorage.setItem('cga_payment_settings', JSON.stringify(s));
-          if (s.qrImageUrl) localStorage.setItem('cga_active_qr_image', s.qrImageUrl);
-          if (s.qrImageUrlBackup) localStorage.setItem('cga_backup_qr_image', s.qrImageUrlBackup);
         }
       } catch {}
     }
@@ -160,10 +149,9 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
     if (target?.dueAmount && target.dueAmount > 0) return 'balance';
     return 'full';
   });
-  const [channel, setChannel] = useState<PaymentChannelType>('upi');
+  const [payOption, setPayOption] = useState<'upi_id' | 'whatsapp_qr'>('upi_id');
   const [referenceCode, setReferenceCode] = useState<string>('');
   const [requestId, setRequestId] = useState<string>('');
-  const [qrType, setQrType] = useState<'official' | 'dynamic'>('official');
 
   // Current Affairs 1-Month (₹49) vs 1-Year (₹499) plan selection
   const isCaSeries = target?.itemId === 'series-current-affairs';
@@ -230,12 +218,10 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
       return;
     }
 
-    if (channel === 'upi') {
-      if (clean.length > 0 && !/^\d+$/.test(clean)) {
-        setUtrError('UPI UTR must contain numbers only (12 digits). Letter IDs like T24... are not the UTR.');
-      } else if (clean.length > 12) {
-        setUtrError('UPI UTR cannot exceed 12 digits.');
-      }
+    if (clean.length > 0 && !/^\d+$/.test(clean)) {
+      setUtrError('UPI UTR must contain numbers only (12 digits). Letter IDs like T24... are not the UTR.');
+    } else if (clean.length > 12) {
+      setUtrError('UPI UTR cannot exceed 12 digits.');
     }
   };
 
@@ -320,22 +306,17 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
 
     // Strict UTR validation
     if (!utr) {
-      setUtrError('Please enter your 12-digit UPI UTR or Bank Transaction reference.');
+      setUtrError('Please enter your 12-digit UPI UTR reference number.');
       return;
     }
 
-    if (channel === 'upi' && utr.length !== 12) {
-      setUtrError(`UPI UTR must be exactly 12 digits (you entered ${utr.length} digits).`);
+    if (!/^\d{12}$/.test(utr)) {
+      setUtrError(`UPI UTR must be exactly 12 digits (you entered ${utr.length} character(s)).`);
       return;
     }
 
-    if (channel === 'bank_transfer' && (utr.length < 12 || utr.length > 25)) {
-      setUtrError(`Bank reference must be between 12 and 25 alphanumeric characters.`);
-      return;
-    }
-
-    if (utr === '123456789012' || utr === '000000000000') {
-      setUtrError('Sample dummy UTRs cannot be submitted. Please provide the real reference from your bank receipt.');
+    if (utr === '123456789012' || utr === '000000000000' || utr === '111111111111') {
+      setUtrError('Sample dummy UTRs cannot be submitted. Please provide the real 12-digit UTR from your payment receipt.');
       return;
     }
 
@@ -356,6 +337,8 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
 
     setIsSubmitting(true);
 
+    const paymentChannelNote = payOption === 'whatsapp_qr' ? 'WhatsApp QR Request' : 'Direct UPI ID';
+
     try {
       if (currentStudent) {
         // Record payment verification in Supabase Postgres and local state
@@ -366,11 +349,11 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
           itemId: target.itemId,
           referenceCode: referenceCode,
           amount: currentAmount,
-          paymentMode: channel === 'upi' ? 'UPI' : 'Net Banking',
+          paymentMode: 'UPI',
           paymentType: selectedPlan === 'instalment_1' ? 'Instalment 1' : 'Full Payment',
           utr: utr,
           screenshotUrl: screenshotPreview || undefined,
-          remarks: `Ref: ${referenceCode} | Item: ${target.title} (${target.itemType})`,
+          remarks: `Ref: ${referenceCode} | Method: ${paymentChannelNote} | Item: ${target.title} (${target.itemType})`,
         });
 
         if (res && !res.success) {
@@ -400,8 +383,8 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
         paymentType: selectedPlan,
         expectedAmount: currentAmount,
         referenceCode: referenceCode,
-        paymentChannel: channel,
-        paymentMethod: channel === 'upi' ? 'upi_manual' : 'bank_transfer',
+        paymentChannel: 'upi',
+        paymentMethod: 'upi_manual',
         utr: utr,
         utrNormalized: utr,
         screenshotPath: screenshotPreview ? `${currentStudent?.id || 'demo'}/${requestId}.jpg` : null,
@@ -423,20 +406,19 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
     }
   };
 
-  const effectiveUpiId =
-    activeQrChoice === 'backup' && settings.upiIdBackup
-      ? settings.upiIdBackup
-      : settings.upiId;
-
-  const upiIntentUrl = buildUpiDeepLink({
-    amount: currentAmount,
-    note: `${target.title.slice(0, 30)} - ${referenceCode}`,
-    transactionRef: referenceCode,
-    customSettings: {
-      upiId: effectiveUpiId,
-      payeeName: settings.payeeName,
-    },
-  });
+  const effectiveUpiId = settings.upiId;
+  const rawWhatsappDigits = (settings.supportPhoneWhatsapp || settings.supportPhone || '+917005929189').replace(/\D/g, '');
+  const whatsappNumber = rawWhatsappDigits.length === 10 ? `91${rawWhatsappDigits}` : rawWhatsappDigits || '917005929189';
+  const whatsappRequestText = [
+    `Hello Career Guidance Academy Admin,`,
+    `Please send me the official Payment QR Code to complete my enrollment.`,
+    ``,
+    `• Student: ${currentStudent?.name || 'Student'}${currentStudent?.phone ? ` (${currentStudent.phone})` : ''}`,
+    `• Enrolling In: ${target.title}`,
+    `• Amount: ₹${currentAmount}`,
+    `• Reference Code: ${referenceCode || 'Pending'}`,
+  ].join('\n');
+  const whatsappRedirectUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(whatsappRequestText)}`;
 
   return (
     <div
@@ -454,7 +436,7 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
             </span>
             <h2 id="payment-modal-title" className="text-xl sm:text-2xl font-black">
               {step === 'summary' && '1. Choose Payment Option'}
-              {step === 'pay' && '2. Pay via UPI or Bank Transfer'}
+              {step === 'pay' && '2. Pay via UPI ID or Request QR on WhatsApp'}
               {step === 'proof' && '3. Submit Payment Reference (UTR)'}
               {step === 'success' && 'Payment Under Verification'}
             </h2>
@@ -682,35 +664,33 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
           {/* ================= STEP 2: PAYMENT DESK ================= */}
           {!isAlreadyEnrolled && !existingPendingPayment && step === 'pay' && (
             <div className="space-y-6">
-              {/* Channel Selector */}
+              {/* Two-Option Channel Selector: UPI ID or WhatsApp QR Request */}
               <div className="flex items-center gap-2 p-1 rounded-xl bg-slate-100 border border-slate-200">
                 <button
                   type="button"
-                  onClick={() => setChannel('upi')}
-                  className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                    channel === 'upi'
+                  onClick={() => setPayOption('upi_id')}
+                  className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    payOption === 'upi_id'
                       ? 'bg-white text-[#0056b3] shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  <QrCode className="w-4 h-4" />
-                  <span>UPI Payment (Instant QR / App)</span>
+                  <Smartphone className="w-4 h-4" />
+                  <span>Option 1: Pay via UPI ID</span>
                 </button>
 
-                {settings.bankTransferEnabled && (
-                  <button
-                    type="button"
-                    onClick={() => setChannel('bank_transfer')}
-                    className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                      channel === 'bank_transfer'
-                        ? 'bg-white text-[#0056b3] shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    <Building2 className="w-4 h-4" />
-                    <span>Bank Transfer (NEFT / IMPS)</span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setPayOption('whatsapp_qr')}
+                  className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    payOption === 'whatsapp_qr'
+                      ? 'bg-white text-emerald-700 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Phone className="w-4 h-4" />
+                  <span>Option 2: Request QR on WhatsApp</span>
+                </button>
               </div>
 
               {/* Mandatory Reference Notice & Exact Amount */}
@@ -741,205 +721,133 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
                 </div>
               </div>
 
-              {/* UPI Tab */}
-              {channel === 'upi' && (
+              {/* Option 1: Direct UPI ID Payment */}
+              {payOption === 'upi_id' && (
                 <div className="space-y-4">
-                  {/* QR Code Card with Toggle */}
-                  <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50 flex flex-col items-center text-center space-y-3">
-                    {/* Limit Failover / Multiple QR Toggle */}
-                    {settings.qrImageUrlBackup && (
-                      <div className="w-full max-w-sm p-3 rounded-2xl bg-amber-50/90 border border-amber-300 text-left space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-extrabold text-amber-950 flex items-center gap-1.5">
-                            <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
-                            <span>Select QR Code:</span>
-                          </span>
-                          <span className="text-[10px] font-bold text-amber-800 bg-amber-200/80 px-2 py-0.5 rounded-full">
-                            Limit Protection
-                          </span>
-                        </div>
-                        <div className="flex rounded-xl bg-white p-1 border border-amber-200 shadow-2xs">
-                          <button
-                            type="button"
-                            onClick={() => setActiveQrChoice('primary')}
-                            className={`flex-1 py-1.5 px-2 rounded-lg font-bold text-xs cursor-pointer transition-all ${
-                              activeQrChoice === 'primary'
-                                ? 'bg-[#0056b3] text-white shadow-xs'
-                                : 'text-slate-600 hover:text-slate-900'
-                            }`}
-                          >
-                            QR 1 ({settings.qrLabel || 'Primary'})
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setActiveQrChoice('backup')}
-                            className={`flex-1 py-1.5 px-2 rounded-lg font-bold text-xs cursor-pointer transition-all ${
-                              activeQrChoice === 'backup'
-                                ? 'bg-purple-700 text-white shadow-xs'
-                                : 'text-slate-600 hover:text-slate-900'
-                            }`}
-                          >
-                            QR 2 ({settings.qrLabelBackup || 'Alternate'})
-                          </button>
-                        </div>
-                        <p className="text-[10px] text-amber-900 leading-tight">
-                          💡 <strong>Showing &quot;Limit reached&quot; error in your UPI app?</strong> Switch to <strong>QR 2</strong> above to complete your enrollment without banking limits.
+                  <div className="p-5 rounded-2xl border border-blue-200 bg-blue-50/50 space-y-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-[#0056b3] text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <Smartphone className="w-5 h-5" />
+                      </div>
+                      <div className="space-y-1">
+                        <h4 className="font-extrabold text-sm text-slate-900">
+                          Pay Directly to Official Academy UPI ID
+                        </h4>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Copy the UPI ID below, open Google Pay, PhonePe, Paytm, or BHIM, choose <strong>&quot;Pay to UPI ID / VPA&quot;</strong>, enter <strong>₹{currentAmount}</strong>, add reference <strong>{referenceCode}</strong> in remarks, and complete the payment.
                         </p>
                       </div>
-                    )}
-
-                    <div className="flex items-center justify-between w-full max-w-xs">
-                      <span className="text-xs font-bold text-slate-700">Scan QR Code:</span>
-                      <div className="flex items-center gap-1 text-[11px]">
-                        <button
-                          type="button"
-                          onClick={() => setQrType('official')}
-                          className={`px-2 py-0.5 rounded font-bold cursor-pointer ${
-                            qrType === 'official' ? 'bg-[#0056b3] text-white' : 'bg-slate-200 text-slate-700'
-                          }`}
-                        >
-                          {activeQrChoice === 'backup' ? 'Alternate QR' : 'Institute QR'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setQrType('dynamic')}
-                          className={`px-2 py-0.5 rounded font-bold cursor-pointer ${
-                            qrType === 'dynamic' ? 'bg-[#0056b3] text-white' : 'bg-slate-200 text-slate-700'
-                          }`}
-                        >
-                          Dynamic Amount
-                        </button>
-                      </div>
                     </div>
 
-                    <div className="p-3 rounded-2xl bg-white border-2 border-slate-200 shadow-sm inline-block">
-                      <img
-                        src={
-                          qrType === 'official'
-                            ? activeQrChoice === 'backup' && settings.qrImageUrlBackup
-                              ? settings.qrImageUrlBackup
-                              : settings.qrImageUrl || getOfficialQrCodeAsset(settings)
-                            : getUpiQrCodeUrl(upiIntentUrl, 260)
-                        }
-                        alt="CGA Official UPI QR Code"
-                        className="w-48 h-48 sm:w-56 sm:h-56 object-contain rounded-lg mx-auto"
-                      />
-                    </div>
-                    <span className="text-[11px] text-slate-500 font-medium">
-                      Compatible with Google Pay, PhonePe, Paytm, BHIM, Cred, and all bank UPI apps.
-                    </span>
-
-                    {/* Mobile Deep Link Intent Button */}
-                    <a
-                      href={upiIntentUrl}
-                      className="w-full max-w-sm py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 cursor-pointer transition-colors"
-                    >
-                      <Smartphone className="w-4 h-4" />
-                      <span>Pay ₹{currentAmount} with UPI App on Mobile</span>
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
-
-                    {/* Bank Limit Advisory for Google Pay / UPI Apps */}
-                    <div className="w-full max-w-sm p-3.5 rounded-2xl bg-amber-50/90 border border-amber-300 text-left space-y-1.5">
-                      <div className="flex items-center gap-1.5 text-xs font-extrabold text-amber-900">
-                        <ShieldCheck className="w-4 h-4 text-amber-700" />
-                        <span>Google Pay showing &quot;Exceeded bank limit&quot;?</span>
+                    {/* Primary UPI ID Box */}
+                    <div className="p-4 rounded-xl bg-white border-2 border-[#0056b3]/25 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                      <div>
+                        <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider block">
+                          Official UPI ID / VPA
+                        </span>
+                        <strong className="text-base sm:text-lg text-[#0056b3] font-mono font-black select-all">
+                          {effectiveUpiId}
+                        </strong>
                       </div>
-                      <p className="text-[11px] text-amber-950 leading-relaxed">
-                        If Google Pay shows <em>&quot;You&apos;ve exceeded the bank limit for this payment&quot;</em>, don&apos;t worry! Simply <strong>Scan the QR code above directly</strong> with Google Pay or transfer to UPI ID <strong>{effectiveUpiId}</strong> directly.
-                      </p>
                       <button
                         type="button"
                         onClick={() => handleCopy(effectiveUpiId, 'upi-direct')}
-                        className="w-full py-1.5 rounded-lg bg-white border border-amber-300 text-amber-900 font-bold text-xs hover:bg-amber-100 inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                        className="px-4 py-2.5 rounded-xl bg-[#0056b3] hover:bg-blue-700 text-white font-bold text-xs inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors shrink-0"
                       >
-                        {copiedKey === 'upi-direct' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                        <span>Copy Official UPI ID ({effectiveUpiId})</span>
+                        {copiedKey === 'upi-direct' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                        <span>{copiedKey === 'upi-direct' ? 'UPI ID Copied!' : 'Copy UPI ID'}</span>
                       </button>
                     </div>
-                  </div>
 
-                  {/* UPI Details */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                    <div className="p-3.5 rounded-xl bg-white border border-slate-200 flex items-center justify-between">
+                    {/* Optional Backup UPI ID if configured */}
+                    {settings.upiIdBackup && (
+                      <div className="p-3.5 rounded-xl bg-white border border-slate-200 flex items-center justify-between gap-3">
+                        <div>
+                          <span className="text-[11px] text-slate-400 font-semibold block">
+                            Alternate / Backup UPI ID:
+                          </span>
+                          <strong className="text-sm text-slate-800 font-mono font-bold">
+                            {settings.upiIdBackup}
+                          </strong>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(settings.upiIdBackup || '', 'upi-backup')}
+                          className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs inline-flex items-center gap-1 cursor-pointer"
+                        >
+                          {copiedKey === 'upi-backup' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                          <span>{copiedKey === 'upi-backup' ? 'Copied' : 'Copy'}</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Payee Name */}
+                    <div className="p-3.5 rounded-xl bg-white border border-slate-200 flex items-center justify-between text-xs">
                       <div>
-                        <span className="text-slate-400 font-semibold block">Official Payee Name:</span>
+                        <span className="text-slate-400 font-semibold block">Verify Payee Name Before Paying:</span>
                         <strong className="text-slate-900 font-bold">{settings.payeeName}</strong>
                       </div>
                       <button
                         type="button"
                         onClick={() => handleCopy(settings.payeeName, 'payee')}
-                        className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+                        className="p-1.5 text-slate-400 hover:text-slate-700 cursor-pointer"
                         title="Copy Payee Name"
                       >
                         {copiedKey === 'payee' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                      </button>
-                    </div>
-
-                    <div className="p-3.5 rounded-xl bg-white border border-slate-200 flex items-center justify-between">
-                      <div>
-                        <span className="text-slate-400 font-semibold block">
-                          UPI ID / VPA ({activeQrChoice === 'backup' ? 'QR 2' : 'QR 1'}):
-                        </span>
-                        <strong className="text-[#0056b3] font-mono font-bold">{effectiveUpiId}</strong>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleCopy(effectiveUpiId, 'upi')}
-                        className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
-                        title="Copy UPI ID"
-                      >
-                        {copiedKey === 'upi' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
                       </button>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Bank Transfer Tab */}
-              {channel === 'bank_transfer' && (
-                <div className="p-5 rounded-2xl border border-slate-200 bg-white space-y-3">
-                  <h4 className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
-                    <Building2 className="w-4 h-4 text-[#0056b3]" />
-                    State Bank of India (SBI) Account Details
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-                      <span className="text-slate-400 font-semibold block">Account Holder:</span>
-                      <strong className="text-slate-900 font-bold">{settings.bankAccountHolder}</strong>
+              {/* Option 2: Request Official QR via Admin WhatsApp */}
+              {payOption === 'whatsapp_qr' && (
+                <div className="p-5 rounded-2xl border border-emerald-200 bg-emerald-50/50 space-y-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Phone className="w-5 h-5" />
                     </div>
-                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-                      <span className="text-slate-400 font-semibold block">Bank &amp; Branch:</span>
-                      <strong className="text-slate-900 font-bold">{settings.bankName}</strong>
+                    <div className="space-y-1">
+                      <h4 className="font-extrabold text-sm text-emerald-950">
+                        Request Payment QR Code on Admin WhatsApp
+                      </h4>
+                      <p className="text-xs text-emerald-900 leading-relaxed">
+                        Click the WhatsApp button below to message our Admission Desk directly with your enrollment details. The admin will immediately send you the official QR code to pay <strong>₹{currentAmount}</strong>.
+                      </p>
                     </div>
-                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                      <div>
-                        <span className="text-slate-400 font-semibold block">Account Number:</span>
-                        <strong className="text-slate-900 font-mono font-bold">{settings.bankAccountNumber}</strong>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleCopy(settings.bankAccountNumber, 'acc')}
-                        className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
-                        title="Copy Account Number"
-                      >
-                        {copiedKey === 'acc' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                      </button>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-white border border-emerald-200 text-xs space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500 font-semibold">Admin WhatsApp Number:</span>
+                      <strong className="font-mono text-emerald-800 font-bold">
+                        {settings.supportPhoneWhatsapp || '+91-7005929189'}
+                      </strong>
                     </div>
-                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                      <div>
-                        <span className="text-slate-400 font-semibold block">IFSC Code:</span>
-                        <strong className="text-slate-900 font-mono font-bold">{settings.bankIfsc}</strong>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleCopy(settings.bankIfsc, 'ifsc')}
-                        className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
-                        title="Copy IFSC"
-                      >
-                        {copiedKey === 'ifsc' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                      </button>
-                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      After paying on the QR sent by Admin, return here and click <strong>&quot;I Have Paid — Enter 12-Digit UTR&quot;</strong> below to submit your UTR for verification.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-2.5">
+                    <a
+                      href={whatsappRedirectUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                    >
+                      <Phone className="w-4 h-4" />
+                      <span>Message Admin on WhatsApp for QR</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(whatsappRequestText, 'wa-msg')}
+                      className="px-4 py-3 rounded-xl bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-100 font-bold text-xs inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                    >
+                      {copiedKey === 'wa-msg' ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                      <span>{copiedKey === 'wa-msg' ? 'Message Copied!' : 'Copy Message'}</span>
+                    </button>
                   </div>
                 </div>
               )}
@@ -1012,19 +920,19 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
                     12-Digit Transaction Reference (UTR) <span className="text-red-600">*</span>
                   </label>
                   <span className="text-[11px] font-mono text-slate-500">
-                    {channel === 'upi' ? `${utr.length}/12 digits` : `${utr.length} chars`}
+                    {utr.length}/12 digits
                   </span>
                 </div>
                 <div className="relative">
                   <input
                     id="payment-utr-input"
                     type="text"
-                    inputMode={channel === 'upi' ? 'numeric' : 'text'}
-                    pattern={channel === 'upi' ? '[0-9]*' : undefined}
-                    maxLength={channel === 'upi' ? 12 : 25}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={12}
                     value={utr}
                     onChange={handleUtrChange}
-                    placeholder={channel === 'upi' ? 'e.g. 429182736451 (12 numbers)' : 'e.g. SBIN429182736451'}
+                    placeholder="e.g. 429182736451 (12 numbers)"
                     className={`w-full px-4 py-3 rounded-xl border text-sm font-mono tracking-wider focus:outline-none focus:ring-2 ${
                       utr.length === 12
                         ? 'border-emerald-500 bg-emerald-50/20 focus:ring-emerald-500'
@@ -1032,7 +940,7 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
                     }`}
                     required
                   />
-                  {channel === 'upi' && utr.length === 12 && (
+                  {utr.length === 12 && (
                     <CheckCircle2 className="w-5 h-5 text-emerald-600 absolute right-3 top-1/2 -translate-y-1/2" />
                   )}
                 </div>
@@ -1042,6 +950,71 @@ export function PayManualModal({ target, onClose, onSuccess }: PayManualModalPro
                     Where do I find this? <ExternalLink className="w-3 h-3" />
                   </Link>
                 </div>
+              </div>
+
+              {/* Optional Payment Screenshot Upload */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-800">
+                    Payment Screenshot <span className="text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  {screenshotPreview && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setScreenshotPreview(null);
+                        setScreenshotFile(null);
+                        setScreenshotError('');
+                      }}
+                      className="text-[11px] font-bold text-red-600 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      <Trash2 className="w-3 h-3" /> Remove
+                    </button>
+                  )}
+                </div>
+
+                {screenshotError && (
+                  <p className="text-xs text-red-600 font-semibold">{screenshotError}</p>
+                )}
+
+                {screenshotPreview ? (
+                  <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50 flex items-center gap-3">
+                    <img
+                      src={screenshotPreview}
+                      alt="Payment screenshot preview"
+                      className="w-14 h-14 object-cover rounded-lg border border-slate-200"
+                    />
+                    <div className="text-xs text-slate-600">
+                      <p className="font-bold text-slate-800 truncate max-w-[220px]">
+                        {screenshotFile?.name || 'Payment screenshot attached'}
+                      </p>
+                      {isBlurryOrSmall && (
+                        <p className="text-[11px] text-amber-700 flex items-center gap-1 mt-0.5">
+                          <AlertTriangle className="w-3 h-3" /> Low resolution image — ensure UTR is legible.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={handleDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-4 rounded-xl border-2 border-dashed border-slate-300 hover:border-[#0056b3] bg-slate-50/70 text-center cursor-pointer transition-colors"
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+                    <Upload className="w-5 h-5 text-slate-400 mx-auto mb-1" />
+                    <p className="text-xs font-semibold text-slate-700">
+                      Click or drag &amp; drop payment screenshot (JPG/PNG, max 5 MB)
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Contact Admission Cell for Support Box */}
