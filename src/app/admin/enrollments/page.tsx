@@ -104,21 +104,27 @@ export default function AdminEnrollmentsPage() {
   const activeItemId = activeItem?.id || selectedItemId || allMockSeries[0]?.id || '';
   const activeItemName = activeItem?.name || '';
 
-  // Calculate enrolled counts for all mock series
+  // Calculate enrolled counts for all mock series (exclude admin profiles)
   const seriesEnrollmentCounts = useMemo(() => {
     const counts: Record<string, number> = {};
+    const studentMap = new Map((db.students || []).map((s) => [s.id, s]));
     allMockSeries.forEach((s) => {
-      counts[s.id] = (db.seriesEnrollments || []).filter((se) => se.seriesId === s.id).length;
+      counts[s.id] = (db.seriesEnrollments || []).filter((se) => {
+        if (se.seriesId !== s.id) return false;
+        const stu = studentMap.get(se.studentId);
+        return Boolean(stu && stu.email !== 'angatsaha825@gmail.com');
+      }).length;
     });
     return counts;
-  }, [allMockSeries, db.seriesEnrollments]);
+  }, [allMockSeries, db.seriesEnrollments, db.students]);
 
-  // Calculate enrolled counts for all courses
+  // Calculate enrolled counts for all courses (exclude admin profiles)
   const courseEnrollmentCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     allCourses.forEach((c) => {
       let cnt = 0;
       (db.students || []).forEach((stu) => {
+        if (stu.email === 'angatsaha825@gmail.com') return;
         if (stu.enrollments.some((e) => e.courseId === c.id)) cnt++;
       });
       counts[c.id] = cnt;
@@ -126,36 +132,25 @@ export default function AdminEnrollmentsPage() {
     return counts;
   }, [allCourses, db.students]);
 
-  // Find enrolled students for the ACTIVE item
+  // Find enrolled students for the ACTIVE item (exclude admin profiles)
   const enrolledStudentRecords = useMemo(() => {
     if (!activeItemId) return [];
 
     if (sectionKind === 'mock_series') {
       const enrRows = (db.seriesEnrollments || []).filter((se) => se.seriesId === activeItemId);
-      return enrRows.map((se) => {
-        const student = db.students.find((s) => s.id === se.studentId) || {
-          id: se.studentId,
-          name: 'Student',
-          studentCode: 'CGA-2026',
-          email: '',
-          phone: '',
-          photo: '',
-          guardianName: '',
-          address: '',
-          qualification: '',
-          targetExam: '',
-          joinedDate: '',
-          status: 'Active' as const,
-          enrollments: [],
-        };
-        return {
-          enrollmentId: se.id,
-          student,
-          enrolledAt: se.enrolledAt,
-          accessValidUntil: se.accessValidUntil,
-          paymentId: se.paymentId,
-        };
-      });
+      return enrRows
+        .map((se) => {
+          const student = db.students.find((s) => s.id === se.studentId);
+          if (!student || student.email === 'angatsaha825@gmail.com') return null;
+          return {
+            enrollmentId: se.id,
+            student,
+            enrolledAt: se.enrolledAt,
+            accessValidUntil: se.accessValidUntil,
+            paymentId: se.paymentId,
+          };
+        })
+        .filter((r): r is NonNullable<typeof r> => r !== null);
     } else {
       const records: {
         enrollmentId?: string;
@@ -168,6 +163,7 @@ export default function AdminEnrollmentsPage() {
       }[] = [];
 
       (db.students || []).forEach((stu) => {
+        if (stu.email === 'angatsaha825@gmail.com') return;
         const enr = stu.enrollments.find((e) => e.courseId === activeItemId);
         if (enr) {
           records.push({
@@ -209,13 +205,13 @@ export default function AdminEnrollmentsPage() {
     });
   }, [enrolledStudentRecords, search, validityFilter, currentTime]);
 
-  // Candidates available to add to this active item (not yet enrolled)
+  // Candidates available to add to this active item (not yet enrolled, exclude admin profiles)
   const availableCandidatesToAdd = useMemo(() => {
     if (!activeItemId) return [];
     const alreadyEnrolledIds = new Set(enrolledStudentRecords.map((r) => r.student.id));
 
     return (db.students || [])
-      .filter((s) => !alreadyEnrolledIds.has(s.id))
+      .filter((s) => s.email !== 'angatsaha825@gmail.com' && !alreadyEnrolledIds.has(s.id))
       .filter((s) => {
         const q = addStudentSearch.trim().toLowerCase();
         if (!q) return true;
