@@ -17,6 +17,9 @@ const cspHeader = `
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   compress: true,
+  experimental: {
+    agentUpgrade: 'security',
+  },
   allowedDevOrigins: [
     '*.trycloudflare.com',
   ],
