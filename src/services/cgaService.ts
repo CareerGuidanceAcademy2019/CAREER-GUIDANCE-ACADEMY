@@ -3334,7 +3334,66 @@ export const cgaService = {
     return { success: true };
   },
 
+  async createMockSeries(params: {
+    name: string;
+    classRange: string;
+    stream?: string;
+    price: number;
+    batchLabel: string;
+    description: string;
+    highlights: string[];
+    status: 'Open' | 'Closed' | 'Archived';
+    startsOn: string;
+    cloneFromSeriesId?: string;
+    subjectNames?: string[];
+    copyExistingTests?: boolean;
+  }): Promise<ServiceResult<{ series?: MockSeries; subjects?: MockSubject[]; copiedTestsCount?: number }>> {
+    invalidateDbCache();
+    try {
+      const res = await fetch('/api/admin/mock-tests/series', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.series) {
+        return { success: false, error: data?.error || 'Could not publish mock test series.' };
+      }
+      const r = data.series;
+      const mappedSeries: MockSeries = {
+        id: r.id,
+        slug: r.slug,
+        name: r.name,
+        classRange: r.class_range,
+        stream: r.stream ?? '',
+        price: Number(r.price),
+        batchLabel: r.batch_label,
+        description: r.description ?? '',
+        highlights: Array.isArray(r.highlights) ? r.highlights : [],
+        status: r.status ?? 'Open',
+        startsOn: r.starts_on ?? 'Enrollment Open Now',
+      };
+      const mappedSubjects: MockSubject[] = Array.isArray(data.subjects)
+        ? data.subjects.map((sub: any) => ({
+            id: sub.id,
+            seriesId: sub.series_id,
+            name: sub.name,
+            sortOrder: Number(sub.sort_order ?? 1),
+          }))
+        : [];
+      return {
+        success: true,
+        series: mappedSeries,
+        subjects: mappedSubjects,
+        copiedTestsCount: Number(data.copiedTestsCount || 0),
+      };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Network error publishing mock test series.' };
+    }
+  },
+
   async updateMockSeries(series: MockSeries): Promise<ServiceResult<{ series?: MockSeries }>> {
+    invalidateDbCache();
     try {
       const res = await fetch('/api/admin/mock-tests/series', {
         method: 'PATCH',
@@ -3347,6 +3406,9 @@ export const cgaService = {
           name: series.name,
           description: series.description,
           batchLabel: series.batchLabel,
+          classRange: series.classRange,
+          stream: series.stream,
+          highlights: series.highlights,
         }),
       });
       const data = await res.json();
@@ -3362,6 +3424,9 @@ export const cgaService = {
             name: series.name,
             description: series.description,
             batch_label: series.batchLabel,
+            class_range: series.classRange,
+            stream: series.stream,
+            highlights: series.highlights,
           })
           .eq('id', series.id);
         if (sbErr) {
@@ -3381,6 +3446,9 @@ export const cgaService = {
             name: series.name,
             description: series.description,
             batch_label: series.batchLabel,
+            class_range: series.classRange,
+            stream: series.stream,
+            highlights: series.highlights,
           })
           .eq('id', series.id);
         if (sbErr) return { success: false, error: sbErr.message };

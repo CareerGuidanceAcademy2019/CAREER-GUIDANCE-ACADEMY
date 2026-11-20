@@ -162,6 +162,20 @@ interface CgaContextType {
   saveAnnouncement: (announcement: Announcement, isNew: boolean) => Promise<void>;
   deleteAnnouncement: (announcementId: string) => Promise<void>;
   updateSiteContent: (content: SiteContent) => Promise<boolean>;
+  createMockSeries: (params: {
+    name: string;
+    classRange: string;
+    stream?: string;
+    price: number;
+    batchLabel: string;
+    description: string;
+    highlights: string[];
+    status: 'Open' | 'Closed' | 'Archived';
+    startsOn: string;
+    cloneFromSeriesId?: string;
+    subjectNames?: string[];
+    copyExistingTests?: boolean;
+  }) => Promise<MockSeries | null>;
   updateMockSeries: (series: MockSeries) => Promise<void>;
   saveMockSubjectPost: (post: MockSubjectPost, isNew: boolean) => Promise<void>;
   deleteMockSubjectPost: (postId: string) => Promise<void>;
@@ -1316,6 +1330,33 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
     [run, refresh]
   );
 
+  const createMockSeries = useCallback(
+    async (params: Parameters<CgaContextType['createMockSeries']>[0]) => {
+      const res = await cgaService.createMockSeries(params);
+      if (!res.success || !res.series) {
+        showToast('Publish Failed', res.error || 'Could not publish new mock test series.', 'error');
+        return null;
+      }
+      const newSeries = res.series;
+      const newSubs = res.subjects || [];
+      setDb((prev) => ({
+        ...prev,
+        mockSeries: [...(prev.mockSeries || []), newSeries],
+        mockSubjects: [...(prev.mockSubjects || []), ...newSubs],
+      }));
+      if (res.copiedTestsCount && res.copiedTestsCount > 0) {
+        void refresh(true);
+      }
+      showToast(
+        'New Mock Test Series Published!',
+        `${newSeries.name} (₹${newSeries.price}/-) is now live for new student enrollment.`,
+        'success'
+      );
+      return newSeries;
+    },
+    [showToast, refresh]
+  );
+
   const updateMockSeries = useCallback(
     async (series: MockSeries) => {
       const res = await cgaService.updateMockSeries(series);
@@ -1327,7 +1368,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         mockSeries: prev.mockSeries.map((s) => (s.id === series.id ? series : s)),
       }));
-      showToast('Mock Test Series Updated', `${series.name} price updated to ₹${series.price}/-.`, 'success');
+      showToast('Mock Test Series Updated', `${series.name} (₹${series.price}/-) updated successfully.`, 'success');
     },
     [showToast]
   );
@@ -1629,6 +1670,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         saveAnnouncement,
         deleteAnnouncement,
         updateSiteContent,
+        createMockSeries,
         updateMockSeries,
         saveMockSubjectPost,
         deleteMockSubjectPost,

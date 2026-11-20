@@ -761,8 +761,8 @@ export default function StudentMockTestsPage() {
       return;
     }
 
-    const activeSeriesList = db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL;
-    const s = activeSeriesList.find((item) => item.id === seriesId);
+    const allSeries = db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL;
+    const s = allSeries.find((item) => item.id === seriesId);
     setPayManualTarget({
       itemType: 'mock_series',
       itemId: seriesId,
@@ -1463,7 +1463,11 @@ export default function StudentMockTestsPage() {
     return true;
   });
 
-  const activeSeriesList = db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL;
+  const activeSeriesList = (
+    db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL
+  ).filter((s) => s.status !== 'Archived');
+  const activeSubjectsPool =
+    db.mockSubjects && db.mockSubjects.length > 0 ? db.mockSubjects : MOCK_SUBJECTS_INITIAL;
   const paper1Series = activeSeriesList.find((s) => s.id === 'series-ttet-paper1') || MOCK_SERIES_INITIAL[0];
   const paper2SciSeries = activeSeriesList.find((s) => s.id === 'series-ttet-paper2-sci') || MOCK_SERIES_INITIAL[1];
   const paper2SocSeries = activeSeriesList.find((s) => s.id === 'series-ttet-paper2-soc') || MOCK_SERIES_INITIAL[2];
@@ -1821,7 +1825,8 @@ export default function StudentMockTestsPage() {
 
         {/* 2. Subject Tabs (Including Full-Length Mocks as its own section) */}
         {(() => {
-          const subjectsForSeries = MOCK_SUBJECTS_INITIAL.filter((s) => s.seriesId === selectedSeriesId);
+          const subjectsForSeries = activeSubjectsPool.filter((s) => s.seriesId === selectedSeriesId);
+          const selectedSeriesObj = activeSeriesList.find((s) => s.id === selectedSeriesId);
           const isEnrolled = isStudentEnrolledInSeries(selectedSeriesId);
 
           return (
@@ -1919,12 +1924,25 @@ export default function StudentMockTestsPage() {
                   );
                 }
 
+                if (selectedSeriesObj?.status === 'Closed') {
+                  return (
+                    <div className="p-4 rounded-2xl bg-slate-100 border border-slate-300 flex items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-2 text-slate-700 font-bold">
+                        <Lock className="w-4 h-4 text-slate-500 shrink-0" />
+                        <span>
+                          Enrollment for <strong>{selectedSeriesObj.name}</strong> is currently closed by the academy.
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }
+
                 return (
                   <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                     <div className="flex items-center gap-2 text-amber-900 font-bold">
                       <Lock className="w-4 h-4 text-[#ea580c] shrink-0" />
                       <span>
-                        Enrolment required for this series to appear in CBT tests and download watermarked question papers.
+                        Enrolment required for <strong>{selectedSeriesObj?.name || 'this series'}</strong> to appear in CBT tests and download watermarked question papers.
                       </span>
                     </div>
                     <button
@@ -1932,7 +1950,7 @@ export default function StudentMockTestsPage() {
                       onClick={() => handleOpenSeriesCheckout(selectedSeriesId)}
                       className="px-4 py-2 rounded-xl bg-[#0056b3] hover:bg-blue-700 text-white font-black shrink-0 cursor-pointer shadow-xs"
                     >
-                      Enrol Now
+                      Enrol Now @ ₹{selectedSeriesObj?.price ?? 499}/-
                     </button>
                   </div>
                 );
@@ -2003,7 +2021,7 @@ export default function StudentMockTestsPage() {
                     return t.testType === 'full' || !t.subjectId || String(t.title).toLowerCase().includes('full');
                   }
                   if (selectedSubjectId !== 'all') {
-                    const matchedSubj = MOCK_SUBJECTS_INITIAL.find((s) => s.id === selectedSubjectId);
+                    const matchedSubj = activeSubjectsPool.find((s) => s.id === selectedSubjectId);
                     const subjName = (matchedSubj?.name || '').toLowerCase();
                     const tSubj = (t.subject || '').toLowerCase();
                     const tTitle = (t.title || '').toLowerCase();
