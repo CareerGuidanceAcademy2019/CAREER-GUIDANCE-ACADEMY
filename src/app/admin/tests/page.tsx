@@ -398,6 +398,7 @@ export default function AdminMockTestsPage() {
     deleteMockTest,
     createMockSeries,
     updateMockSeries,
+    deleteMockSeries,
     saveMockSubjectPost,
     deleteMockSubjectPost,
     showToast,
@@ -427,8 +428,35 @@ export default function AdminMockTestsPage() {
   const [deletePostTarget, setDeletePostTarget] = useState<MockSubjectPost | null>(null);
   const [filterPostSubject, setFilterPostSubject] = useState<string>('all');
 
-  // Series Packages editing & creation state
-  const [editingSeries, setEditingSeries] = useState<MockSeries | null>(null);
+  // Series Packages editing, creation & deletion state
+  const normalizeSeriesNameClient = (name: string) =>
+    String(name || '')
+      .toLowerCase()
+      .replace(/\(\s*new\s*batch\s*\)/gi, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const [editingSeriesModal, setEditingSeriesModal] = useState<{
+    series: MockSeries;
+    highlightsText: string;
+    subjectsText: string;
+  } | null>(null);
+  const [isSavingSeriesEdit, setIsSavingSeriesEdit] = useState(false);
+  const [deleteSeriesTarget, setDeleteSeriesTarget] = useState<MockSeries | null>(null);
+  const [isDeletingSeries, setIsDeletingSeries] = useState(false);
+
+  const openEditSeriesModal = (series: MockSeries) => {
+    const subs = (db.mockSubjects || [])
+      .filter((s) => s.seriesId === series.id)
+      .map((s) => s.name);
+    setEditingSeriesModal({
+      series: { ...series },
+      highlightsText: (series.highlights || []).join('\n'),
+      subjectsText: subs.join(', '),
+    });
+  };
+
   const [newSeriesModalOpen, setNewSeriesModalOpen] = useState(false);
   const [isPublishingSeries, setIsPublishingSeries] = useState(false);
   const [newSeriesForm, setNewSeriesForm] = useState<{
@@ -449,7 +477,7 @@ export default function AdminMockTestsPage() {
     classRange: 'Classes VI to VIII',
     stream: 'Science',
     price: 499,
-    batchLabel: 'New Batch 2026',
+    batchLabel: 'Batch 2026',
     startsOn: 'Enrollment Open Now',
     status: 'Open',
     description: 'Daily Online Mock Tests Series with Bilingual MCQs, OMR Practice & Complete Syllabus Coverage.',
@@ -472,11 +500,11 @@ export default function AdminMockTestsPage() {
         .filter((s) => s.seriesId === templateSeries.id)
         .map((s) => s.name);
       setNewSeriesForm({
-        name: `${templateSeries.name.replace(/\s*\(New Batch.*\)$/i, '')} (New Batch)`,
+        name: `${templateSeries.name.replace(/\s*\(New Batch.*\)$/i, '')} — Batch 2`,
         classRange: templateSeries.classRange || 'Classes VI to VIII',
         stream: templateSeries.stream || 'General',
         price: Number(templateSeries.price ?? 499),
-        batchLabel: 'New Batch',
+        batchLabel: 'Batch 2',
         startsOn: 'Enrollment Open Now',
         status: 'Open',
         description: templateSeries.description || '',
@@ -494,7 +522,7 @@ export default function AdminMockTestsPage() {
         classRange: 'All Target Candidates',
         stream: 'General',
         price: 499,
-        batchLabel: 'New Batch 2026',
+        batchLabel: 'Batch 2026',
         startsOn: 'Enrollment Open Now',
         status: 'Open',
         description: 'Structured Online Mock Tests Series with Complete Exam-Pattern Practice & Instant Analysis.',
@@ -1515,6 +1543,23 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
       return;
     }
 
+    // Prevent duplicate mock test title within the same mock test series
+    const normTestTitle = finalEditingTest.title.trim().toLowerCase().replace(/\s+/g, ' ');
+    const duplicateExistingTest = (db.mockTests || []).find(
+      (t) =>
+        t.id !== finalEditingTest.id &&
+        (t.seriesId || '') === (finalEditingTest.seriesId || '') &&
+        (t.title || '').trim().toLowerCase().replace(/\s+/g, ' ') === normTestTitle
+    );
+    if (duplicateExistingTest) {
+      showToast(
+        'Duplicate Mock Test Blocked',
+        `A mock test titled "${duplicateExistingTest.title}" already exists in this series. Please enter a unique mock test title.`,
+        'error'
+      );
+      return;
+    }
+
     const seriesObj = (db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL).find(
       (s) => s.id === finalEditingTest.seriesId
     );
@@ -1595,36 +1640,56 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
     );
   };
 
-  // Dynamically combine base subject groups with every newly published Mock Test Series in DB
+  // Dynamically build active DB series subject groups (excludes deleted series & reflects live edited titles/subjects)
   const dynamicMockSubjectGroups = useMemo<MockSubjectGroup[]>(() => {
-    const groups: MockSubjectGroup[] = [...ALL_MOCK_SUBJECT_GROUPS];
-    const knownSeriesIds = new Set(groups.map((g) => g.seriesId));
     const allSeries = db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL;
+    const activeSeriesIdSet = new Set(allSeries.map((s) => s.id));
+    const staticBySeries = new Map(
+      ALL_MOCK_SUBJECT_GROUPS.filter((g) => activeSeriesIdSet.has(g.seriesId)).map((g) => [g.seriesId, g])
+    );
 
+    const groups: MockSubjectGroup[] = [];
     for (const ser of allSeries) {
-      if (ser.id === 'series-current-affairs' || knownSeriesIds.has(ser.id)) continue;
-      knownSeriesIds.add(ser.id);
+      if (ser.id === 'series-current-affairs') continue;
       const serSubs = (db.mockSubjects || []).filter((sub) => sub.seriesId === ser.id);
-      const items: MockSubjectItem[] = serSubs.map((sub) => {
-        const mode = getSubjectLanguageMode(sub.name);
-        const modeTag = mode === 'english_only' ? 'English Only' : mode === 'bengali_only' ? 'Bengali Only' : 'Bilingual';
-        return {
-          name: sub.name,
-          label: `${sub.name} [${modeTag}]`,
-          langMode: mode,
+      const staticFallback = staticBySeries.get(ser.id);
+
+      let items: MockSubjectItem[];
+      if (serSubs.length > 0) {
+        items = serSubs.map((sub) => {
+          const mode = getSubjectLanguageMode(sub.name);
+          const modeTag = mode === 'english_only' ? 'English Only' : mode === 'bengali_only' ? 'Bengali Only' : 'Bilingual';
+          return {
+            name: sub.name,
+            label: `${sub.name} [${modeTag}]`,
+            langMode: mode,
+            seriesId: ser.id,
+            defaultTitle: `${ser.name}: ${sub.name} Mock #01`,
+          };
+        });
+        items.push({
+          name: `${ser.name} Full Length Mock`,
+          label: 'Full-Length Simulated Paper [Bilingual]',
+          langMode: 'bilingual',
           seriesId: ser.id,
-          defaultTitle: `${ser.name}: ${sub.name} Mock #01`,
-        };
-      });
-      items.push({
-        name: `${ser.name} Full Length Mock`,
-        label: 'Full-Length Simulated Paper [Bilingual]',
-        langMode: 'bilingual',
-        seriesId: ser.id,
-        defaultTitle: `${ser.name} — Full-Length Mock #01`,
-      });
+          defaultTitle: `${ser.name} — Full-Length Mock #01`,
+        });
+      } else if (staticFallback) {
+        items = staticFallback.items;
+      } else {
+        items = [
+          {
+            name: `${ser.name} Full Length Mock`,
+            label: 'Full-Length Simulated Paper [Bilingual]',
+            langMode: 'bilingual',
+            seriesId: ser.id,
+            defaultTitle: `${ser.name} — Full-Length Mock #01`,
+          },
+        ];
+      }
+
       groups.push({
-        group: `${ser.name} (₹${ser.price}/- — ${ser.batchLabel || 'New Batch'})`,
+        group: `${ser.name} (₹${ser.price}/- — ${ser.batchLabel || 'Active Batch'})`,
         seriesId: ser.id,
         items,
       });
@@ -2839,7 +2904,8 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {(db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL).map((series) => {
-              const isEditing = editingSeries?.id === series.id;
+              const testsInSeriesCount = (db.mockTests || []).filter((t) => t.seriesId === series.id).length;
+              const subjectsInSeries = (db.mockSubjects || []).filter((sub) => sub.seriesId === series.id);
 
               return (
                 <div
@@ -2864,104 +2930,29 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                       </span>
                     </div>
 
-                    {isEditing && editingSeries ? (
-                      <div className="space-y-2">
-                        <input
-                          type="text"
-                          value={editingSeries.name}
-                          onChange={(e) => setEditingSeries({ ...editingSeries, name: e.target.value })}
-                          className="w-full px-2.5 py-1.5 rounded-lg border border-blue-300 text-xs font-extrabold text-[#0a0e2a]"
-                          placeholder="Series Title"
-                        />
-                        <textarea
-                          rows={2}
-                          value={editingSeries.description}
-                          onChange={(e) => setEditingSeries({ ...editingSeries, description: e.target.value })}
-                          className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs text-slate-700"
-                          placeholder="Description"
-                        />
-                      </div>
-                    ) : (
-                      <>
-                        <h3 className="text-base font-extrabold text-[#0a0e2a] leading-snug">
-                          {series.name}
-                        </h3>
-                        <p className="text-xs text-slate-600">{series.description}</p>
-                      </>
-                    )}
+                    <h3 className="text-base font-extrabold text-[#0a0e2a] leading-snug">
+                      {series.name}
+                    </h3>
+                    <p className="text-xs text-slate-600">{series.description}</p>
 
-                    {/* Price & Schedule Management */}
+                    {/* Price & Schedule Overview */}
                     <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-slate-500 font-bold">Package Price:</span>
-                        {isEditing && editingSeries ? (
-                          <div className="flex items-center gap-1">
-                            <span className="text-sm font-black text-slate-800">₹</span>
-                            <input
-                              type="number"
-                              value={editingSeries.price}
-                              onChange={(e) =>
-                                setEditingSeries({ ...editingSeries, price: Number(e.target.value) })
-                              }
-                              className="w-20 px-2 py-0.5 rounded border border-blue-400 text-xs font-bold text-[#0056b3]"
-                            />
-                          </div>
-                        ) : (
-                          <span className="text-xl font-black text-[#0056b3]">
-                            ₹{series.price}/-
-                          </span>
-                        )}
+                        <span className="text-xl font-black text-[#0056b3]">
+                          ₹{series.price}/-
+                        </span>
                       </div>
 
                       <div className="flex items-center justify-between text-xs gap-2">
                         <span className="text-slate-500">Launch Date:</span>
-                        {isEditing && editingSeries ? (
-                          <input
-                            type="text"
-                            value={editingSeries.startsOn}
-                            onChange={(e) =>
-                              setEditingSeries({ ...editingSeries, startsOn: e.target.value })
-                            }
-                            className="px-2 py-0.5 rounded border border-slate-300 text-xs font-semibold w-36"
-                            placeholder="e.g. Admin Scheduled"
-                          />
-                        ) : (
-                          <span className="font-bold text-slate-700 text-right">{series.startsOn}</span>
-                        )}
+                        <span className="font-bold text-slate-700 text-right">{series.startsOn}</span>
                       </div>
 
-                      {isEditing && editingSeries && (
-                        <>
-                          <div className="flex items-center justify-between text-xs gap-2">
-                            <span className="text-slate-500">Batch Label:</span>
-                            <input
-                              type="text"
-                              value={editingSeries.batchLabel}
-                              onChange={(e) =>
-                                setEditingSeries({ ...editingSeries, batchLabel: e.target.value })
-                              }
-                              className="px-2 py-0.5 rounded border border-slate-300 text-xs font-semibold w-36"
-                            />
-                          </div>
-                          <div className="flex items-center justify-between text-xs gap-2">
-                            <span className="text-slate-500">Status:</span>
-                            <select
-                              value={editingSeries.status}
-                              onChange={(e) =>
-                                setEditingSeries({
-                                  ...editingSeries,
-                                  status: e.target.value as 'Open' | 'Closed' | 'Archived',
-                                })
-                              }
-                              className="px-2 py-0.5 rounded border border-slate-300 text-xs font-bold bg-white w-36"
-                            >
-                              <option value="Open">Open (Accepting Students)</option>
-                              <option value="Closed">Closed (Enrollment Paused)</option>
-                              <option value="Archived">Archived (Hidden)</option>
-                            </select>
-                          </div>
-                        </>
-                      )}
+                      <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-200/70">
+                        <span>{testsInSeriesCount} Mock Test(s)</span>
+                        <span>{subjectsInSeries.length} Subject Section(s)</span>
+                      </div>
                     </div>
 
                     {/* Highlights */}
@@ -2969,73 +2960,400 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                       <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">
                         Features from Banner:
                       </span>
-                      <ul className="text-xs text-slate-600 space-y-1">
-                        {series.highlights.slice(0, 5).map((h: string, i: number) => (
-                          <li key={i} className="flex items-center gap-1.5">
-                            <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                            <span>{h}</span>
-                          </li>
-                        ))}
-                      </ul>
+                      {series.highlights && series.highlights.length > 0 ? (
+                        <ul className="text-xs text-slate-600 space-y-1">
+                          {series.highlights.slice(0, 6).map((h: string, i: number) => (
+                            <li key={i} className="flex items-center gap-1.5">
+                              <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              <span>{h}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-[11px] text-slate-400 italic">
+                          No banner features added yet — click Edit to add features.
+                        </p>
+                      )}
                     </div>
                   </div>
 
-                  <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">
-                    {isEditing ? (
-                      <div className="flex items-center gap-2 w-full">
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            if (editingSeries) {
-                              await updateMockSeries(editingSeries);
-                              setEditingSeries(null);
-                            }
-                          }}
-                          className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold inline-flex items-center justify-center gap-1 cursor-pointer"
-                        >
-                          <Save className="w-3.5 h-3.5" /> Save Changes
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditingSeries(null)}
-                          className="px-3 py-2 rounded-xl bg-slate-100 text-slate-600 text-xs font-bold cursor-pointer"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex items-center gap-2 w-full">
-                          <button
-                            type="button"
-                            onClick={() => setEditingSeries({ ...series })}
-                            className="flex-1 py-2 rounded-xl bg-blue-50 text-[#0056b3] hover:bg-blue-100 text-xs font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" /> Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openPublishSeriesModal(series)}
-                            className="flex-1 py-2 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer"
-                            title="Launch a brand-new enrollment batch using this series structure"
-                          >
-                            <Copy className="w-3.5 h-3.5" /> New Batch
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => router.push(`/admin/mock-tests/${series.id}/papers`)}
-                            className="px-3 py-2 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
-                            title="Manage soft-copy Question Paper PDFs"
-                          >
-                            <FileText className="w-3.5 h-3.5" /> Papers
-                          </button>
-                        </div>
-                      </>
-                    )}
+                  <div className="pt-3 border-t border-slate-100 flex items-center gap-2 w-full">
+                    <button
+                      type="button"
+                      onClick={() => openEditSeriesModal(series)}
+                      className="flex-1 py-2 rounded-xl bg-blue-50 text-[#0056b3] hover:bg-blue-100 text-xs font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer"
+                      title="Edit title, price, banner features, subjects, status & all series info"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" /> Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteSeriesTarget(series)}
+                      className="flex-1 py-2 rounded-xl bg-red-50 text-red-700 hover:bg-red-100 text-xs font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer"
+                      title="Permanently delete this mock test series from the database"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Delete
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/admin/mock-tests/${series.id}/papers`)}
+                      className="px-3 py-2 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
+                      title="Manage soft-copy Question Paper PDFs"
+                    >
+                      <FileText className="w-3.5 h-3.5" /> Papers
+                    </button>
                   </div>
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* ==================== MODAL: FULL EDIT MOCK TEST SERIES ==================== */}
+      {editingSeriesModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-sm overflow-y-auto"
+        >
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-2xl my-8 overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="cga-gradient-hero text-white p-5 sm:p-6 flex items-center justify-between gap-4 shrink-0">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 inline-flex items-center gap-1">
+                  <Edit2 className="w-3 h-3" /> Complete Series Editor
+                </span>
+                <h2 className="text-lg sm:text-xl font-black mt-1">
+                  Edit Mock Test Series Package
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingSeriesModal(null)}
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const s = editingSeriesModal.series;
+                const cleanTitle = s.name.trim();
+                if (!cleanTitle || cleanTitle.length < 3) {
+                  showToast('Validation Error', 'Series title must be at least 3 characters.', 'error');
+                  return;
+                }
+                const normTitle = normalizeSeriesNameClient(cleanTitle);
+                const duplicate = (db.mockSeries || []).find(
+                  (other) => other.id !== s.id && normalizeSeriesNameClient(other.name) === normTitle
+                );
+                if (duplicate) {
+                  showToast(
+                    'Duplicate Series Name Blocked',
+                    `"${duplicate.name}" already exists. Please enter a distinct series title/batch name.`,
+                    'error'
+                  );
+                  return;
+                }
+
+                setIsSavingSeriesEdit(true);
+                const highlights = editingSeriesModal.highlightsText
+                  .split('\n')
+                  .map((line) => line.replace(/^[\s✓✔✅☑️•\-\*–—\uFE0F]+/, '').trim())
+                  .filter(Boolean);
+                const subjectNames = editingSeriesModal.subjectsText
+                  .split(',')
+                  .map((item) => item.trim())
+                  .filter(Boolean);
+
+                const ok = await updateMockSeries(
+                  {
+                    ...s,
+                    name: cleanTitle,
+                    price: Number(s.price || 0),
+                    batchLabel: s.batchLabel.trim(),
+                    classRange: s.classRange.trim(),
+                    stream: s.stream.trim(),
+                    startsOn: s.startsOn.trim(),
+                    description: s.description.trim(),
+                    highlights,
+                  },
+                  subjectNames
+                );
+                setIsSavingSeriesEdit(false);
+                if (ok) {
+                  setEditingSeriesModal(null);
+                }
+              }}
+              className="p-5 sm:p-6 overflow-y-auto space-y-4 text-xs"
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Series Title <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editingSeriesModal.series.name}
+                    onChange={(e) =>
+                      setEditingSeriesModal({
+                        ...editingSeriesModal,
+                        series: { ...editingSeriesModal.series, name: e.target.value },
+                      })
+                    }
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 font-bold text-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Enrollment Fee (₹) <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    required
+                    value={editingSeriesModal.series.price}
+                    onChange={(e) =>
+                      setEditingSeriesModal({
+                        ...editingSeriesModal,
+                        series: { ...editingSeriesModal.series, price: Number(e.target.value) },
+                      })
+                    }
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 font-bold text-[#0056b3]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Batch Label</label>
+                  <input
+                    type="text"
+                    value={editingSeriesModal.series.batchLabel}
+                    onChange={(e) =>
+                      setEditingSeriesModal({
+                        ...editingSeriesModal,
+                        series: { ...editingSeriesModal.series, batchLabel: e.target.value },
+                      })
+                    }
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Target Exam / Class Range</label>
+                  <input
+                    type="text"
+                    value={editingSeriesModal.series.classRange}
+                    onChange={(e) =>
+                      setEditingSeriesModal({
+                        ...editingSeriesModal,
+                        series: { ...editingSeriesModal.series, classRange: e.target.value },
+                      })
+                    }
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Launch Date / Schedule</label>
+                  <input
+                    type="text"
+                    value={editingSeriesModal.series.startsOn}
+                    onChange={(e) =>
+                      setEditingSeriesModal({
+                        ...editingSeriesModal,
+                        series: { ...editingSeriesModal.series, startsOn: e.target.value },
+                      })
+                    }
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Stream / Category</label>
+                  <input
+                    type="text"
+                    value={editingSeriesModal.series.stream}
+                    onChange={(e) =>
+                      setEditingSeriesModal({
+                        ...editingSeriesModal,
+                        series: { ...editingSeriesModal.series, stream: e.target.value },
+                      })
+                    }
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Publish Status</label>
+                  <select
+                    value={editingSeriesModal.series.status}
+                    onChange={(e) =>
+                      setEditingSeriesModal({
+                        ...editingSeriesModal,
+                        series: {
+                          ...editingSeriesModal.series,
+                          status: e.target.value as 'Open' | 'Closed' | 'Archived',
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white font-bold"
+                  >
+                    <option value="Open">Open (Accepting Students)</option>
+                    <option value="Closed">Closed (Enrollment Paused)</option>
+                    <option value="Archived">Archived (Hidden)</option>
+                  </select>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block font-bold text-slate-700 mb-1">Description</label>
+                  <textarea
+                    rows={3}
+                    value={editingSeriesModal.series.description}
+                    onChange={(e) =>
+                      setEditingSeriesModal({
+                        ...editingSeriesModal,
+                        series: { ...editingSeriesModal.series, description: e.target.value },
+                      })
+                    }
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Subject Sections (Comma-separated)
+                  </label>
+                  <input
+                    type="text"
+                    value={editingSeriesModal.subjectsText}
+                    onChange={(e) =>
+                      setEditingSeriesModal({ ...editingSeriesModal, subjectsText: e.target.value })
+                    }
+                    placeholder="e.g. English, G.K. & General Science, Mathematics, Bengali"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Features from Banner / Package Highlights (One feature per line)
+                  </label>
+                  <textarea
+                    rows={5}
+                    value={editingSeriesModal.highlightsText}
+                    onChange={(e) =>
+                      setEditingSeriesModal({ ...editingSeriesModal, highlightsText: e.target.value })
+                    }
+                    placeholder="40 Sectional Mock Tests (30 Marks Each)&#10;English – 10 Tests&#10;Detailed Answer Keys with Explanations"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 font-mono text-[11px]"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Each line appears as a bullet point with a green checkmark on the banner card.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = editingSeriesModal.series;
+                    setEditingSeriesModal(null);
+                    setDeleteSeriesTarget(target);
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 font-extrabold inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" /> Delete Series
+                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingSeriesModal(null)}
+                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingSeriesEdit}
+                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-extrabold inline-flex items-center gap-1.5 shadow-md cursor-pointer"
+                  >
+                    <Save className="w-4 h-4" />
+                    {isSavingSeriesEdit ? 'Saving Changes...' : 'Save Full Series Changes'}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== MODAL: CONFIRM PERMANENT DELETE MOCK TEST SERIES ==================== */}
+      {deleteSeriesTarget && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-sm"
+        >
+          <div className="bg-white rounded-3xl border border-red-200 shadow-2xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-extrabold text-slate-900">
+                  Permanently Delete Mock Test Series?
+                </h3>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  You are about to delete <strong>&quot;{deleteSeriesTarget.name}&quot;</strong> from the database.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-red-50 border border-red-200 text-xs text-red-900 space-y-1">
+              <p className="font-bold">This action cannot be undone and will remove:</p>
+              <ul className="list-disc list-inside space-y-0.5 text-[11px]">
+                <li>The series from Admin Portal, Student Portal, My Learning &amp; Public Website</li>
+                <li>
+                  {(db.mockTests || []).filter((t) => t.seriesId === deleteSeriesTarget.id).length} mock test(s) &amp;{' '}
+                  {(db.mockSubjects || []).filter((s) => s.seriesId === deleteSeriesTarget.id).length} subject section(s) linked to this series
+                </li>
+                <li>
+                  {(db.seriesEnrollments || []).filter((se) => se.seriesId === deleteSeriesTarget.id).length} series enrollment record(s)
+                </li>
+              </ul>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={isDeletingSeries}
+                onClick={() => setDeleteSeriesTarget(null)}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingSeries}
+                onClick={async () => {
+                  setIsDeletingSeries(true);
+                  const ok = await deleteMockSeries(deleteSeriesTarget.id);
+                  setIsDeletingSeries(false);
+                  if (ok) {
+                    setDeleteSeriesTarget(null);
+                  }
+                }}
+                className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-xs font-extrabold inline-flex items-center gap-1.5 shadow-md cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {isDeletingSeries ? 'Deleting...' : 'Yes, Delete Permanently'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -3069,14 +3387,27 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
-                if (!newSeriesForm.name.trim()) {
-                  showToast('Missing Title', 'Please enter a name for the new mock test series.', 'error');
+                const cleanTitle = newSeriesForm.name.trim();
+                if (!cleanTitle || cleanTitle.length < 3) {
+                  showToast('Missing Title', 'Please enter a series title (at least 3 characters).', 'error');
+                  return;
+                }
+                const normTitle = normalizeSeriesNameClient(cleanTitle);
+                const duplicateSeries = (db.mockSeries || []).find(
+                  (s) => normalizeSeriesNameClient(s.name) === normTitle
+                );
+                if (duplicateSeries) {
+                  showToast(
+                    'Duplicate Mock Test Series Blocked',
+                    `"${duplicateSeries.name}" already exists. Edit the existing series or enter a distinct series title/batch name (e.g. "Batch 2" or "Dec 2026").`,
+                    'error'
+                  );
                   return;
                 }
                 setIsPublishingSeries(true);
                 const highlights = newSeriesForm.highlightsText
                   .split('\n')
-                  .map((s) => s.trim())
+                  .map((s) => s.replace(/^[\s✓✔✅☑️•\-\*–—\uFE0F]+/, '').trim())
                   .filter(Boolean);
                 const subjectNames = newSeriesForm.subjectsText
                   .split(',')
@@ -3084,7 +3415,7 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                   .filter(Boolean);
 
                 const created = await createMockSeries({
-                  name: newSeriesForm.name.trim(),
+                  name: cleanTitle,
                   classRange: newSeriesForm.classRange.trim(),
                   stream: newSeriesForm.stream.trim(),
                   price: Number(newSeriesForm.price || 0),
@@ -3130,10 +3461,11 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                         .map((s) => s.name);
                       setNewSeriesForm((prev) => ({
                         ...prev,
-                        name: `${src.name.replace(/\s*\(New Batch.*\)$/i, '')} (New Batch)`,
+                        name: `${src.name.replace(/\s*\(New Batch.*\)$/i, '')} — Batch 2`,
                         classRange: src.classRange || prev.classRange,
                         stream: src.stream || prev.stream,
                         price: Number(src.price ?? 499),
+                        batchLabel: 'Batch 2',
                         description: src.description || prev.description,
                         highlightsText: (src.highlights || []).join('\n'),
                         subjectsText: subs.length > 0 ? subs.join(', ') : prev.subjectsText,

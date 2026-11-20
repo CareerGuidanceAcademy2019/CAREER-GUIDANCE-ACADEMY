@@ -3398,7 +3398,10 @@ export const cgaService = {
     }
   },
 
-  async updateMockSeries(series: MockSeries): Promise<ServiceResult<{ series?: MockSeries }>> {
+  async updateMockSeries(
+    series: MockSeries,
+    subjectNames?: string[]
+  ): Promise<ServiceResult<{ series?: MockSeries; subjects?: MockSubject[] }>> {
     invalidateDbCache();
     try {
       const res = await fetch('/api/admin/mock-tests/series', {
@@ -3415,53 +3418,77 @@ export const cgaService = {
           classRange: series.classRange,
           stream: series.stream,
           highlights: series.highlights,
+          ...(Array.isArray(subjectNames) ? { subjectNames } : {}),
         }),
       });
       const data = await res.json();
       if (!res.ok) {
-        // Fallback to direct supabase client update if authenticated as admin in browser
-        const sb = this.client();
-        const { error: sbErr } = await sb
-          .from('mock_series')
-          .update({
-            price: Number(series.price),
-            starts_on: series.startsOn,
-            status: series.status,
-            name: series.name,
-            description: series.description,
-            batch_label: series.batchLabel,
-            class_range: series.classRange,
-            stream: series.stream,
-            highlights: series.highlights,
-          })
-          .eq('id', series.id);
-        if (sbErr) {
-          return { success: false, error: data.error || sbErr.message };
-        }
+        return { success: false, error: data?.error || 'Failed to update mock test series.' };
       }
-      return { success: true };
+      const mappedSubjects: MockSubject[] | undefined = Array.isArray(data.subjects)
+        ? data.subjects.map((sub: any) => ({
+            id: sub.id,
+            seriesId: sub.series_id,
+            name: sub.name,
+            sortOrder: Number(sub.sort_order ?? 1),
+          }))
+        : undefined;
+      return { success: true, series, subjects: mappedSubjects };
     } catch (err: any) {
-      try {
-        const sb = this.client();
-        const { error: sbErr } = await sb
-          .from('mock_series')
-          .update({
-            price: Number(series.price),
-            starts_on: series.startsOn,
-            status: series.status,
-            name: series.name,
-            description: series.description,
-            batch_label: series.batchLabel,
-            class_range: series.classRange,
-            stream: series.stream,
-            highlights: series.highlights,
-          })
-          .eq('id', series.id);
-        if (sbErr) return { success: false, error: sbErr.message };
-        return { success: true };
-      } catch (fallbackErr: any) {
-        return { success: false, error: fallbackErr?.message || 'Failed to update mock test series' };
+      return { success: false, error: err?.message || 'Failed to update mock test series.' };
+    }
+  },
+
+  async deleteMockSeries(seriesId: string): Promise<ServiceResult<{ deletedTestsCount?: number }>> {
+    invalidateDbCache();
+    try {
+      const res = await fetch(`/api/admin/mock-tests/series?id=${encodeURIComponent(seriesId)}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return { success: false, error: data?.error || 'Could not delete mock test series.' };
       }
+
+      if (typeof window !== 'undefined') {
+        try {
+          sessionStorage.removeItem('cga_db_cache');
+          const storedSe = localStorage.getItem('cga_series_enrollments');
+          if (storedSe) {
+            const list = JSON.parse(storedSe);
+            if (Array.isArray(list)) {
+              localStorage.setItem(
+                'cga_series_enrollments',
+                JSON.stringify(list.filter((e: any) => e.seriesId !== seriesId))
+              );
+            }
+          }
+          const storedTests = localStorage.getItem('cga_custom_tests');
+          if (storedTests) {
+            const list = JSON.parse(storedTests);
+            if (Array.isArray(list)) {
+              localStorage.setItem(
+                'cga_custom_tests',
+                JSON.stringify(list.filter((t: any) => t.seriesId !== seriesId))
+              );
+            }
+          }
+          const storedPosts = localStorage.getItem('cga_mock_subject_posts');
+          if (storedPosts) {
+            const list = JSON.parse(storedPosts);
+            if (Array.isArray(list)) {
+              localStorage.setItem(
+                'cga_mock_subject_posts',
+                JSON.stringify(list.filter((p: any) => p.seriesId !== seriesId))
+              );
+            }
+          }
+        } catch {}
+      }
+
+      return { success: true, deletedTestsCount: Number(data?.deletedTestsCount || 0) };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Network error deleting mock test series.' };
     }
   },
 

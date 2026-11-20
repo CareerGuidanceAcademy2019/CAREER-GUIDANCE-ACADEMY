@@ -176,7 +176,8 @@ interface CgaContextType {
     subjectNames?: string[];
     copyExistingTests?: boolean;
   }) => Promise<MockSeries | null>;
-  updateMockSeries: (series: MockSeries) => Promise<void>;
+  updateMockSeries: (series: MockSeries, subjectNames?: string[]) => Promise<boolean>;
+  deleteMockSeries: (seriesId: string) => Promise<boolean>;
   saveMockSubjectPost: (post: MockSubjectPost, isNew: boolean) => Promise<void>;
   deleteMockSubjectPost: (postId: string) => Promise<void>;
 
@@ -1358,19 +1359,53 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
   );
 
   const updateMockSeries = useCallback(
-    async (series: MockSeries) => {
-      const res = await cgaService.updateMockSeries(series);
+    async (series: MockSeries, subjectNames?: string[]) => {
+      const res = await cgaService.updateMockSeries(series, subjectNames);
       if (!res.success) {
         showToast('Update Failed', res.error || 'Could not update series in database.', 'error');
-        return;
+        return false;
       }
       setDb((prev) => ({
         ...prev,
         mockSeries: prev.mockSeries.map((s) => (s.id === series.id ? series : s)),
+        mockSubjects: res.subjects
+          ? [
+              ...(prev.mockSubjects || []).filter((sub) => sub.seriesId !== series.id),
+              ...res.subjects,
+            ]
+          : prev.mockSubjects,
       }));
       showToast('Mock Test Series Updated', `${series.name} (₹${series.price}/-) updated successfully.`, 'success');
+      return true;
     },
     [showToast]
+  );
+
+  const deleteMockSeries = useCallback(
+    async (seriesId: string) => {
+      const targetName = db.mockSeries.find((s) => s.id === seriesId)?.name || 'Mock Test Series';
+      const res = await cgaService.deleteMockSeries(seriesId);
+      if (!res.success) {
+        showToast('Delete Failed', res.error || 'Could not delete mock test series.', 'error');
+        return false;
+      }
+      setDb((prev) => ({
+        ...prev,
+        mockSeries: (prev.mockSeries || []).filter((s) => s.id !== seriesId),
+        mockSubjects: (prev.mockSubjects || []).filter((sub) => sub.seriesId !== seriesId),
+        mockTests: (prev.mockTests || []).filter((t) => t.seriesId !== seriesId),
+        seriesTests: (prev.seriesTests || []).filter((t) => t.seriesId !== seriesId),
+        seriesEnrollments: (prev.seriesEnrollments || []).filter((se) => se.seriesId !== seriesId),
+        mockSubjectPosts: (prev.mockSubjectPosts || []).filter((p) => p.seriesId !== seriesId),
+      }));
+      showToast(
+        'Mock Test Series Deleted',
+        `"${targetName}" has been permanently removed from the database and all student/public pages.`,
+        'success'
+      );
+      return true;
+    },
+    [db.mockSeries, showToast]
   );
 
   const saveMockSubjectPost = useCallback(
@@ -1672,6 +1707,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         updateSiteContent,
         createMockSeries,
         updateMockSeries,
+        deleteMockSeries,
         saveMockSubjectPost,
         deleteMockSubjectPost,
         enrolInSeries,

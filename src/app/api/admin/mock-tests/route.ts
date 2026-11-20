@@ -47,6 +47,25 @@ export async function POST(request: Request) {
       validSeriesId = 'series-ttet-paper1';
     }
 
+    // Prevent duplicate mock test title within the same series (case/whitespace insensitive)
+    const normIncomingTitle = String(t.title || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const { data: siblingTests } = await admin
+      .from('mock_tests')
+      .select('id, title')
+      .eq('series_id', validSeriesId)
+      .neq('id', t.id);
+    const duplicateTest = (siblingTests || []).find(
+      (st: any) => String(st.title || '').trim().toLowerCase().replace(/\s+/g, ' ') === normIncomingTitle
+    );
+    if (duplicateTest) {
+      return NextResponse.json(
+        {
+          error: `Duplicate Mock Test: "${duplicateTest.title}" already exists in this mock test series. Please use a unique mock test title (e.g. Mock #02).`,
+        },
+        { status: 409 }
+      );
+    }
+
     let validSubjectId = t.subjectId || t.subject_id || t.subject || null;
     if (validSubjectId) {
       const subQueryVal = String(validSubjectId).trim();

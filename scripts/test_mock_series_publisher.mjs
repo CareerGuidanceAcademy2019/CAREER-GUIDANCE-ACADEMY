@@ -43,12 +43,14 @@ await runTest('TC-01: API /api/admin/mock-tests/series implements POST (create/c
   assert(routeCode.includes("from('mock_subjects').insert"), 'POST must create subject sections for the new series');
 });
 
-await runTest('TC-02: Admin Tests page exposes Post/Publish New Series, New Batch clone, and full Edit controls', async () => {
+await runTest('TC-02: Admin Tests page exposes Post/Publish New Series, full Edit Series Modal, and Permanent Delete controls', async () => {
   const adminTestsCode = fs.readFileSync(path.resolve('src/app/admin/tests/page.tsx'), 'utf8');
   assert(adminTestsCode.includes('Post / Publish New Series'), 'Missing Publish New Series button');
-  assert(adminTestsCode.includes('New Batch'), 'Missing New Batch re-launch button on existing series cards');
+  assert(adminTestsCode.includes('Edit Mock Test Series Package'), 'Missing Full Edit Series modal');
+  assert(adminTestsCode.includes('Permanently Delete Mock Test Series?'), 'Missing Delete Series confirmation modal');
   assert(adminTestsCode.includes('Publish New Mock Test Series Package'), 'Missing Publish Series modal');
   assert(adminTestsCode.includes('createMockSeries'), 'Admin UI must call createMockSeries');
+  assert(adminTestsCode.includes('deleteMockSeries'), 'Admin UI must call deleteMockSeries');
 });
 
 await runTest('TC-03: Student Portal displays open newly published series, dynamic subjects, and Enroll button', async () => {
