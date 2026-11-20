@@ -5,7 +5,6 @@ import Link from 'next/link';
 import {
   Users,
   BookOpen,
-  IndianRupee,
   AlertCircle,
   ArrowUpRight,
   TrendingUp,
@@ -22,7 +21,16 @@ export default function AdminDashboardPage() {
   const activeCourses = db.courses.filter((c) => c.status === 'Open for Admission').length;
   const closedCourses = db.courses.length - activeCourses;
 
-  const totalRevenue = db.feePayments.reduce((sum, p) => sum + p.amount, 0);
+  const verifiedEnrollmentsCount =
+    (db.seriesEnrollments || []).filter((se) => {
+      const stu = (db.students || []).find((s) => s.id === se.studentId);
+      return Boolean(stu && stu.email !== 'angatsaha825@gmail.com');
+    }).length +
+    (db.students || []).reduce(
+      (sum, s) => sum + (s.email === 'angatsaha825@gmail.com' ? 0 : (s.enrollments || []).length),
+      0
+    );
+  const activeSeriesCount = (db.mockSeries || []).filter((s) => s.status === 'Open').length;
   const totalPendingDues = db.students.reduce(
     (sum, s) => sum + s.enrollments.reduce((eSum, e) => eSum + e.dueAmount, 0),
     0
@@ -114,16 +122,19 @@ export default function AdminDashboardPage() {
 
         <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs flex items-center justify-between">
           <div>
-            <span className="text-xs font-bold uppercase text-slate-400">Revenue Collected</span>
+            <span className="text-xs font-bold uppercase text-slate-400">Verified Enrollments</span>
             <p className="text-3xl font-extrabold text-emerald-600 mt-1">
-              ₹{totalRevenue.toLocaleString('en-IN')}
+              {verifiedEnrollmentsCount}
             </p>
-            <span className="text-[11px] font-semibold text-slate-500 block mt-1">
-              Across {db.feePayments.length} verified receipts
-            </span>
+            <Link
+              href="/admin/enrollments"
+              className="text-[11px] font-bold text-emerald-700 hover:underline inline-flex items-center gap-0.5 mt-1"
+            >
+              Across {activeSeriesCount} active mock series <ArrowUpRight className="w-3 h-3" />
+            </Link>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-            <IndianRupee className="w-6 h-6" />
+            <CheckCircle2 className="w-6 h-6" />
           </div>
         </div>
 

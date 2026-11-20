@@ -471,11 +471,8 @@ export default function AdminPaymentsPage() {
     const rejected = requests.filter((r) => r.status === 'rejected').length;
     const refundDue = requests.filter((r) => r.status === 'refund_due').length;
     const expired = requests.filter((r) => r.status === 'expired').length;
-    const totalCollected = requests
-      .filter((r) => r.status === 'approved')
-      .reduce((sum, r) => sum + (r.amountReceived || r.expectedAmount), 0);
 
-    return { pending, approved, rejected, refundDue, expired, totalCollected };
+    return { pending, approved, rejected, refundDue, expired };
   }, [requests]);
 
   // Handle Screenshot View: fetches short-lived signed URL if in Supabase storage
@@ -773,7 +770,7 @@ export default function AdminPaymentsPage() {
       </div>
 
       {/* Summary KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-2xl p-4.5 border border-slate-200 shadow-2xs">
           <span className="text-[11px] font-bold uppercase text-slate-400 block">Pending Review</span>
           <div className="flex items-baseline gap-2 mt-1">
@@ -799,13 +796,6 @@ export default function AdminPaymentsPage() {
         </div>
 
         <div className="bg-white rounded-2xl p-4.5 border border-slate-200 shadow-2xs">
-          <span className="text-[11px] font-bold uppercase text-slate-400 block">Verified Revenue</span>
-          <p className="text-2xl font-black text-[#0a0e2a] mt-1">
-            ₹{stats.totalCollected.toLocaleString('en-IN')}
-          </p>
-        </div>
-
-        <div className="bg-white rounded-2xl p-4.5 border border-slate-200 shadow-2xs col-span-2 sm:col-span-1">
           <span className="text-[11px] font-bold uppercase text-slate-400 block">Fee Defaulters / Dues</span>
           <div className="flex items-baseline gap-2 mt-1">
             <span className="text-2xl font-black text-[#dc2626]">{defaultersCount}</span>
