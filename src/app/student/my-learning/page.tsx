@@ -196,28 +196,32 @@ export default function StudentMyLearningPage() {
   const filteredTests = useMemo(() => {
     return enrolledMockTests.filter((t) => {
       if (selectedSeriesFilter === 'all') return true;
-      if (selectedSeriesFilter === 'p1') {
+      if (t.seriesId === selectedSeriesFilter || t.courseId === selectedSeriesFilter) return true;
+      if (selectedSeriesFilter === 'series-ttet-paper1' || selectedSeriesFilter === 'p1') {
         return (
+          t.seriesId === 'series-ttet-paper1' ||
           t.title.toLowerCase().includes('paper-i') ||
           t.title.toLowerCase().includes('paper 1') ||
           t.courseId.includes('paper1')
         );
       }
-      if (selectedSeriesFilter === 'p2sci') {
+      if (selectedSeriesFilter === 'series-ttet-paper2-sci' || selectedSeriesFilter === 'p2sci') {
         return (
+          t.seriesId === 'series-ttet-paper2-sci' ||
           t.title.toLowerCase().includes('science') ||
           t.title.toLowerCase().includes('math') ||
           t.courseId.includes('paper2-sci')
         );
       }
-      if (selectedSeriesFilter === 'p2soc') {
+      if (selectedSeriesFilter === 'series-ttet-paper2-soc' || selectedSeriesFilter === 'p2soc') {
         return (
+          t.seriesId === 'series-ttet-paper2-soc' ||
           t.title.toLowerCase().includes('social') ||
           t.title.toLowerCase().includes('history') ||
           t.courseId.includes('paper2-soc')
         );
       }
-      return t.courseId === selectedSeriesFilter || t.subject === selectedSeriesFilter;
+      return t.subject === selectedSeriesFilter;
     });
   }, [enrolledMockTests, selectedSeriesFilter]);
 
@@ -522,15 +526,18 @@ export default function StudentMyLearningPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
             {pendingPayments.map((p) => {
-              const courseObj = db.courses.find((c) => c.id === p.courseId);
-              const seriesObj = db.mockSeries.find((s) => s.id === p.courseId);
+              const targetId = p.itemId || p.courseId;
+              const courseObj = db.courses.find((c) => c.id === targetId || c.id === p.courseId);
+              const seriesObj = db.mockSeries.find((s) => s.id === targetId || s.id === p.courseId);
+              const matObj = (db.studyMaterials || []).find((m) => m.id === targetId || m.id === p.courseId);
               const itemName =
-                p.courseName ||
                 courseObj?.name ||
                 seriesObj?.name ||
-                (p.courseId === 'series-current-affairs'
+                matObj?.title ||
+                p.courseName ||
+                (targetId === 'series-current-affairs'
                   ? 'Current Affairs Series (Monthly/Yearly Pass)'
-                  : p.courseId);
+                  : targetId);
 
               return (
                 <div
@@ -1233,39 +1240,20 @@ export default function StudentMyLearningPage() {
                 >
                   All ({enrolledMockTests.length})
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedSeriesFilter('p1')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    selectedSeriesFilter === 'p1'
-                      ? 'bg-[#0056b3] text-white shadow-2xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  Paper-I
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedSeriesFilter('p2sci')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    selectedSeriesFilter === 'p2sci'
-                      ? 'bg-[#0056b3] text-white shadow-2xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  Paper-II (Sci)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedSeriesFilter('p2soc')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    selectedSeriesFilter === 'p2soc'
-                      ? 'bg-[#0056b3] text-white shadow-2xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  Paper-II (Social)
-                </button>
+                {enrolledMockSeriesList.map((ser) => (
+                  <button
+                    key={ser.id}
+                    type="button"
+                    onClick={() => setSelectedSeriesFilter(ser.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      selectedSeriesFilter === ser.id
+                        ? 'bg-[#0056b3] text-white shadow-2xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {ser.name.length > 34 ? `${ser.name.slice(0, 34)}…` : ser.name}
+                  </button>
+                ))}
               </div>
             </div>
 

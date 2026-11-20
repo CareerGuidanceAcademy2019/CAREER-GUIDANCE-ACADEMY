@@ -47,14 +47,25 @@ export async function POST(request: Request) {
       validSeriesId = 'series-ttet-paper1';
     }
 
-    let validSubjectId = t.subjectId || t.subject_id || null;
+    let validSubjectId = t.subjectId || t.subject_id || t.subject || null;
     if (validSubjectId) {
-      const { data: matchedSubject } = await admin
+      const subQueryVal = String(validSubjectId).trim();
+      const { data: matchedInSeries } = await admin
         .from('mock_subjects')
         .select('id')
-        .or(`id.eq.${validSubjectId},name.eq.${validSubjectId}`)
-        .maybeSingle();
-      validSubjectId = matchedSubject ? matchedSubject.id : null;
+        .eq('series_id', validSeriesId)
+        .or(`id.eq.${subQueryVal},name.eq.${subQueryVal}`)
+        .limit(1);
+      if (matchedInSeries && matchedInSeries.length > 0) {
+        validSubjectId = matchedInSeries[0].id;
+      } else {
+        const { data: matchedAny } = await admin
+          .from('mock_subjects')
+          .select('id')
+          .or(`id.eq.${subQueryVal},name.eq.${subQueryVal}`)
+          .limit(1);
+        validSubjectId = matchedAny && matchedAny.length > 0 ? matchedAny[0].id : null;
+      }
     }
 
     // Fetch existing DB questions & passage groups to ensure complete synchronization

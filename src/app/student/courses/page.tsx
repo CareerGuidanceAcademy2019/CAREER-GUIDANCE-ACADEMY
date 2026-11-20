@@ -47,7 +47,7 @@ export default function StudentCourseCataloguePage() {
   const pendingIds = React.useMemo(() => {
     const fromDb = (db.feePayments || [])
       .filter((p) => (p.studentId === currentStudent.id || p.studentId === 'me') && p.status === 'Pending')
-      .map((p) => p.courseId);
+      .flatMap((p) => [p.courseId, p.itemId].filter(Boolean) as string[]);
     let fromLocal: string[] = [];
     if (typeof window !== 'undefined') {
       try {
@@ -56,7 +56,7 @@ export default function StudentCourseCataloguePage() {
           const list = JSON.parse(stored);
           fromLocal = list
             .filter((p: any) => (p.studentId === currentStudent.id || p.studentId === 'me') && p.status === 'Pending')
-            .map((p: any) => p.courseId);
+            .flatMap((p: any) => [p.courseId, p.itemId].filter(Boolean) as string[]);
         }
       } catch {}
     }

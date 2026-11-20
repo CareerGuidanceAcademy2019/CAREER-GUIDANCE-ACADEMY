@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Plus,
   ClipboardCheck,
@@ -1595,6 +1595,43 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
     );
   };
 
+  // Dynamically combine base subject groups with every newly published Mock Test Series in DB
+  const dynamicMockSubjectGroups = useMemo<MockSubjectGroup[]>(() => {
+    const groups: MockSubjectGroup[] = [...ALL_MOCK_SUBJECT_GROUPS];
+    const knownSeriesIds = new Set(groups.map((g) => g.seriesId));
+    const allSeries = db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL;
+
+    for (const ser of allSeries) {
+      if (ser.id === 'series-current-affairs' || knownSeriesIds.has(ser.id)) continue;
+      knownSeriesIds.add(ser.id);
+      const serSubs = (db.mockSubjects || []).filter((sub) => sub.seriesId === ser.id);
+      const items: MockSubjectItem[] = serSubs.map((sub) => {
+        const mode = getSubjectLanguageMode(sub.name);
+        const modeTag = mode === 'english_only' ? 'English Only' : mode === 'bengali_only' ? 'Bengali Only' : 'Bilingual';
+        return {
+          name: sub.name,
+          label: `${sub.name} [${modeTag}]`,
+          langMode: mode,
+          seriesId: ser.id,
+          defaultTitle: `${ser.name}: ${sub.name} Mock #01`,
+        };
+      });
+      items.push({
+        name: `${ser.name} Full Length Mock`,
+        label: 'Full-Length Simulated Paper [Bilingual]',
+        langMode: 'bilingual',
+        seriesId: ser.id,
+        defaultTitle: `${ser.name} — Full-Length Mock #01`,
+      });
+      groups.push({
+        group: `${ser.name} (₹${ser.price}/- — ${ser.batchLabel || 'New Batch'})`,
+        seriesId: ser.id,
+        items,
+      });
+    }
+    return groups;
+  }, [db.mockSeries, db.mockSubjects]);
+
   const handleSubjectChange = (val: string) => {
     if (!editingTest) return;
 
@@ -1608,7 +1645,7 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
     }
 
     let foundItem: MockSubjectItem | undefined;
-    for (const grp of ALL_MOCK_SUBJECT_GROUPS) {
+    for (const grp of dynamicMockSubjectGroups) {
       const match = grp.items.find(
         (it) => it.name === targetSubjName && (!val.includes(':::') || it.seriesId === targetSeriesId)
       );
@@ -1622,6 +1659,9 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
     const mode = foundItem ? foundItem.langMode : getSubjectLanguageMode(targetSubjName);
     const seriesObj = (db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL).find(
       (s) => s.id === targetSeriesId
+    );
+    const matchedSubRow = (db.mockSubjects || []).find(
+      (sub) => sub.seriesId === targetSeriesId && sub.name.toLowerCase() === targetSubjName.toLowerCase()
     );
 
     let newCourseId = editingTest.courseId;
@@ -1647,6 +1687,7 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
     setEditingTest({
       ...editingTest,
       seriesId: targetSeriesId,
+      subjectId: matchedSubRow?.id || undefined,
       subject: targetSubjName,
       languageMode: mode,
       courseId: newCourseId,
@@ -1911,7 +1952,14 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
           </p>
         </div>
 
-        <div className="flex items-center gap-2 self-start">
+        <div className="flex flex-wrap items-center gap-2 self-start">
+          <button
+            type="button"
+            onClick={() => openPublishSeriesModal()}
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer shadow-sm transition-all"
+          >
+            <Flame className="w-4 h-4 text-amber-300" /> + Start New Mock Test Series
+          </button>
           {activeAdminTab === 'subject_posts' ? (
             <button
               type="button"
@@ -1926,7 +1974,7 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
               onClick={openCreateModal}
               className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-bold cursor-pointer shadow-sm transition-all"
             >
-              <Plus className="w-4 h-4" /> Create & Upload Mock Test
+              <Plus className="w-4 h-4" /> Create &amp; Upload Mock Test
             </button>
           )}
         </div>
@@ -1952,7 +2000,7 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
               : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
         >
-          <Flame className="w-4 h-4 text-amber-300" /> T-TET Daily Series Packages ({db.mockSeries.length})
+          <Flame className="w-4 h-4 text-amber-300" /> Mock Test Series Packages ({db.mockSeries.length})
         </button>
         <button
           type="button"
@@ -3621,7 +3669,7 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                   onChange={(e) => handleSubjectChange(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0056b3]"
                 >
-                  {ALL_MOCK_SUBJECT_GROUPS.map((grp) => (
+                  {dynamicMockSubjectGroups.map((grp) => (
                     <optgroup key={grp.seriesId} label={grp.group}>
                       {grp.items.map((it) => (
                         <option key={`${it.seriesId}:::${it.name}`} value={`${it.seriesId}:::${it.name}`}>
@@ -3631,7 +3679,7 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                     </optgroup>
                   ))}
                   {/* Fallback for any legacy subject not in groups */}
-                  {!ALL_MOCK_SUBJECT_GROUPS.some((g) =>
+                  {!dynamicMockSubjectGroups.some((g) =>
                     g.items.some((it) => it.seriesId === editingTest.seriesId && it.name === editingTest.subject)
                   ) && (
                       <optgroup label="Other Subject">
@@ -3673,12 +3721,22 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                   <select
                     value={editingTest.seriesId || 'series-ttet-paper1'}
                     onChange={(e) => {
+                      const nextSeriesId = e.target.value;
                       const sObj = (db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL).find(
-                        (s) => s.id === e.target.value
+                        (s) => s.id === nextSeriesId
                       );
+                      const grp = dynamicMockSubjectGroups.find((g) => g.seriesId === nextSeriesId);
+                      const matchedSubInNew =
+                        (db.mockSubjects || []).find(
+                          (sub) => sub.seriesId === nextSeriesId && sub.name.toLowerCase() === (editingTest.subject || '').toLowerCase()
+                        ) || (db.mockSubjects || []).find((sub) => sub.seriesId === nextSeriesId);
+                      const nextSubjectName = matchedSubInNew?.name || grp?.items[0]?.name || editingTest.subject;
                       setEditingTest({
                         ...editingTest,
-                        seriesId: e.target.value,
+                        seriesId: nextSeriesId,
+                        subjectId: matchedSubInNew?.id || undefined,
+                        subject: nextSubjectName,
+                        languageMode: getSubjectLanguageMode(nextSubjectName || ''),
                         courseId: '',
                         courseName: sObj?.name || 'Dedicated Mock Test Series Package',
                         batchName: `${sObj?.name || 'Mock Series'} (Enrolled Students Only)`,

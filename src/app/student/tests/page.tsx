@@ -60,8 +60,18 @@ export default function StudentMockTestsPage() {
   const [currentTime] = useState(() => Date.now());
 
   // Series, Subject, and Subsections Navigation
-  const [selectedSeriesId, setSelectedSeriesId] = useState<string>('series-ttet-paper1');
+  const [selectedSeriesId, setSelectedSeriesId] = useState<string>(
+    () => searchParams.get('seriesId') || 'series-ttet-paper1'
+  );
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>('all');
+
+  useEffect(() => {
+    const paramSeries = searchParams.get('seriesId');
+    if (paramSeries) {
+      setSelectedSeriesId(paramSeries);
+      setSelectedSubjectId('all');
+    }
+  }, [searchParams]);
   const [activeSubsection, setActiveSubsection] = useState<'tests' | 'papers'>('tests');
   const [seriesPapers, setSeriesPapers] = useState<any[]>([]);
   const [loadingPapers, setLoadingPapers] = useState(false);
@@ -727,32 +737,38 @@ export default function StudentMockTestsPage() {
     }
   }, [searchParams, db.mockTests, activeTest, completedAttempt, myPastAttempts]);
 
+  const hasPendingSeriesPayment = (seriesId: string) => {
+    if (!currentStudent) return false;
+    const inDb = (db.feePayments || []).some(
+      (p) =>
+        (p.studentId === currentStudent.id || p.studentId === 'me') &&
+        (p.itemId === seriesId || p.courseId === seriesId) &&
+        p.status === 'Pending'
+    );
+    if (inDb) return true;
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('cga_custom_payments');
+        if (stored) {
+          const list = JSON.parse(stored);
+          return list.some(
+            (p: any) =>
+              (p.studentId === currentStudent.id || p.studentId === 'me') &&
+              (p.itemId === seriesId || p.courseId === seriesId) &&
+              p.status === 'Pending'
+          );
+        }
+      } catch {}
+    }
+    return false;
+  };
+
   const handleOpenSeriesCheckout = (seriesId: string) => {
     if (isStudentEnrolledInSeries(seriesId)) {
       showToast('Already Enrolled', 'You are already enrolled in this mock test series.', 'info');
       return;
     }
-    const hasPendingPayment =
-      (db.feePayments || []).some(
-        (p) => (p.studentId === currentStudent.id || p.studentId === 'me') && p.courseId === seriesId && p.status === 'Pending'
-      ) ||
-      (typeof window !== 'undefined' &&
-        (() => {
-          try {
-            const stored = localStorage.getItem('cga_custom_payments');
-            if (stored) {
-              const list = JSON.parse(stored);
-              return list.some(
-                (p: any) =>
-                  (p.studentId === currentStudent.id || p.studentId === 'me') &&
-                  p.courseId === seriesId &&
-                  p.status === 'Pending'
-              );
-            }
-          } catch {}
-          return false;
-        })());
-    if (hasPendingPayment) {
+    if (hasPendingSeriesPayment(seriesId)) {
       showToast(
         'Verification Pending',
         'You have already submitted a payment for this mock series. Please wait for admin verification.',
@@ -766,9 +782,9 @@ export default function StudentMockTestsPage() {
     setPayManualTarget({
       itemType: 'mock_series',
       itemId: seriesId,
-      title: s?.name || 'Tripura TET Daily Online Mock Tests Series',
-      category: 'Tripura TET Mock Series',
-      fullAmount: s?.price || 499,
+      title: s?.name || 'Daily Online Mock Tests Series',
+      category: s?.batchLabel || 'Online Mock Test Series',
+      fullAmount: s?.price ?? 499,
       paymentType: 'full',
     });
   };
@@ -1468,24 +1484,39 @@ export default function StudentMockTestsPage() {
   ).filter((s) => s.status !== 'Archived');
   const activeSubjectsPool =
     db.mockSubjects && db.mockSubjects.length > 0 ? db.mockSubjects : MOCK_SUBJECTS_INITIAL;
-  const paper1Series = activeSeriesList.find((s) => s.id === 'series-ttet-paper1') || MOCK_SERIES_INITIAL[0];
-  const paper2SciSeries = activeSeriesList.find((s) => s.id === 'series-ttet-paper2-sci') || MOCK_SERIES_INITIAL[1];
-  const paper2SocSeries = activeSeriesList.find((s) => s.id === 'series-ttet-paper2-soc') || MOCK_SERIES_INITIAL[2];
 
-  const isP1Enrolled = isStudentEnrolledInSeries('series-ttet-paper1');
-  const isP1Pending = !isP1Enrolled && db.feePayments?.some(
-    (p) => p.studentId === currentStudent.id && p.courseId === 'series-ttet-paper1' && p.status === 'Pending'
-  );
+  const FLAGSHIP_SERIES_IDS = ['series-ttet-paper1', 'series-ttet-paper2-sci', 'series-ttet-paper2-soc'];
+  const LEGACY_NON_FLAGSHIP_SEED_IDS = new Set([
+    'series-stgt-soc',
+    'series-stgt-pure-sci',
+    'series-stgt-bio-sci',
+    'series-tpsc-combined',
+    'series-tcs-tps',
+    'series-banking-ssc',
+    'series-school-foundation',
+    'series-current-affairs',
+  ]);
 
-  const isP2SciEnrolled = isStudentEnrolledInSeries('series-ttet-paper2-sci');
-  const isP2SciPending = !isP2SciEnrolled && db.feePayments?.some(
-    (p) => p.studentId === currentStudent.id && p.courseId === 'series-ttet-paper2-sci' && p.status === 'Pending'
-  );
+  // Top showcase cards: 3 flagship TET series + EVERY newly published Open Mock Test Series
+  const showcaseSeriesList = [
+    ...FLAGSHIP_SERIES_IDS.map((id) => activeSeriesList.find((s) => s.id === id)).filter(
+      (s): s is NonNullable<typeof s> => Boolean(s)
+    ),
+    ...activeSeriesList.filter(
+      (s) =>
+        s.status === 'Open' &&
+        !FLAGSHIP_SERIES_IDS.includes(s.id) &&
+        !LEGACY_NON_FLAGSHIP_SEED_IDS.has(s.id)
+    ),
+  ];
 
-  const isP2SocEnrolled = isStudentEnrolledInSeries('series-ttet-paper2-soc');
-  const isP2SocPending = !isP2SocEnrolled && db.feePayments?.some(
-    (p) => p.studentId === currentStudent.id && p.courseId === 'series-ttet-paper2-soc' && p.status === 'Pending'
-  );
+  const CARD_GRADIENTS = [
+    'from-blue-900 via-[#0056b3] to-indigo-900',
+    'from-indigo-950 via-[#1e3a8a] to-blue-900',
+    'from-slate-900 via-blue-950 to-indigo-950',
+    'from-emerald-950 via-teal-900 to-blue-950',
+    'from-purple-950 via-indigo-900 to-slate-900',
+  ];
 
   return (
     <div className="space-y-8">
@@ -1503,15 +1534,15 @@ export default function StudentMockTestsPage() {
       {/* Instant Scorecard if just completed */}
       {renderResultView()}
 
-      {/* ==================== 3 FESTIVAL OFFER BANNERS / PACKAGES SHOWCASE ==================== */}
+      {/* ==================== FLAGSHIP & NEWLY LAUNCHED MOCK SERIES PACKAGES SHOWCASE ==================== */}
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <span className="px-2.5 py-0.5 rounded-full bg-red-100 text-[#dc2626] font-black text-[11px] uppercase tracking-wider inline-flex items-center gap-1">
-              <Flame className="w-3.5 h-3.5 fill-current" /> Festival Offer Live
+              <Flame className="w-3.5 h-3.5 fill-current" /> Enrollment Open • Live Series
             </span>
             <h2 className="text-xl font-black text-[#0a0e2a] mt-1">
-              Tripura TET 2026 Daily Online Mock Tests Series Packages
+              Daily Online Mock Tests Series Packages
             </h2>
           </div>
           <div className="text-xs text-slate-600 flex items-center gap-2">
@@ -1524,230 +1555,112 @@ export default function StudentMockTestsPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Banner 1: Paper-I 2026 */}
-          <div className="bg-gradient-to-br from-blue-900 via-[#0056b3] to-indigo-900 rounded-3xl p-6 text-white shadow-xl flex flex-col justify-between relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-amber-400/10 rounded-full blur-2xl pointer-events-none" />
-            <div className="space-y-3 relative z-10">
-              <div className="flex items-center justify-between">
-                <span className="px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black text-[10px] uppercase tracking-wider">
-                  Festival Offer!
-                </span>
-                <span className="text-xs font-bold text-blue-200">Classes I to V</span>
-              </div>
-              <h3 className="text-lg font-black leading-snug">
-                Tripura TET: Paper-I 2026
-              </h3>
-              <p className="text-xs text-blue-100">
-                Daily Online Mock Tests Series (Weekly 5 Days Mon–Fri)
-              </p>
+          {showcaseSeriesList.map((series, idx) => {
+            const isNewLaunch = !FLAGSHIP_SERIES_IDS.includes(series.id);
+            const isEnrolled = isStudentEnrolledInSeries(series.id);
+            const isPending = !isEnrolled && hasPendingSeriesPayment(series.id);
+            const isClosed = series.status === 'Closed';
+            const gradient = CARD_GRADIENTS[idx % CARD_GRADIENTS.length];
+            const highlights =
+              Array.isArray(series.highlights) && series.highlights.length > 0
+                ? series.highlights.slice(0, 5)
+                : [
+                    'Sectional & Topic-wise Mock Tests',
+                    'Full Length Exam Pattern Mock Tests',
+                    'Bilingual Questions & Instant Scorecard',
+                    'Self Performance Analysis & Merit Rank',
+                  ];
 
-              {/* Price Tag */}
-              <div className="pt-2">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-black text-amber-300">₹{paper1Series.price}/-</span>
-                  <span className="text-xs text-blue-200 font-bold uppercase">Only</span>
-                  <span className="text-xs text-blue-300 line-through">₹{Math.max(499, paper1Series.price + 100)}</span>
+            return (
+              <div
+                key={series.id}
+                className={`bg-gradient-to-br ${gradient} rounded-3xl p-6 text-white shadow-xl flex flex-col justify-between relative overflow-hidden`}
+              >
+                <div className="absolute top-0 right-0 w-32 h-32 bg-amber-400/10 rounded-full blur-2xl pointer-events-none" />
+                <div className="space-y-3 relative z-10">
+                  <div className="flex items-center justify-between gap-2">
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full font-black text-[10px] uppercase tracking-wider ${
+                        isNewLaunch
+                          ? 'bg-emerald-400 text-slate-950'
+                          : 'bg-amber-400 text-slate-950'
+                      }`}
+                    >
+                      {isNewLaunch ? `New Launch • ${series.batchLabel || 'Live'}` : 'Festival Offer!'}
+                    </span>
+                    <span className="text-xs font-bold text-blue-200 truncate">
+                      {series.classRange || 'All Target Exams'}
+                    </span>
+                  </div>
+                  <h3 className="text-lg font-black leading-snug">{series.name}</h3>
+                  <p className="text-xs text-blue-100 line-clamp-2">
+                    {series.description || 'Daily Online Mock Tests Series with Complete Exam-Pattern Practice'}
+                  </p>
+
+                  {/* Price Tag */}
+                  <div className="pt-2">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl font-black text-amber-300">₹{series.price}/-</span>
+                      <span className="text-xs text-blue-200 font-bold uppercase">Only</span>
+                      <span className="text-xs text-blue-300 line-through">
+                        ₹{Math.max(series.price + 100, series.price >= 450 ? series.price + 200 : 499)}
+                      </span>
+                    </div>
+                    {series.startsOn && (
+                      <p className="text-[11px] text-blue-200 font-semibold mt-1">
+                        Schedule: {series.startsOn}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Feature Highlights */}
+                  <ul className="space-y-1.5 text-xs text-blue-50 pt-3 border-t border-white/15">
+                    {highlights.map((h: string, hIdx: number) => (
+                      <li key={hIdx} className="flex items-center gap-1.5 font-medium">
+                        <Check className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                        <span>{h}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="pt-5 mt-5 border-t border-white/15 relative z-10 space-y-2">
+                  {isEnrolled ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedSeriesId(series.id);
+                        setSelectedSubjectId('all');
+                      }}
+                      className="w-full py-2.5 rounded-xl bg-emerald-500/25 hover:bg-emerald-500/35 border border-emerald-400/40 text-emerald-200 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all"
+                    >
+                      <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+                      <span>Enrolled &amp; Active — Open Tests</span>
+                    </button>
+                  ) : isPending ? (
+                    <div className="w-full py-2.5 rounded-xl bg-amber-500/25 border border-amber-400/40 text-amber-200 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs">
+                      <Clock className="w-4 h-4 text-amber-300 animate-pulse" />
+                      <span>Verification Pending (Admin Review)</span>
+                    </div>
+                  ) : isClosed ? (
+                    <div className="w-full py-2.5 rounded-xl bg-white/10 border border-white/20 text-slate-300 font-extrabold text-xs flex items-center justify-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>Enrollment Closed</span>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenSeriesCheckout(series.id)}
+                      className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer shadow-md transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Enroll Now @ ₹{series.price}/- (Pay via UPI ID / WhatsApp)
+                    </button>
+                  )}
                 </div>
               </div>
-
-              {/* Feature Highlights from Banner */}
-              <ul className="space-y-1.5 text-xs text-blue-50 pt-3 border-t border-white/15">
-                <li className="flex items-center gap-1.5 font-medium">
-                  <Check className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                  <span>30+ Sectional Mock Tests (CDP, English, Bengali, Math & EVS)</span>
-                </li>
-                <li className="flex items-center gap-1.5 font-medium">
-                  <Check className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                  <span>02 Full Length Mock Tests (Full Syllabus)</span>
-                </li>
-                <li className="flex items-center gap-1.5 font-medium">
-                  <Check className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                  <span>1200+ MCQs & OMR Sheet For Practice</span>
-                </li>
-                <li className="flex items-center gap-1.5 font-medium">
-                  <Check className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                  <span>Bilingual Questions (English & Bengali)</span>
-                </li>
-                <li className="flex items-center gap-1.5 font-medium">
-                  <Check className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                  <span>Self Performance Analysis & Doubt Discussion</span>
-                </li>
-              </ul>
-            </div>
-
-            <div className="pt-5 mt-5 border-t border-white/15 relative z-10">
-              {isP1Enrolled ? (
-                <div className="w-full py-2.5 rounded-xl bg-emerald-500/25 border border-emerald-400/40 text-emerald-200 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-300" />
-                  <span>Enrolled &amp; Active</span>
-                </div>
-              ) : isP1Pending ? (
-                <div className="w-full py-2.5 rounded-xl bg-amber-500/25 border border-amber-400/40 text-amber-200 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs">
-                  <Clock className="w-4 h-4 text-amber-300 animate-pulse" />
-                  <span>Verification Pending (Admin Review)</span>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => handleOpenSeriesCheckout('series-ttet-paper1')}
-                  className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer shadow-md transition-all flex items-center justify-center gap-1.5"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  Enroll Now @ ₹{paper1Series.price}/- (Pay via UPI / Bank)
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Banner 2: Paper-II (Science) 2026 */}
-          <div className="bg-gradient-to-br from-indigo-950 via-[#1e3a8a] to-blue-900 rounded-3xl p-6 text-white shadow-xl flex flex-col justify-between relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-amber-400/10 rounded-full blur-2xl pointer-events-none" />
-            <div className="space-y-3 relative z-10">
-              <div className="flex items-center justify-between">
-                <span className="px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black text-[10px] uppercase tracking-wider">
-                  Festival Offer!
-                </span>
-                <span className="text-xs font-bold text-indigo-200">Classes VI to VIII</span>
-              </div>
-              <h3 className="text-lg font-black leading-snug">
-                Tripura TET: Paper-II (Science) 2026
-              </h3>
-              <p className="text-xs text-indigo-100">
-                Daily Online Mock Tests Series (Weekly 5 Days Mon–Fri)
-              </p>
-
-              {/* Price Tag */}
-              <div className="pt-2">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-black text-amber-300">₹{paper2SciSeries.price}/-</span>
-                  <span className="text-xs text-indigo-200 font-bold uppercase">Only</span>
-                  <span className="text-xs text-indigo-300 line-through">₹{Math.max(699, paper2SciSeries.price + 200)}</span>
-                </div>
-              </div>
-
-              {/* Feature Highlights from Banner */}
-              <ul className="space-y-1.5 text-xs text-indigo-50 pt-3 border-t border-white/15">
-                <li className="flex items-center gap-1.5 font-medium">
-                  <Check className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                  <span>40+ Sectional Mock Tests (CDP, English, Bengali, Maths & Science)</span>
-                </li>
-                <li className="flex items-center gap-1.5 font-medium">
-                  <Check className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                  <span>02 Full Length Mock Tests (Full Syllabus)</span>
-                </li>
-                <li className="flex items-center gap-1.5 font-medium">
-                  <Check className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                  <span>1500+ MCQs & OMR Sheet For Practice</span>
-                </li>
-                <li className="flex items-center gap-1.5 font-medium">
-                  <Check className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                  <span>Bilingual Questions (English & Bengali)</span>
-                </li>
-                <li className="flex items-center gap-1.5 font-medium">
-                  <Check className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                  <span>Self Performance Analysis & Doubt Discussion</span>
-                </li>
-              </ul>
-            </div>
-
-            <div className="pt-5 mt-5 border-t border-white/15 relative z-10">
-              {isP2SciEnrolled ? (
-                <div className="w-full py-2.5 rounded-xl bg-emerald-500/25 border border-emerald-400/40 text-emerald-200 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-300" />
-                  <span>Enrolled &amp; Active</span>
-                </div>
-              ) : isP2SciPending ? (
-                <div className="w-full py-2.5 rounded-xl bg-amber-500/25 border border-amber-400/40 text-amber-200 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs">
-                  <Clock className="w-4 h-4 text-amber-300 animate-pulse" />
-                  <span>Verification Pending (Admin Review)</span>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => handleOpenSeriesCheckout('series-ttet-paper2-sci')}
-                  className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer shadow-md transition-all flex items-center justify-center gap-1.5"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  Enroll Now @ ₹{paper2SciSeries.price}/- (Pay via UPI / Bank)
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Banner 3: Paper-II (Social Studies) 2026 */}
-          <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950 rounded-3xl p-6 text-white shadow-xl flex flex-col justify-between relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-amber-400/10 rounded-full blur-2xl pointer-events-none" />
-            <div className="space-y-3 relative z-10">
-              <div className="flex items-center justify-between">
-                <span className="px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black text-[10px] uppercase tracking-wider">
-                  Festival Offer!
-                </span>
-                <span className="text-xs font-bold text-slate-300">Classes VI to VIII</span>
-              </div>
-              <h3 className="text-lg font-black leading-snug">
-                Tripura TET: Paper-II (Social Studies) 2026
-              </h3>
-              <p className="text-xs text-slate-200">
-                Daily Online Mock Tests Series (Weekly 5 Days Mon–Fri)
-              </p>
-
-              {/* Price Tag */}
-              <div className="pt-2">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-black text-amber-300">₹{paper2SocSeries.price}/-</span>
-                  <span className="text-xs text-slate-200 font-bold uppercase">Only</span>
-                  <span className="text-xs text-slate-400 line-through">₹{Math.max(699, paper2SocSeries.price + 200)}</span>
-                </div>
-              </div>
-
-              {/* Feature Highlights from Banner */}
-              <ul className="space-y-1.5 text-xs text-slate-100 pt-3 border-t border-white/15">
-                <li className="flex items-center gap-1.5 font-medium">
-                  <Check className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                  <span>40+ Sectional Mock Tests (CDP, English, Bengali, History, Geog, Pol Sci)</span>
-                </li>
-                <li className="flex items-center gap-1.5 font-medium">
-                  <Check className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                  <span>02 Full Length Mock Tests (Full Syllabus)</span>
-                </li>
-                <li className="flex items-center gap-1.5 font-medium">
-                  <Check className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                  <span>1500+ MCQs & OMR Sheet For Practice</span>
-                </li>
-                <li className="flex items-center gap-1.5 font-medium">
-                  <Check className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                  <span>Bilingual Questions (English & Bengali)</span>
-                </li>
-                <li className="flex items-center gap-1.5 font-medium">
-                  <Check className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                  <span>Self Performance Analysis & Doubt Discussion</span>
-                </li>
-              </ul>
-            </div>
-
-            <div className="pt-5 mt-5 border-t border-white/15 relative z-10">
-              {isP2SocEnrolled ? (
-                <div className="w-full py-2.5 rounded-xl bg-emerald-500/25 border border-emerald-400/40 text-emerald-200 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-300" />
-                  <span>Enrolled &amp; Active</span>
-                </div>
-              ) : isP2SocPending ? (
-                <div className="w-full py-2.5 rounded-xl bg-amber-500/25 border border-amber-400/40 text-amber-200 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs">
-                  <Clock className="w-4 h-4 text-amber-300 animate-pulse" />
-                  <span>Verification Pending (Admin Review)</span>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => handleOpenSeriesCheckout('series-ttet-paper2-soc')}
-                  className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer shadow-md transition-all flex items-center justify-center gap-1.5"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  Enroll Now @ ₹{paper2SocSeries.price}/- (Pay via UPI / Bank)
-                </button>
-              )}
-            </div>
-          </div>
+            );
+          })}
         </div>
       </div>
 
@@ -1904,9 +1817,7 @@ export default function StudentMockTestsPage() {
 
               {/* Banner if student is not enrolled in this series */}
               {!isEnrolled && (() => {
-                const isSeriesPending = db.feePayments?.some(
-                  (p) => p.studentId === currentStudent.id && p.courseId === selectedSeriesId && p.status === 'Pending'
-                );
+                const isSeriesPending = hasPendingSeriesPayment(selectedSeriesId);
 
                 if (isSeriesPending) {
                   return (
@@ -1958,65 +1869,73 @@ export default function StudentMockTestsPage() {
 
               {/* SUBSECTION (A): MOCK TESTS */}
               {activeSubsection === 'tests' && (() => {
-                const allAvailableTests: any[] = [
-                  ...(db.seriesTests || []).filter((st) => st.questions && st.questions.length > 0),
-                  ...(db.mockTests || []).map((mt) => {
-                    const cId = (mt.courseId || '').toLowerCase();
-                    const title = (mt.title || '').toLowerCase();
-                    const subj = (mt.subject || '').toLowerCase();
-                    const combined = `${cId} ${title} ${subj}`;
-                    let mappedSeries = mt.seriesId;
-                    if (!mappedSeries) {
-                      if (combined.includes('bio') && combined.includes('stgt')) {
-                        mappedSeries = 'series-stgt-bio-sci';
-                      } else if (combined.includes('pure') || (combined.includes('stgt') && (combined.includes('sci') || combined.includes('math')))) {
-                        mappedSeries = 'series-stgt-pure-sci';
-                      } else if (combined.includes('stgt') && (combined.includes('soc') || combined.includes('arts') || combined.includes('sst'))) {
-                        mappedSeries = 'series-stgt-soc';
-                      } else if (combined.includes('tpsc') || combined.includes('jrbt')) {
-                        mappedSeries = 'series-tpsc-combined';
-                      } else if (combined.includes('tcs') || combined.includes('tps')) {
-                        mappedSeries = 'series-tcs-tps';
-                      } else if (combined.includes('banking') || combined.includes('ibps') || combined.includes('sbi') || combined.includes('ssc')) {
-                        mappedSeries = 'series-banking-ssc';
-                      } else if (combined.includes('school') || combined.includes('foundation') || combined.includes('class-') || combined.includes('class 7') || combined.includes('class 8') || combined.includes('class 9') || combined.includes('class 10')) {
-                        mappedSeries = 'series-school-foundation';
-                      } else if (
-                        combined.includes('arts') ||
-                        combined.includes('soc') ||
-                        combined.includes('sst') ||
-                        combined.includes('history') ||
-                        combined.includes('geography') ||
-                        combined.includes('political')
-                      ) {
-                        mappedSeries = 'series-ttet-paper2-soc';
-                      } else if (
-                        combined.includes('sci') ||
-                        combined.includes('math')
-                      ) {
-                        mappedSeries = 'series-ttet-paper2-sci';
-                      } else if (
-                        combined.includes('tet 1') ||
-                        combined.includes('tet-1') ||
-                        combined.includes('paper 1') ||
-                        combined.includes('paper-1') ||
-                        combined.includes('paper-i') ||
-                        combined.includes('evs')
-                      ) {
-                        mappedSeries = 'series-ttet-paper1';
-                      }
+                const seenTestIds = new Set<string>();
+                const allAvailableTests: any[] = [];
+
+                for (const mt of db.mockTests || []) {
+                  if (seenTestIds.has(mt.id)) continue;
+                  seenTestIds.add(mt.id);
+                  const cId = (mt.courseId || '').toLowerCase();
+                  const title = (mt.title || '').toLowerCase();
+                  const subj = (mt.subject || '').toLowerCase();
+                  const combined = `${cId} ${title} ${subj}`;
+                  let mappedSeries = mt.seriesId;
+                  if (!mappedSeries) {
+                    if (combined.includes('bio') && combined.includes('stgt')) {
+                      mappedSeries = 'series-stgt-bio-sci';
+                    } else if (combined.includes('pure') || (combined.includes('stgt') && (combined.includes('sci') || combined.includes('math')))) {
+                      mappedSeries = 'series-stgt-pure-sci';
+                    } else if (combined.includes('stgt') && (combined.includes('soc') || combined.includes('arts') || combined.includes('sst'))) {
+                      mappedSeries = 'series-stgt-soc';
+                    } else if (combined.includes('tpsc') || combined.includes('jrbt')) {
+                      mappedSeries = 'series-tpsc-combined';
+                    } else if (combined.includes('tcs') || combined.includes('tps')) {
+                      mappedSeries = 'series-tcs-tps';
+                    } else if (combined.includes('banking') || combined.includes('ibps') || combined.includes('sbi') || combined.includes('ssc')) {
+                      mappedSeries = 'series-banking-ssc';
+                    } else if (combined.includes('school') || combined.includes('foundation') || combined.includes('class-') || combined.includes('class 7') || combined.includes('class 8') || combined.includes('class 9') || combined.includes('class 10')) {
+                      mappedSeries = 'series-school-foundation';
+                    } else if (
+                      combined.includes('arts') ||
+                      combined.includes('soc') ||
+                      combined.includes('sst') ||
+                      combined.includes('history') ||
+                      combined.includes('geography') ||
+                      combined.includes('political')
+                    ) {
+                      mappedSeries = 'series-ttet-paper2-soc';
+                    } else if (
+                      combined.includes('sci') ||
+                      combined.includes('math')
+                    ) {
+                      mappedSeries = 'series-ttet-paper2-sci';
+                    } else if (
+                      combined.includes('tet 1') ||
+                      combined.includes('tet-1') ||
+                      combined.includes('paper 1') ||
+                      combined.includes('paper-1') ||
+                      combined.includes('paper-i') ||
+                      combined.includes('evs')
+                    ) {
+                      mappedSeries = 'series-ttet-paper1';
                     }
-                    return {
-                      ...mt,
-                      seriesId: mappedSeries,
-                      subjectId: mt.subjectId || mt.subject || null,
-                      testType: mt.title.toLowerCase().includes('full') ? 'full' : 'sectional',
-                    };
-                  }),
-                ];
+                  }
+                  allAvailableTests.push({
+                    ...mt,
+                    seriesId: mappedSeries,
+                    subjectId: mt.subjectId || mt.subject || null,
+                    testType: mt.title.toLowerCase().includes('full') ? 'full' : 'sectional',
+                  });
+                }
+
+                for (const st of db.seriesTests || []) {
+                  if (!st.questions || st.questions.length === 0 || seenTestIds.has(st.id)) continue;
+                  seenTestIds.add(st.id);
+                  allAvailableTests.push(st);
+                }
 
                 const filtered = allAvailableTests.filter((t) => {
-                  if (t.seriesId && t.seriesId !== selectedSeriesId) return false;
+                  if (t.seriesId !== selectedSeriesId) return false;
                   if (selectedSubjectId === 'full-length') {
                     return t.testType === 'full' || !t.subjectId || String(t.title).toLowerCase().includes('full');
                   }

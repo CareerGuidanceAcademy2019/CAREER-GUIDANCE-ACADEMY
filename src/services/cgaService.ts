@@ -1469,7 +1469,11 @@ export const cgaService = {
 
     const facultyList = faculty.map(toFaculty);
     const facultyName = (id: string | null) => facultyList.find((f) => f.id === id)?.name ?? '';
-    const courseName = (id: string) => courses.find((c: Row) => c.id === id)?.name ?? '';
+    const courseName = (id: string) =>
+      courses.find((c: Row) => c.id === id)?.name ??
+      seriesRaw.find((s: Row) => s.id === id)?.name ??
+      materials.find((m: Row) => m.id === id)?.title ??
+      '';
 
     const materialList = materials.map((m) => toMaterial(m, courseName(m.course_id)));
     let localTests: MockTest[] = [];
@@ -1690,7 +1694,9 @@ export const cgaService = {
       } catch {}
     }
 
-    const serverPayments = payments.map((p) => toPayment(p, studentName(p.student_id), courseName(p.course_id)));
+    const serverPayments = payments.map((p) =>
+      toPayment(p, studentName(p.student_id), courseName(p.course_id || p.item_id))
+    );
 
     // Reconcile and purge local custom payments that have been verified on server
     const verifiedSeriesIds = new Set(seriesEnrRaw.map((se) => se.series_id));

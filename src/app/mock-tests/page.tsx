@@ -84,25 +84,77 @@ export default function MockTestsLandingPage() {
           })()))
   );
 
-  const displayPrice = primarySeries?.price || 499;
-  const seriesTitle = primarySeries?.name || 'T-TET 2026 Mock Test Series (15 Full-Length Mocks)';
+  const FLAGSHIP_IDS = ['series-ttet-paper1', 'series-ttet-paper2-sci', 'series-ttet-paper2-soc'];
+  const LEGACY_NON_FLAGSHIP_IDS = new Set([
+    'series-stgt-soc',
+    'series-stgt-pure-sci',
+    'series-stgt-bio-sci',
+    'series-tpsc-combined',
+    'series-tcs-tps',
+    'series-banking-ssc',
+    'series-school-foundation',
+    'series-current-affairs',
+  ]);
+  const allOpenSeries = (db.mockSeries || []).filter((s) => s.status !== 'Archived');
+  const publicShowcaseSeries = [
+    ...FLAGSHIP_IDS.map((id) => allOpenSeries.find((s) => s.id === id)).filter(
+      (s): s is NonNullable<typeof s> => Boolean(s)
+    ),
+    ...allOpenSeries.filter(
+      (s) => s.status === 'Open' && !FLAGSHIP_IDS.includes(s.id) && !LEGACY_NON_FLAGSHIP_IDS.has(s.id)
+    ),
+  ];
 
-  const handleEnrolClick = () => {
+  const isEnrolledInPublicSeries = (seriesId: string) =>
+    Boolean(
+      currentStudent &&
+        ((db.seriesEnrollments || []).some(
+          (se) => (se.studentId === currentStudent.id || se.studentId === 'me') && se.seriesId === seriesId
+        ) ||
+          (db.feePayments || []).some(
+            (p) =>
+              (p.studentId === currentStudent.id || p.studentId === 'me') &&
+              (p.itemId === seriesId || p.courseId === seriesId) &&
+              p.status === 'Verified'
+          ) ||
+          currentStudent.enrollments?.some((e) => e.courseId === seriesId))
+    );
+
+  const isPendingInPublicSeries = (seriesId: string) =>
+    Boolean(
+      currentStudent &&
+        (db.feePayments || []).some(
+          (p) =>
+            (p.studentId === currentStudent.id || p.studentId === 'me') &&
+            (p.itemId === seriesId || p.courseId === seriesId) &&
+            p.status === 'Pending'
+        )
+    );
+
+  const handleEnrolSeries = (series: { id: string; name: string; price: number; batchLabel?: string }) => {
     if (!session || !currentStudent) {
       router.push('/login?redirect=/mock-tests');
       return;
     }
-
     setPayTarget({
       itemType: 'mock_series',
-      itemId: primarySeries?.id || 'ttet-2026',
-      title: seriesTitle,
-      fullAmount: displayPrice,
+      itemId: series.id,
+      title: series.name,
+      category: series.batchLabel || 'Online Mock Test Series',
+      fullAmount: series.price,
       paymentType: 'full',
-      metadata: {
-        exam: 'Tripura Teachers Eligibility Test (T-TET)',
-        testsCount: 15,
-      },
+    });
+  };
+
+  const displayPrice = primarySeries?.price || 499;
+  const seriesTitle = primarySeries?.name || 'T-TET 2026 Mock Test Series (15 Full-Length Mocks)';
+
+  const handleEnrolClick = () => {
+    handleEnrolSeries({
+      id: primarySeries?.id || 'series-ttet-paper1',
+      name: seriesTitle,
+      price: displayPrice,
+      batchLabel: primarySeries?.batchLabel,
     });
   };
 
@@ -156,7 +208,7 @@ export default function MockTestsLandingPage() {
                 href="/how-to-pay"
                 className="w-full sm:w-auto px-6 py-4 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold text-sm backdrop-blur-sm border border-white/20 inline-flex items-center justify-center gap-2 transition-all"
               >
-                <HelpCircle className="w-4 h-4" /> How to Pay via UPI / Bank
+                <HelpCircle className="w-4 h-4" /> How to Pay via UPI ID / WhatsApp
               </Link>
             </div>
 
@@ -176,6 +228,110 @@ export default function MockTestsLandingPage() {
             </div>
           </div>
         </section>
+
+        {/* Active & Newly Launched Mock Test Series Packages */}
+        {publicShowcaseSeries.length > 0 && (
+          <section className="py-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+            <div className="text-center space-y-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-100 text-[#dc2626] text-[11px] font-black uppercase tracking-wider">
+                <Flame className="w-3.5 h-3.5" /> Enrollment Open • Live Test Series
+              </span>
+              <h2 className="text-2xl sm:text-3xl font-black text-[#0a0e2a]">
+                Choose Your Mock Test Series Package
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-600 max-w-2xl mx-auto">
+                Pay securely via Official Academy UPI ID or request the Payment QR on WhatsApp. After verification, your series unlocks automatically in My Learning.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {publicShowcaseSeries.map((ser) => {
+                const isNewLaunch = !FLAGSHIP_IDS.includes(ser.id);
+                const serEnrolled = isEnrolledInPublicSeries(ser.id);
+                const serPending = !serEnrolled && isPendingInPublicSeries(ser.id);
+                const serClosed = ser.status === 'Closed';
+                const highlights =
+                  Array.isArray(ser.highlights) && ser.highlights.length > 0
+                    ? ser.highlights.slice(0, 5)
+                    : [
+                        'Sectional & Full-Length Mock Tests',
+                        'Bilingual Questions (English & Bengali)',
+                        'Instant Scorecard & State Ranking',
+                      ];
+
+                return (
+                  <div
+                    key={ser.id}
+                    className="bg-white rounded-3xl border border-slate-200 p-6 shadow-md flex flex-col justify-between space-y-5"
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                            isNewLaunch
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-amber-100 text-amber-900'
+                          }`}
+                        >
+                          {isNewLaunch ? `New Launch • ${ser.batchLabel || 'Live'}` : 'Festival Offer'}
+                        </span>
+                        <span className="text-[11px] font-bold text-slate-400">
+                          {ser.classRange}
+                        </span>
+                      </div>
+                      <h3 className="text-lg font-extrabold text-[#0a0e2a] leading-snug">
+                        {ser.name}
+                      </h3>
+                      <p className="text-xs text-slate-600 line-clamp-2">{ser.description}</p>
+                      <div className="flex items-baseline gap-2 pt-1">
+                        <span className="text-3xl font-black text-[#0056b3]">₹{ser.price}/-</span>
+                        <span className="text-xs font-bold text-slate-400 uppercase">Only</span>
+                      </div>
+                      <ul className="space-y-1.5 text-xs text-slate-700 pt-3 border-t border-slate-100">
+                        {highlights.map((h, i) => (
+                          <li key={i} className="flex items-center gap-2">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span>{h}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="pt-3 border-t border-slate-100">
+                      {serEnrolled ? (
+                        <Link
+                          href={`/student/tests?seriesId=${ser.id}`}
+                          className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-sm transition-all"
+                        >
+                          <CheckCircle2 className="w-4 h-4" /> Enrolled &amp; Active — Open Tests
+                        </Link>
+                      ) : serPending ? (
+                        <Link
+                          href="/student/my-learning"
+                          className="w-full py-3 rounded-xl bg-amber-100 text-amber-900 border border-amber-300 text-xs font-extrabold flex items-center justify-center gap-1.5"
+                        >
+                          <Clock className="w-4 h-4" /> Verification Pending — View Status
+                        </Link>
+                      ) : serClosed ? (
+                        <div className="w-full py-3 rounded-xl bg-slate-100 text-slate-500 text-xs font-extrabold text-center">
+                          Enrollment Closed
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleEnrolSeries(ser)}
+                          className="w-full py-3 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-md cursor-pointer transition-all"
+                        >
+                          <Zap className="w-4 h-4" /> Enrol Now @ ₹{ser.price}/-
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {/* Pricing & Value Proposition */}
         <section className="py-16 max-w-5xl mx-auto px-4 sm:px-6">
@@ -259,7 +415,7 @@ export default function MockTestsLandingPage() {
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>Pay with GPay, PhonePe, Paytm, BHIM or Bank</span>
+                    <span>Pay via Official UPI ID or WhatsApp QR Request</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
