@@ -1,20 +1,25 @@
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { Plus_Jakarta_Sans, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { CgaProvider } from '@/context/CgaContext';
 import { ToastContainer } from '@/components/ui/ToastContainer';
 import { CookieConsentBanner } from '@/components/layout/CookieConsentBanner';
 import { GlobalNavigationLoader } from '@/components/layout/GlobalNavigationLoader';
 import { SessionHeartbeat } from '@/components/auth/SessionHeartbeat';
+import { UrgentAnnouncementModal } from '@/components/layout/UrgentAnnouncementModal';
 
-const geistSans = Geist({
+const jakartaSans = Plus_Jakarta_Sans({
   variable: '--font-geist-sans',
   subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800'],
+  display: 'swap',
 });
 
-const geistMono = Geist_Mono({
+const jetbrainsMono = JetBrains_Mono({
   variable: '--font-geist-mono',
   subsets: ['latin'],
+  weight: ['400', '500', '600'],
+  display: 'swap',
 });
 
 const siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://careerguidanceacademy.in';
@@ -51,10 +56,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
-      <body className="min-h-screen flex flex-col bg-white text-slate-900 antialiased">
+    <html lang="en" className={`${jakartaSans.variable} ${jetbrainsMono.variable}`}>
+      <body className="min-h-screen flex flex-col bg-[#fafaf9] text-slate-900 antialiased selection:bg-[#0056b3]/15 selection:text-[#0056b3]">
         <CgaProvider>
           {children}
+          <UrgentAnnouncementModal />
           <SessionHeartbeat />
           <GlobalNavigationLoader />
           <ToastContainer />

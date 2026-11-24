@@ -62,28 +62,28 @@ export function PublicHeader({ variant = 'default' }: PublicHeaderProps) {
   }
 
   return (
-    <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-2xs">
+    <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200/90 shadow-2xs">
       {/* Top Academic Utility Bar */}
-      <div className="bg-[#0a0e2a] text-white text-xs py-2 px-4">
+      <div className="bg-[#0b1120] text-slate-200 text-xs py-2 px-4 border-b border-slate-800/80">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-4">
-            <span className="inline-flex items-center gap-1.5 text-blue-200">
-              <MapPin className="w-3.5 h-3.5 text-[#ea580c] shrink-0" />
-              <span className="truncate max-w-xs sm:max-w-none">
+          <div className="flex flex-wrap items-center gap-4 min-w-0">
+            <span className="inline-flex items-center gap-1.5 text-slate-300 min-w-0">
+              <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="truncate max-w-[260px] sm:max-w-none">
                 {db.siteContent.contact.address} (PIN: {db.siteContent.contact.pincode || '799120'})
               </span>
             </span>
             <a
               href={`tel:${db.siteContent.contact.phonePrimary}`}
-              className="hidden md:inline-flex items-center gap-1.5 text-blue-100 hover:text-white font-medium"
+              className="hidden md:inline-flex items-center gap-1.5 text-slate-200 hover:text-white font-medium shrink-0"
             >
-              <Phone className="w-3.5 h-3.5 text-[#ea580c]" />
+              <Phone className="w-3.5 h-3.5 text-amber-400" />
               {db.siteContent.contact.phonePrimary}
             </a>
           </div>
 
-          <div className="flex items-center gap-3 ml-auto">
-            <span className="hidden lg:inline-block px-2 py-0.5 rounded bg-[#dc2626] text-[11px] font-bold tracking-wide">
+          <div className="flex items-center gap-3 ml-auto shrink-0">
+            <span className="hidden lg:inline-block px-2.5 py-0.5 rounded bg-white/10 border border-white/15 text-[11px] font-medium text-amber-200 tracking-wide">
               {db.siteContent.heroBadge}
             </span>
           </div>
@@ -91,11 +91,13 @@ export function PublicHeader({ variant = 'default' }: PublicHeaderProps) {
       </div>
 
       {/* Main Navigation Bar */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
-        <CGALogo size="md" />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 sm:h-20 flex items-center justify-between gap-3">
+        <div className="min-w-0 shrink">
+          <CGALogo size="md" />
+        </div>
 
         {/* Desktop Nav Links */}
-        <nav className="hidden lg:flex items-center gap-1" aria-label="Main Navigation">
+        <nav className="hidden lg:flex items-center gap-1 shrink-0" aria-label="Main Navigation">
           {NAV_LINKS.map((item) => {
             const isActive =
               item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
@@ -104,9 +106,9 @@ export function PublicHeader({ variant = 'default' }: PublicHeaderProps) {
                 key={item.href}
                 href={item.href}
                 prefetch={true}
-                className={`px-3.5 py-2 rounded-xl text-sm font-semibold transition-all ${
+                className={`px-3.5 py-2 rounded-lg text-sm font-medium transition-all ${
                   isActive
-                    ? 'bg-blue-50 text-[#0056b3] font-bold shadow-2xs'
+                    ? 'bg-slate-100 text-[#0056b3] font-semibold'
                     : 'text-slate-700 hover:text-[#0056b3] hover:bg-slate-50'
                 }`}
               >
@@ -117,20 +119,20 @@ export function PublicHeader({ variant = 'default' }: PublicHeaderProps) {
         </nav>
 
         {/* Auth / Portal Actions */}
-        <div className="hidden sm:flex items-center gap-2.5">
+        <div className="hidden sm:flex items-center gap-2 shrink-0">
           {session ? (
             <>
               <Link
                 href={PORTAL_HOME[session.role] ?? '/student/dashboard'}
                 prefetch={true}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold bg-[#0056b3] text-white hover:bg-[#1e3a8a] shadow-sm transition-all"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-[#0056b3] text-white hover:bg-[#1e3a8a] shadow-2xs transition-all whitespace-nowrap"
               >
                 {session.role === 'ADMIN' ? (
-                  <ShieldCheck className="w-4 h-4 text-amber-300" />
+                  <ShieldCheck className="w-4 h-4 text-amber-300 shrink-0" />
                 ) : session.role === 'FACULTY' ? (
-                  <Presentation className="w-4 h-4 text-amber-300" />
+                  <Presentation className="w-4 h-4 text-amber-300 shrink-0" />
                 ) : (
-                  <LayoutDashboard className="w-4 h-4" />
+                  <LayoutDashboard className="w-4 h-4 shrink-0" />
                 )}
                 {session.role === 'ADMIN'
                   ? 'Admin Portal'
@@ -141,7 +143,7 @@ export function PublicHeader({ variant = 'default' }: PublicHeaderProps) {
               <button
                 type="button"
                 onClick={logout}
-                className="px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:text-[#dc2626] hover:bg-red-50 border border-slate-200 transition-colors cursor-pointer"
+                className="px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:text-[#dc2626] hover:bg-red-50 border border-slate-200 transition-colors cursor-pointer whitespace-nowrap"
               >
                 Logout
               </button>
@@ -151,15 +153,15 @@ export function PublicHeader({ variant = 'default' }: PublicHeaderProps) {
               <Link
                 href="/login"
                 id="nav-login-btn"
-                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold text-[#0056b3] bg-blue-50 hover:bg-blue-100 border border-blue-200/80 transition-all"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 hover:text-[#0056b3] bg-white hover:bg-slate-50 border border-slate-200 transition-all whitespace-nowrap"
               >
-                <LogIn className="w-4 h-4" />
+                <LogIn className="w-4 h-4 text-[#0056b3]" />
                 Login
               </Link>
               <Link
                 href="/register"
                 id="nav-register-btn"
-                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-[#0056b3] hover:bg-[#1e3a8a] shadow-sm transition-all"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold text-white bg-[#0056b3] hover:bg-[#1e3a8a] shadow-2xs transition-all whitespace-nowrap"
               >
                 <UserPlus className="w-4 h-4" />
                 Register
@@ -168,14 +170,14 @@ export function PublicHeader({ variant = 'default' }: PublicHeaderProps) {
           )}
         </div>
 
-        {/* Mobile Menu Trigger */}
+        {/* Mobile / Tablet Menu Trigger */}
         <button
           type="button"
           onClick={() => setMobileOpen(!mobileOpen)}
-          className="lg:hidden p-2.5 rounded-xl text-slate-700 hover:bg-slate-100 border border-slate-200"
+          className="lg:hidden p-2.5 rounded-xl text-slate-700 hover:bg-slate-100 border border-slate-200 shrink-0 cursor-pointer"
           aria-label="Toggle Menu"
         >
-          {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
       </div>
 

@@ -24,9 +24,9 @@ export function CGALogo({
   }[size];
 
   const content = (
-    <div className="inline-flex items-center gap-3 group select-none">
+    <div className="inline-flex items-center gap-2.5 sm:gap-3 group select-none min-w-0">
       <div
-        className={`${dimensions} relative rounded-full overflow-hidden bg-white shadow-md ring-2 ring-[#0056b3]/20 group-hover:ring-[#dc2626]/60 transition-all shrink-0 flex items-center justify-center`}
+        className={`${dimensions} relative rounded-full overflow-hidden bg-white shadow-xs ring-1 ring-slate-200/80 group-hover:ring-[#0056b3]/50 transition-all shrink-0 flex items-center justify-center`}
       >
         <img
           src="/cga-logo.webp"
@@ -38,22 +38,22 @@ export function CGALogo({
         />
       </div>
       {showText && (
-        <div className="flex flex-col">
+        <div className="flex flex-col min-w-0">
           <div className="flex items-center gap-1.5">
             <span
-              className={`font-extrabold tracking-tight leading-tight ${
-                size === 'lg' || size === 'xl' ? 'text-xl sm:text-2xl' : 'text-base sm:text-lg'
+              className={`font-bold tracking-tight leading-snug truncate ${
+                size === 'lg' || size === 'xl' ? 'text-lg sm:text-2xl' : 'text-sm sm:text-base'
               } ${variant === 'light' ? 'text-white' : 'text-[#0a0e2a]'}`}
             >
               Career Guidance Academy
             </span>
-            <span className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded bg-[#0056b3] text-white">
+            <span className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded bg-[#0056b3] text-white shrink-0">
               C.G.A
             </span>
           </div>
           <span
-            className={`text-xs font-medium tracking-wide ${
-              variant === 'light' ? 'text-blue-200' : 'text-slate-600'
+            className={`text-[11px] font-normal tracking-normal truncate ${
+              variant === 'light' ? 'text-slate-300' : 'text-slate-500'
             }`}
           >
             Chanban, Udaipur • Tripura 799120

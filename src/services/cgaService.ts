@@ -1902,6 +1902,13 @@ export const cgaService = {
           }
           return INITIAL_SEED_DATA.siteContent.campusImages || [];
         })(),
+        urgentPopupAnnouncements: (() => {
+          const dbContent = site.data?.content as SiteContent | undefined;
+          if (dbContent && Array.isArray(dbContent.urgentPopupAnnouncements)) {
+            return dbContent.urgentPopupAnnouncements;
+          }
+          return INITIAL_SEED_DATA.siteContent.urgentPopupAnnouncements || [];
+        })(),
       },
       courses: courseList.length > 0 ? courseList : INITIAL_SEED_DATA.courses,
       faculty: facultyList.length > 0 ? facultyList : INITIAL_SEED_DATA.faculty,
@@ -3589,11 +3596,10 @@ export const cgaService = {
 
   async saveSiteContent(content: SiteContent): Promise<ServiceResult<{ content?: SiteContent }>> {
     try {
-      // 1. Immediately invalidate in-memory and session cache
-      dbCache = null;
+      // 1. Immediately invalidate in-memory, session, and local cache
+      invalidateDbCache();
       if (typeof window !== 'undefined') {
         try {
-          sessionStorage.removeItem('cga_db_cache');
           localStorage.removeItem('cga_campus_images');
           localStorage.setItem(
             'cga_site_content',

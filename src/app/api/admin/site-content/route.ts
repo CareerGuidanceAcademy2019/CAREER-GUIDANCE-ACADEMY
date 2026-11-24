@@ -154,6 +154,11 @@ export async function POST(request: Request) {
       mergedContent.campusImages = newContent.campusImages;
     }
 
+    // Ensure urgentPopupAnnouncements array is preserved cleanly when updated from Public Site CMS
+    if (Array.isArray(newContent.urgentPopupAnnouncements)) {
+      mergedContent.urgentPopupAnnouncements = newContent.urgentPopupAnnouncements;
+    }
+
     // 3. Upsert into site_content singleton
     const { error: upsertErr } = await adminSupabase.from('site_content').upsert(
       {

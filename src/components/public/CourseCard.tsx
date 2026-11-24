@@ -49,11 +49,11 @@ export function CourseCard({
       : 'bg-slate-100 text-slate-700 border-slate-200';
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs cga-card-hover flex flex-col justify-between overflow-hidden relative">
+    <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs cga-card-hover flex flex-col justify-between overflow-hidden relative">
       {/* Top accent stripe */}
       <div
-        className={`h-1.5 w-full ${
-          isOpen ? 'bg-gradient-to-r from-[#0056b3] via-[#1e3a8a] to-[#ea580c]' : 'bg-slate-300'
+        className={`h-1 w-full ${
+          isOpen ? 'bg-[#0056b3]' : 'bg-slate-300'
         }`}
       />
 

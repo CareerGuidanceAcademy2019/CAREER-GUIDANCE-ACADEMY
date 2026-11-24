@@ -82,7 +82,7 @@ export async function compressCampusPhoto(
           try {
             const webp = canvas.toDataURL('image/webp', q);
             if (webp.startsWith('data:image/webp')) return webp;
-          } catch {}
+          } catch { }
           return canvas.toDataURL('image/jpeg', q);
         };
 

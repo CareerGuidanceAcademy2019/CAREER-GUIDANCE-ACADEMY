@@ -347,6 +347,19 @@ export interface SiteContent {
   testimonials: Testimonial[];
   standalonePackages?: StandalonePackage[];
   campusImages?: CampusGalleryImage[];
+  urgentPopupAnnouncements?: UrgentPopupAnnouncement[];
+}
+
+export interface UrgentPopupAnnouncement {
+  id: string;
+  title: string;
+  message: string;
+  tag?: string;
+  linkUrl?: string;
+  linkLabel?: string;
+  date: string;
+  isActive: boolean;
+  updatedAt?: string;
 }
 
 export interface CampusGalleryImage {
