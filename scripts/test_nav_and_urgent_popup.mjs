@@ -58,6 +58,26 @@ await runTest('TC-01: Admin & Student sidebars are hidden by default with overfl
   );
 });
 
+await runTest('TC-01C: Zoomed-out root scale, full-square geometry (0px radius), and contact email overflow prevention are active', async () => {
+  const globalsCss = fs.readFileSync(path.resolve('src/app/globals.css'), 'utf8');
+  const contactPage = fs.readFileSync(path.resolve('src/app/contact/page.tsx'), 'utf8');
+  assert(
+    globalsCss.includes('--radius-xl: 0px') &&
+      globalsCss.includes('--radius-2xl: 0px') &&
+      globalsCss.includes('--radius-3xl: 0px') &&
+      globalsCss.includes('border-radius: 0px !important'),
+    'globals.css must enforce 0px full-square geometry on all boxes, cards, buttons, and inputs'
+  );
+  assert(
+    globalsCss.includes('font-size: 13.5px') && globalsCss.includes('font-size: 14px'),
+    'globals.css must apply the zoomed-out root font scale across phone, tablet, and desktop'
+  );
+  assert(
+    contactPage.includes('break-all') && contactPage.includes('min-w-0 flex-1'),
+    'contact/page.tsx must prevent long email address overflow across all screen sizes'
+  );
+});
+
 await runTest('TC-01B: Zero emojis exist anywhere in portal UI source files (src/)', async () => {
   function walk(dir, out = []) {
     for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {

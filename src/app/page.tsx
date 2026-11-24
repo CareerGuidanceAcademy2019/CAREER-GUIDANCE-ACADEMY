@@ -259,29 +259,29 @@ export default function HomePage() {
 
       <main className="flex-1">
         {/* ==================== 1. HERO BANNER ==================== */}
-        <section className="relative overflow-hidden cga-gradient-hero text-white py-14 sm:py-16 lg:py-22 border-b border-slate-800">
+        <section className="relative overflow-hidden cga-gradient-hero text-white py-10 sm:py-12 lg:py-16 border-b border-slate-800">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-center">
               {/* Left Column: Hero Copy */}
-              <div className="lg:col-span-7 space-y-5">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-white/[0.08] border border-white/15 text-xs font-medium text-amber-200">
+              <div className="lg:col-span-7 space-y-4">
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/[0.08] border border-white/15 text-xs font-medium text-amber-200">
                   <CustomAcademicEmblemSvg className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                   <span>{siteContent.heroBadge}</span>
                 </div>
 
-                <h1 className="text-2xl sm:text-4xl lg:text-[2.75rem] font-bold tracking-tight leading-[1.18] text-white">
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight leading-[1.2] text-white">
                   {siteContent.heroTitle}
                 </h1>
 
-                <p className="text-sm sm:text-base lg:text-lg text-slate-300 leading-relaxed max-w-2xl font-normal">
+                <p className="text-xs sm:text-sm lg:text-base text-slate-300 leading-relaxed max-w-2xl font-normal">
                   {siteContent.heroSubtitle}
                 </p>
 
                 {/* Primary & Secondary CTAs */}
-                <div className="flex flex-wrap items-center gap-3.5 pt-1">
+                <div className="flex flex-wrap items-center gap-3 pt-1">
                   <Link
                     href="/courses"
-                    className="px-5 py-3 rounded-xl bg-[#ea580c] hover:bg-orange-600 text-white font-semibold text-sm shadow-sm transition-all inline-flex items-center gap-2"
+                    className="px-5 py-2.5 bg-[#ea580c] hover:bg-orange-600 text-white font-semibold text-xs sm:text-sm shadow-xs transition-all inline-flex items-center gap-2"
                   >
                     <span>Explore Exam Courses</span>
                     <CustomArrowRightSvg className="w-4 h-4" />
@@ -289,41 +289,41 @@ export default function HomePage() {
 
                   <Link
                     href="/login"
-                    className="px-5 py-3 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] border border-white/20 text-white font-semibold text-sm transition-all inline-flex items-center gap-2"
+                    className="px-5 py-2.5 bg-white/[0.08] hover:bg-white/[0.14] border border-white/25 text-white font-semibold text-xs sm:text-sm transition-all inline-flex items-center gap-2"
                   >
                     <span>Student Login</span>
                   </Link>
                 </div>
 
                 {/* Key Pillars */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-5 border-t border-white/10">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-white/[0.07] text-amber-300 shrink-0">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 pt-4 border-t border-white/10">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="p-2 bg-white/[0.07] text-amber-300 shrink-0">
                       <Award className="w-4 h-4" />
                     </div>
-                    <div>
-                      <p className="text-xs font-semibold text-white">State Topper Mentorship</p>
-                      <p className="text-[11px] text-slate-300">Tripura Rank #01 Faculty</p>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-white truncate">State Topper Mentorship</p>
+                      <p className="text-[11px] text-slate-300 truncate">Tripura Rank #01 Faculty</p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-white/[0.07] text-emerald-300 shrink-0">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="p-2 bg-white/[0.07] text-emerald-300 shrink-0">
                       <GraduationCap className="w-4 h-4" />
                     </div>
-                    <div>
-                      <p className="text-xs font-semibold text-white">Gomati Classroom & Online</p>
-                      <p className="text-[11px] text-slate-300">Udaipur Center + Live Classes</p>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-white truncate">Gomati Classroom &amp; Online</p>
+                      <p className="text-[11px] text-slate-300 truncate">Udaipur Center + Live Classes</p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-white/[0.07] text-sky-300 shrink-0">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="p-2 bg-white/[0.07] text-sky-300 shrink-0">
                       <FileCheck className="w-4 h-4" />
                     </div>
-                    <div>
-                      <p className="text-xs font-semibold text-white">100% Focused Curriculum</p>
-                      <p className="text-[11px] text-slate-300">TRBT &amp; TPSC Pattern</p>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-white truncate">100% Focused Curriculum</p>
+                      <p className="text-[11px] text-slate-300 truncate">TRBT &amp; TPSC Pattern</p>
                     </div>
                   </div>
                 </div>
@@ -331,8 +331,8 @@ export default function HomePage() {
 
               {/* Right Column: Academic Highlights Card */}
               <div className="lg:col-span-5">
-                <div className="bg-white rounded-2xl p-5 sm:p-7 text-slate-800 shadow-xl border border-slate-200 relative">
-                  <div className="flex items-center gap-4 pb-5 border-b border-slate-100">
+                <div className="bg-white p-5 sm:p-6 text-slate-800 shadow-xl border border-slate-200 relative">
+                  <div className="flex items-center gap-3.5 pb-4 border-b border-slate-100">
                     <img
                       src="/cga-logo.webp"
                       alt="Career Guidance Academy Logo"
@@ -340,29 +340,29 @@ export default function HomePage() {
                       height={96}
                       fetchPriority="high"
                       decoding="async"
-                      className="w-16 h-16 sm:w-20 sm:h-20 object-contain shrink-0 rounded-full border border-slate-200 p-0.5"
+                      className="w-14 h-14 sm:w-16 sm:h-16 object-contain shrink-0 rounded-full border border-slate-200 p-0.5"
                     />
-                    <div className="min-w-0">
-                      <span className="inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-semibold uppercase tracking-wider mb-1">
+                    <div className="min-w-0 flex-1">
+                      <span className="inline-block px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-semibold uppercase tracking-wider mb-1">
                         Est. 2019 • Gomati District
                       </span>
-                      <h2 className="text-lg sm:text-xl font-bold text-[#0a0e2a] truncate">
+                      <h2 className="text-base sm:text-lg font-bold text-[#0a0e2a] truncate">
                         Career Guidance Academy
                       </h2>
-                      <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                      <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5 min-w-0">
                         <MapPin className="w-3.5 h-3.5 text-[#0056b3] shrink-0" />
                         <span className="truncate">Chanban Youth Club Rd, Udaipur, Tripura</span>
                       </p>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 my-5">
+                  <div className="grid grid-cols-2 gap-2.5 my-4">
                     {siteContent.stats.map((stat, i) => (
                       <div
                         key={i}
-                        className="p-3.5 rounded-xl bg-slate-50/90 border border-slate-200/70 text-center"
+                        className="p-3 bg-slate-50/90 border border-slate-200/80 text-center"
                       >
-                        <p className="text-xl sm:text-2xl font-bold text-[#0a0e2a]">{stat.value}</p>
+                        <p className="text-lg sm:text-xl font-bold text-[#0a0e2a]">{stat.value}</p>
                         <p className="text-[11px] font-medium text-slate-500 mt-0.5 leading-snug">
                           {stat.label}
                         </p>
@@ -370,8 +370,8 @@ export default function HomePage() {
                     ))}
                   </div>
 
-                  <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div>
+                  <div className="bg-slate-50 border border-slate-200/90 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <div className="min-w-0">
                       <p className="text-xs font-semibold text-[#0a0e2a]">
                         Student &amp; Faculty Portal Access
                       </p>
@@ -381,7 +381,7 @@ export default function HomePage() {
                     </div>
                     <Link
                       href="/login"
-                      className="px-3.5 py-2 rounded-lg bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-semibold shrink-0 inline-flex items-center justify-center gap-1 whitespace-nowrap"
+                      className="px-3.5 py-2 bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-semibold shrink-0 inline-flex items-center justify-center gap-1 whitespace-nowrap"
                     >
                       Portal Login <CustomArrowRightSvg className="w-3.5 h-3.5" />
                     </Link>

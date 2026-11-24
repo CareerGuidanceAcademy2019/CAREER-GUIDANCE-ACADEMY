@@ -51,8 +51,8 @@ export function CGALogo({
             >
               Career Guidance Academy
             </span>
-            {size !== 'sm' && (
-              <span className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded bg-[#0056b3] text-white shrink-0">
+            {!(size === 'sm' && variant === 'light') && (
+              <span className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-[#0056b3] text-white shrink-0">
                 C.G.A
               </span>
             )}

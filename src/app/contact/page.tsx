@@ -93,50 +93,54 @@ export default function ContactPage() {
                   Official Campus Contact Information
                 </h2>
 
-                <div className="space-y-4">
-                  <div className="flex items-start gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
-                    <div className="w-10 h-10 rounded-xl bg-[#0056b3] text-white flex items-center justify-center shrink-0">
-                      <MapPin className="w-5 h-5" />
+                <div className="space-y-3.5">
+                  <div className="flex items-start gap-3.5 p-4 bg-slate-50 border border-slate-200/90">
+                    <div className="w-9 h-9 bg-[#0056b3] text-white flex items-center justify-center shrink-0">
+                      <MapPin className="w-4 h-4" />
                     </div>
-                    <div>
-                      <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
                         Institute Address
                       </span>
-                      <p className="text-sm font-bold text-slate-900 mt-0.5">{contact.address}</p>
+                      <p className="text-xs sm:text-sm font-semibold text-slate-900 mt-0.5 leading-snug">
+                        {contact.address}
+                      </p>
                       <p className="text-xs text-slate-500 mt-0.5">
                         {contact.landmark} — PIN: {contact.pincode || '799120'}
                       </p>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="flex items-start gap-3.5 p-4 rounded-2xl bg-slate-50 border border-slate-100">
-                      <div className="w-10 h-10 rounded-xl bg-[#ea580c] text-white flex items-center justify-center shrink-0">
-                        <Phone className="w-5 h-5" />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3.5">
+                    <div className="flex items-start gap-3 p-4 bg-slate-50 border border-slate-200/90 min-w-0">
+                      <div className="w-9 h-9 bg-[#ea580c] text-white flex items-center justify-center shrink-0">
+                        <Phone className="w-4 h-4" />
                       </div>
-                      <div>
-                        <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                      <div className="min-w-0 flex-1">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
                           Contact Number
                         </span>
-                        <p className="text-sm font-bold text-slate-900 mt-0.5">
+                        <p className="text-xs sm:text-sm font-semibold text-slate-900 mt-0.5 break-words">
                           {contact.phonePrimary}
                         </p>
                         {contact.phoneSecondary && contact.phoneSecondary.trim() && contact.phoneSecondary !== contact.phonePrimary && (
-                          <p className="text-xs text-slate-600">{contact.phoneSecondary}</p>
+                          <p className="text-xs text-slate-600 break-words">{contact.phoneSecondary}</p>
                         )}
                       </div>
                     </div>
 
-                    <div className="flex items-start gap-3.5 p-4 rounded-2xl bg-slate-50 border border-slate-100">
-                      <div className="w-10 h-10 rounded-xl bg-[#dc2626] text-white flex items-center justify-center shrink-0">
-                        <Mail className="w-5 h-5" />
+                    <div className="flex items-start gap-3 p-4 bg-slate-50 border border-slate-200/90 min-w-0">
+                      <div className="w-9 h-9 bg-[#dc2626] text-white flex items-center justify-center shrink-0">
+                        <Mail className="w-4 h-4" />
                       </div>
-                      <div>
-                        <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                          Email & Timings
+                      <div className="min-w-0 flex-1">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
+                          Email &amp; Timings
                         </span>
-                        <p className="text-sm font-bold text-slate-900 mt-0.5">{contact.email}</p>
-                        <p className="text-xs text-slate-600 mt-0.5">{contact.officeHours}</p>
+                        <p className="text-xs font-semibold text-slate-900 mt-0.5 break-all leading-snug">
+                          {contact.email}
+                        </p>
+                        <p className="text-[11px] text-slate-600 mt-1 leading-snug">{contact.officeHours}</p>
                       </div>
                     </div>
                   </div>

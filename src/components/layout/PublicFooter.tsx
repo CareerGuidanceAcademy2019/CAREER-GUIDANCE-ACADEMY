@@ -158,9 +158,9 @@ export function PublicFooter({ variant = 'default' }: PublicFooterProps) {
                     : contact.phonePrimary}
                 </span>
               </li>
-              <li className="flex items-center gap-2.5">
+              <li className="flex items-center gap-2.5 min-w-0">
                 <Mail className="w-4 h-4 text-[#ea580c] shrink-0" />
-                <span>{contact.email}</span>
+                <span className="break-all text-xs">{contact.email}</span>
               </li>
               <li className="flex items-center gap-2.5">
                 <Clock className="w-4 h-4 text-[#ea580c] shrink-0" />
@@ -220,7 +220,7 @@ export function PublicFooter({ variant = 'default' }: PublicFooterProps) {
             <p className="text-slate-400 leading-relaxed">
               Designated Grievance &amp; DPDP Officer: <strong>Tridip Sarkar</strong><br />
               Email:{' '}
-              <a href="mailto:careerguidanceacademy2019@gmail.com" className="hover:text-amber-400 underline">
+              <a href="mailto:careerguidanceacademy2019@gmail.com" className="hover:text-amber-400 underline break-all">
                 careerguidanceacademy2019@gmail.com
               </a><br />
               Phone: +91 70059 29189

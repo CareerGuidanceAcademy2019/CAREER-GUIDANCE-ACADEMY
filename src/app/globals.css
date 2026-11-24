@@ -23,20 +23,73 @@
   --font-sans: var(--font-geist-sans), 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   --font-mono: var(--font-geist-mono), monospace;
 
-  /* Humanised editorial weight & type scale: prevents heavy cramped text */
+  /* Humanised editorial weight & compact zoomed-out type scale (one size smaller) */
   --font-weight-bold: 600;
   --font-weight-extrabold: 700;
   --font-weight-black: 700;
-  --text-xs: 0.8125rem;
-  --text-xs--line-height: 1.55;
-  --text-sm: 0.925rem;
-  --text-sm--line-height: 1.6;
-  --text-base: 1rem;
-  --text-base--line-height: 1.65;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.5;
+  --text-sm: 0.84rem;
+  --text-sm--line-height: 1.55;
+  --text-base: 0.925rem;
+  --text-base--line-height: 1.6;
+  --text-lg: 1.025rem;
+  --text-lg--line-height: 1.5;
+  --text-xl: 1.125rem;
+  --text-xl--line-height: 1.4;
+  --text-2xl: 1.3rem;
+  --text-2xl--line-height: 1.3;
+  --text-3xl: 1.55rem;
+  --text-3xl--line-height: 1.25;
+  --text-4xl: 1.85rem;
+  --text-4xl--line-height: 1.2;
+  --text-5xl: 2.15rem;
+  --text-5xl--line-height: 1.15;
+
+  /* Full square / original sharp square geometry across all boxes, cards, buttons & inputs */
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
+  --radius-4xl: 0px;
 }
 
+/* Zoomed-out root scale across phone, tablet, and desktop so pages fit comfortably without feeling zoomed-in */
 html {
   scroll-behavior: smooth;
+  font-size: 13.5px;
+}
+
+@media (min-width: 640px) {
+  html {
+    font-size: 13.75px;
+  }
+}
+
+@media (min-width: 1024px) {
+  html {
+    font-size: 14px;
+  }
+}
+
+/* Enforce sharp full-square geometry on all box, card, badge, input, and button shapes */
+.rounded,
+.rounded-xs,
+.rounded-sm,
+.rounded-md,
+.rounded-lg,
+.rounded-xl,
+.rounded-2xl,
+.rounded-3xl,
+.rounded-4xl,
+button.rounded-full,
+a.rounded-full,
+span.rounded-full:not(.w-2):not(.w-2\.5):not(.h-2):not(.h-2\.5),
+div.rounded-full:not(:has(> img)) {
+  border-radius: 0px !important;
 }
 
 body {
