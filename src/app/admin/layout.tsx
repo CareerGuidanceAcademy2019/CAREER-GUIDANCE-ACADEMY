@@ -28,6 +28,7 @@ import {
   UserCheck,
 } from 'lucide-react';
 import { CGALogo } from '@/components/ui/CGALogo';
+import { PortalContentSkeleton } from '@/components/ui/PageSkeleton';
 import { CustomAcademicEmblemSvg, CustomArrowRightSvg } from '@/components/ui/CustomIcons';
 import { useCga } from '@/context/CgaContext';
 
@@ -89,10 +90,12 @@ export default function AdminPortalLayout({ children }: { children: React.ReactN
 
   if (!isHydrated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="text-center space-y-2">
-          <div className="w-10 h-10 rounded-full border-4 border-[#0056b3] border-t-transparent animate-spin mx-auto" />
-          <p className="text-xs font-bold text-slate-500">Loading C.G.A Admin Control Panel...</p>
+      <div className="min-h-screen flex bg-slate-50">
+        <aside className="hidden lg:flex lg:flex-col lg:w-72 bg-[#0a0e2a] text-white shrink-0 border-r border-slate-800 p-5">
+          <CGALogo size="sm" variant="light" href="/admin/dashboard" />
+        </aside>
+        <div className="flex-1 p-6 sm:p-8">
+          <PortalContentSkeleton />
         </div>
       </div>
     );

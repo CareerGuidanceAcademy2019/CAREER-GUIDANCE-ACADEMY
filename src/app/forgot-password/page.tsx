@@ -147,8 +147,11 @@ export default function ForgotPasswordPage() {
           {/* Header */}
           <div className="flex items-center gap-3">
             <img
-              src="/cga-logo.png"
+              src="/cga-logo.webp"
               alt="C.G.A Logo"
+              width={48}
+              height={48}
+              decoding="async"
               className="w-12 h-12 rounded-full object-contain border border-slate-200 p-0.5"
             />
             <div>

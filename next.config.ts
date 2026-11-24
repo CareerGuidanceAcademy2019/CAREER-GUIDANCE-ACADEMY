@@ -17,8 +17,16 @@ const cspHeader = `
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   compress: true,
+  images: {
+    formats: ['image/avif', 'image/webp'],
+    remotePatterns: [
+      { protocol: 'https', hostname: 'craicxwqaygdydtdaxtw.supabase.co' },
+      { protocol: 'https', hostname: 'images.unsplash.com' },
+    ],
+  },
   experimental: {
     agentUpgrade: 'security',
+    optimizePackageImports: ['lucide-react'],
   },
   allowedDevOrigins: [
     '*.trycloudflare.com',

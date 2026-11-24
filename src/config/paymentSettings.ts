@@ -55,7 +55,7 @@ export const PAYMENT_SETTINGS: PaymentSettingsRecord = {
   ],
   refundPolicyText: 'contract to office with evidance and reason for refund related queries',
   paymentInstructionsExtra: 'Approval will be verify within 24 hrs',
-  qrImageUrl: '/cga-upi-qr.jpg',
+  qrImageUrl: '/cga-upi-qr.webp',
   qrImageUrlBackup: null,
   qrLabel: 'Primary Institute QR',
   qrLabelBackup: 'Secondary / Alternate QR',
@@ -116,7 +116,7 @@ export function getOfficialQrCodeAsset(customSettings?: Partial<PaymentSettingsR
     const cached = localStorage.getItem('cga_active_qr_image');
     if (cached) return cached;
   }
-  return PAYMENT_SETTINGS.qrImageUrl || '/cga-upi-qr.jpg';
+  return PAYMENT_SETTINGS.qrImageUrl || '/cga-upi-qr.webp';
 }
 
 /**

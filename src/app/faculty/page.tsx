@@ -4,11 +4,12 @@ import React from 'react';
 import { GraduationCap, Award, BookOpen, Briefcase, CheckCircle2 } from 'lucide-react';
 import { PublicHeader } from '@/components/layout/PublicHeader';
 import { PublicFooter } from '@/components/layout/PublicFooter';
+import { FacultyCardSkeleton } from '@/components/ui/PageSkeleton';
 import { useCga } from '@/context/CgaContext';
 import { formatFacultyName, getFacultyAvatarUrl } from '@/lib/names';
 
 export default function FacultyPage() {
-  const { db } = useCga();
+  const { db, isDbLoading } = useCga();
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
@@ -34,7 +35,13 @@ export default function FacultyPage() {
 
         {/* Faculty Cards Grid */}
         <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
-          {db.faculty.length === 0 ? (
+          {isDbLoading && db.faculty.length === 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {[0, 1, 2, 3, 4, 5].map((i) => (
+                <FacultyCardSkeleton key={i} />
+              ))}
+            </div>
+          ) : db.faculty.length === 0 ? (
             <div className="text-center py-16 bg-white rounded-3xl border border-dashed border-slate-300 p-8">
               <GraduationCap className="w-12 h-12 text-slate-300 mx-auto mb-3" />
               <h3 className="text-lg font-bold text-slate-700">No Faculty Profiles Listed Yet</h3>

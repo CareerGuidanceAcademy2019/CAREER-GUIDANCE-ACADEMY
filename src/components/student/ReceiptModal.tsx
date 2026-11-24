@@ -57,8 +57,11 @@ This is a computer-generated receipt from C.G.A Digital Portal.
         <div className="cga-gradient-hero text-white p-6 flex items-center justify-between">
           <div className="flex items-center gap-3.5">
             <img
-              src="/cga-logo.png"
+              src="/cga-logo.webp"
               alt="C.G.A Logo"
+              width={56}
+              height={56}
+              decoding="async"
               className="w-14 h-14 rounded-full bg-white p-1 object-contain"
             />
             <div>

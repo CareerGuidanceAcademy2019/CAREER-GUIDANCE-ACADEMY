@@ -20,6 +20,7 @@ import {
   Lock,
 } from 'lucide-react';
 import { CGALogo } from '@/components/ui/CGALogo';
+import { PortalContentSkeleton } from '@/components/ui/PageSkeleton';
 import { useCga } from '@/context/CgaContext';
 
 const STUDENT_NAV = [
@@ -45,10 +46,12 @@ export default function StudentPortalLayout({ children }: { children: React.Reac
 
   if (!isHydrated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="text-center space-y-2">
-          <div className="w-10 h-10 rounded-full border-4 border-[#0056b3] border-t-transparent animate-spin mx-auto" />
-          <p className="text-xs font-bold text-slate-500">Loading C.G.A Student Portal...</p>
+      <div className="min-h-screen flex bg-slate-50">
+        <aside className="hidden lg:flex lg:flex-col lg:w-72 bg-[#0a0e2a] text-white shrink-0 border-r border-slate-800 p-5">
+          <CGALogo size="sm" variant="light" href="/student/dashboard" />
+        </aside>
+        <div className="flex-1 p-6 sm:p-8">
+          <PortalContentSkeleton />
         </div>
       </div>
     );
@@ -60,8 +63,11 @@ export default function StudentPortalLayout({ children }: { children: React.Reac
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
         <div className="max-w-md w-full bg-white rounded-3xl shadow-xl border border-slate-200 p-8 text-center space-y-5">
           <img
-            src="/cga-logo.png"
+            src="/cga-logo.webp"
             alt="C.G.A Logo"
+            width={80}
+            height={80}
+            decoding="async"
             className="w-20 h-20 rounded-full mx-auto object-contain border border-slate-200 p-1"
           />
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-[#0056b3] text-xs font-bold">

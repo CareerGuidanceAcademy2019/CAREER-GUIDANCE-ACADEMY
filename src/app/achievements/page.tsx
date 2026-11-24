@@ -4,10 +4,11 @@ import React, { useState } from 'react';
 import { Trophy, CheckCircle2, Award, Search } from 'lucide-react';
 import { PublicHeader } from '@/components/layout/PublicHeader';
 import { PublicFooter } from '@/components/layout/PublicFooter';
+import { TopperCardSkeleton } from '@/components/ui/PageSkeleton';
 import { useCga } from '@/context/CgaContext';
 
 export default function AchievementsPage() {
-  const { db } = useCga();
+  const { db, isDbLoading } = useCga();
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [search, setSearch] = useState('');
 
@@ -86,7 +87,13 @@ export default function AchievementsPage() {
 
         {/* Toppers Grid */}
         <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          {filtered.length === 0 ? (
+          {isDbLoading && db.achievements.length === 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+                <TopperCardSkeleton key={i} />
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center max-w-md mx-auto">
               <Award className="w-10 h-10 text-[#ea580c] mx-auto mb-3" />
               <h3 className="text-base font-extrabold text-slate-900">No records matching filter</h3>

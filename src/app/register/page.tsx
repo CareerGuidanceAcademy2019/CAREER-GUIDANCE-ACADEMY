@@ -313,8 +313,11 @@ export default function RegisterPage() {
               </p>
             </div>
             <img
-              src="/cga-logo.png"
+              src="/cga-logo.webp"
               alt="C.G.A Logo"
+              width={64}
+              height={64}
+              decoding="async"
               className="w-16 h-16 rounded-full bg-white p-1 object-contain shrink-0 hidden sm:block"
             />
           </div>

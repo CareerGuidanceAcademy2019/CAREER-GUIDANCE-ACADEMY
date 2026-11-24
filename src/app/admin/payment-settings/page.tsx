@@ -122,7 +122,7 @@ export default function AdminPaymentSettingsPage() {
     );
     setQrPreview(
       target === 'primary'
-        ? (settings.qrImageUrl || '/cga-upi-qr.jpg')
+        ? (settings.qrImageUrl || '/cga-upi-qr.webp')
         : (settings.qrImageUrlBackup || null)
     );
     setQrError('');
@@ -183,14 +183,14 @@ export default function AdminPaymentSettingsPage() {
         .update({
           upi_id: updatedSettings.upiId,
           upi_id_backup: updatedSettings.upiIdBackup || null,
-          qr_image_url: updatedSettings.qrImageUrl || '/cga-upi-qr.jpg',
+          qr_image_url: updatedSettings.qrImageUrl || '/cga-upi-qr.webp',
           qr_image_url_backup: updatedSettings.qrImageUrlBackup || null,
           qr_label: updatedSettings.qrLabel || 'Primary Institute QR',
           qr_label_backup: updatedSettings.qrLabelBackup || 'Secondary / Alternate QR',
         })
         .eq('id', 1);
 
-      localStorage.setItem('cga_active_qr_image', updatedSettings.qrImageUrl || '/cga-upi-qr.jpg');
+      localStorage.setItem('cga_active_qr_image', updatedSettings.qrImageUrl || '/cga-upi-qr.webp');
       if (updatedSettings.qrImageUrlBackup) {
         localStorage.setItem('cga_backup_qr_image', updatedSettings.qrImageUrlBackup);
       }
@@ -204,7 +204,7 @@ export default function AdminPaymentSettingsPage() {
         'success'
       );
     } catch {
-      localStorage.setItem('cga_active_qr_image', updatedSettings.qrImageUrl || '/cga-upi-qr.jpg');
+      localStorage.setItem('cga_active_qr_image', updatedSettings.qrImageUrl || '/cga-upi-qr.webp');
       if (updatedSettings.qrImageUrlBackup) {
         localStorage.setItem('cga_backup_qr_image', updatedSettings.qrImageUrlBackup);
       }
@@ -261,7 +261,7 @@ export default function AdminPaymentSettingsPage() {
         payee_name: settings.payeeName,
         upi_id: settings.upiId,
         upi_id_backup: settings.upiIdBackup || null,
-        qr_image_url: settings.qrImageUrl || '/cga-upi-qr.jpg',
+        qr_image_url: settings.qrImageUrl || '/cga-upi-qr.webp',
         qr_image_url_backup: settings.qrImageUrlBackup || null,
         qr_label: settings.qrLabel || 'Primary Institute QR',
         qr_label_backup: settings.qrLabelBackup || 'Secondary / Alternate QR',
@@ -302,7 +302,7 @@ export default function AdminPaymentSettingsPage() {
         }
       }
 
-      localStorage.setItem('cga_active_qr_image', settings.qrImageUrl || '/cga-upi-qr.jpg');
+      localStorage.setItem('cga_active_qr_image', settings.qrImageUrl || '/cga-upi-qr.webp');
       if (settings.qrImageUrlBackup) {
         localStorage.setItem('cga_backup_qr_image', settings.qrImageUrlBackup);
       } else {
@@ -462,7 +462,7 @@ export default function AdminPaymentSettingsPage() {
 
                 <div className="flex items-center justify-center p-3 bg-white rounded-xl border border-slate-200 shadow-2xs">
                   <img
-                    src={settings.qrImageUrl || '/cga-upi-qr.jpg'}
+                    src={settings.qrImageUrl || '/cga-upi-qr.webp'}
                     alt="Primary UPI QR Code"
                     className="w-36 h-36 object-contain rounded-lg"
                   />

@@ -242,7 +242,7 @@ function LoginInner() {
             <div>
               <div className="bg-white w-20 h-20 rounded-full p-1.5 shadow-lg mb-5">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/cga-logo.png" alt="Career Guidance Academy (C.G.A) Logo" className="w-full h-full object-contain" />
+                <img src="/cga-logo.webp" alt="Career Guidance Academy (C.G.A) Logo" width={80} height={80} decoding="async" className="w-full h-full object-contain" />
               </div>
               <span className="inline-block px-2.5 py-0.5 rounded bg-white/15 text-amber-300 text-[11px] font-bold uppercase tracking-wider">
                 Udaipur Digital Campus

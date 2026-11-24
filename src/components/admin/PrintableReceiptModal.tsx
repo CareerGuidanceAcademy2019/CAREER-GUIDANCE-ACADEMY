@@ -155,8 +155,11 @@ Admissions are subject to institutional terms and conditions.
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3.5">
                 <img
-                  src="/cga-logo.png"
+                  src="/cga-logo.webp"
                   alt="C.G.A Logo"
+                  width={64}
+                  height={64}
+                  decoding="async"
                   className="w-16 h-16 rounded-full border border-slate-300 object-contain p-1 shrink-0"
                 />
                 <div>

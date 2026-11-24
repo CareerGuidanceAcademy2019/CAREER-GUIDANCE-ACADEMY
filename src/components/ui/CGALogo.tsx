@@ -29,8 +29,11 @@ export function CGALogo({
         className={`${dimensions} relative rounded-full overflow-hidden bg-white shadow-md ring-2 ring-[#0056b3]/20 group-hover:ring-[#dc2626]/60 transition-all shrink-0 flex items-center justify-center`}
       >
         <img
-          src="/cga-logo.png"
+          src="/cga-logo.webp"
           alt="Career Guidance Academy (C.G.A) Udaipur Official Logo"
+          width={96}
+          height={96}
+          decoding="async"
           className="w-full h-full object-contain p-0.5"
         />
       </div>

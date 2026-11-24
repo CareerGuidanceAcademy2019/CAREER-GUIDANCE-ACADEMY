@@ -20,13 +20,14 @@ import {
 } from 'lucide-react';
 import { PublicHeader } from '@/components/layout/PublicHeader';
 import { PublicFooter } from '@/components/layout/PublicFooter';
+import { CourseCardSkeleton } from '@/components/ui/PageSkeleton';
 import { useCga } from '@/context/CgaContext';
 import { PayManualModal, type PayManualTarget } from '@/components/payment/PayManualModal';
 import { PAYMENT_SETTINGS } from '@/config/paymentSettings';
 
 export default function MockTestsLandingPage() {
   const router = useRouter();
-  const { session, currentStudent, db, showToast } = useCga();
+  const { session, currentStudent, db, isDbLoading, showToast } = useCga();
   const [payTarget, setPayTarget] = useState<PayManualTarget | null>(null);
 
   const primarySeries = db.mockSeries?.[0];
@@ -230,7 +231,7 @@ export default function MockTestsLandingPage() {
         </section>
 
         {/* Active & Newly Launched Mock Test Series Packages */}
-        {publicShowcaseSeries.length > 0 && (
+        {(isDbLoading || publicShowcaseSeries.length > 0) && (
           <section className="py-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
             <div className="text-center space-y-2">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-100 text-[#dc2626] text-[11px] font-black uppercase tracking-wider">
@@ -245,7 +246,9 @@ export default function MockTestsLandingPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {publicShowcaseSeries.map((ser) => {
+              {isDbLoading && publicShowcaseSeries.length === 0
+                ? [0, 1, 2].map((i) => <CourseCardSkeleton key={i} />)
+                : publicShowcaseSeries.map((ser) => {
                 const isNewLaunch = !FLAGSHIP_IDS.includes(ser.id);
                 const serEnrolled = isEnrolledInPublicSeries(ser.id);
                 const serPending = !serEnrolled && isPendingInPublicSeries(ser.id);

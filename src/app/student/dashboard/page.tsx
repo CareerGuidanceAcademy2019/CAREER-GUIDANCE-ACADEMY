@@ -18,14 +18,17 @@ import {
   LogOut,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
+import { PortalContentSkeleton } from '@/components/ui/PageSkeleton';
 import { CustomCheckSvg, CustomArrowRightSvg } from '@/components/ui/CustomIcons';
 
 export default function StudentDashboardPage() {
   const router = useRouter();
-  const { db, currentStudent, logout, refresh, showToast } = useCga();
+  const { db, isDbLoading, currentStudent, logout, refresh, showToast } = useCga();
   const [isRefreshingSite, setIsRefreshingSite] = useState(false);
 
-  if (!currentStudent) return null;
+  if (!currentStudent) {
+    return isDbLoading ? <PortalContentSkeleton /> : null;
+  }
 
   const handleRefreshWholeSite = async () => {
     if (isRefreshingSite) return;

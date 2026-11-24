@@ -18,6 +18,7 @@ import {
 import { PublicHeader } from '@/components/layout/PublicHeader';
 import { PublicFooter } from '@/components/layout/PublicFooter';
 import { CourseCard } from '@/components/public/CourseCard';
+import { CourseCardSkeleton } from '@/components/ui/PageSkeleton';
 import { useCga } from '@/context/CgaContext';
 import { CourseCategory, CourseMode } from '@/data/initialSeedData';
 
@@ -30,7 +31,7 @@ const ALL_CATEGORIES: ('All' | CourseCategory)[] = [
 ];
 
 export default function CoursesCataloguePage() {
-  const { db } = useCga();
+  const { db, isDbLoading } = useCga();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMode, setSelectedMode] = useState<'All' | CourseMode>('All');
   const [selectedCategory, setSelectedCategory] = useState<'All' | CourseCategory>('All');
@@ -284,7 +285,13 @@ export default function CoursesCataloguePage() {
             )}
           </div>
 
-          {filteredCourses.length === 0 ? (
+          {isDbLoading && db.courses.length === 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[0, 1, 2, 3, 4, 5].map((i) => (
+                <CourseCardSkeleton key={i} />
+              ))}
+            </div>
+          ) : filteredCourses.length === 0 ? (
             <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center max-w-lg mx-auto my-6">
               <div className="w-12 h-12 rounded-2xl bg-blue-50 text-[#0056b3] flex items-center justify-center mx-auto mb-4">
                 <BookOpen className="w-6 h-6" />

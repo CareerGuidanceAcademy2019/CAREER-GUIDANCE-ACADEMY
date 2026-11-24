@@ -38,11 +38,12 @@ import { CustomAcademicEmblemSvg, CustomArrowRightSvg } from '@/components/ui/Cu
 import { getFacultyAvatarUrl, formatFacultyName } from '@/lib/names';
 import { Announcement, CampusGalleryImage, INITIAL_SEED_DATA } from '@/data/initialSeedData';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { CourseCardSkeleton, TopperCardSkeleton, FacultyCardSkeleton } from '@/components/ui/PageSkeleton';
 import { compressCampusPhoto, MAX_CAMPUS_IMAGES, type CompressionResult } from '@/lib/imageCompressor';
 
 export default function HomePage() {
   const router = useRouter();
-  const { db, session, saveAnnouncement, deleteAnnouncement, updateSiteContent, showToast } = useCga();
+  const { db, isDbLoading, session, saveAnnouncement, deleteAnnouncement, updateSiteContent, showToast } = useCga();
   const { siteContent, courses, achievements, faculty, announcements = [] } = db;
 
   // Auto-detect recovery code or token from email redirect and forward immediately to reset-password
@@ -337,8 +338,12 @@ export default function HomePage() {
                 <div className="bg-white rounded-3xl p-6 sm:p-8 text-slate-800 shadow-2xl border border-white/20 relative">
                   <div className="flex items-center gap-4 pb-6 border-b border-slate-100">
                     <img
-                      src="/cga-logo.png"
+                      src="/cga-logo.webp"
                       alt="Career Guidance Academy Logo"
+                      width={96}
+                      height={96}
+                      fetchPriority="high"
+                      decoding="async"
                       className="w-20 h-20 sm:w-24 sm:h-24 object-contain shrink-0 rounded-full shadow-md"
                     />
                     <div>
@@ -596,7 +601,9 @@ export default function HomePage() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {topAchievements.map((topper) => (
+              {isDbLoading && topAchievements.length === 0
+                ? [0, 1, 2, 3].map((i) => <TopperCardSkeleton key={i} />)
+                : topAchievements.map((topper) => (
                 <div
                   key={topper.id}
                   className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs cga-card-hover flex flex-col"
@@ -605,6 +612,8 @@ export default function HomePage() {
                     <img
                       src={topper.photo}
                       alt={`Photograph of student ${topper.name}, ${topper.rank} in ${topper.exam}`}
+                      loading="lazy"
+                      decoding="async"
                       className="w-16 h-16 rounded-full object-cover ring-2 ring-[#ea580c] shrink-0"
                     />
                     <div>
@@ -931,7 +940,9 @@ export default function HomePage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {featuredCourses.length === 0 ? (
+              {isDbLoading && featuredCourses.length === 0 ? (
+                [0, 1, 2].map((i) => <CourseCardSkeleton key={i} />)
+              ) : featuredCourses.length === 0 ? (
                 <div className="col-span-3 text-center py-12 text-slate-500">
                   No featured courses found at this time.
                 </div>
@@ -965,7 +976,9 @@ export default function HomePage() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {topFaculty.map((member) => (
+              {isDbLoading && topFaculty.length === 0
+                ? [0, 1, 2, 3].map((i) => <FacultyCardSkeleton key={i} />)
+                : topFaculty.map((member) => (
                 <div
                   key={member.id}
                   className="bg-white rounded-2xl border border-slate-200 p-6 text-center shadow-2xs cga-card-hover flex flex-col items-center justify-between"
@@ -974,6 +987,8 @@ export default function HomePage() {
                     <img
                       src={getFacultyAvatarUrl(member.name)}
                       alt={`Portrait of ${formatFacultyName(member.name)}, faculty at Career Guidance Academy`}
+                      loading="lazy"
+                      decoding="async"
                       className="w-24 h-24 rounded-full object-cover ring-4 ring-blue-50 shadow-sm"
                     />
                     <h3 className="text-base font-extrabold text-[#0a0e2a] mt-4">

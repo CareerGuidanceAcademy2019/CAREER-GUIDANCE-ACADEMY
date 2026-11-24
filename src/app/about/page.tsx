@@ -43,8 +43,11 @@ export default function AboutPage() {
               </div>
               <div className="bg-white p-4 rounded-3xl shadow-xl shrink-0">
                 <img
-                  src="/cga-logo.png"
+                  src="/cga-logo.webp"
                   alt="Career Guidance Academy (C.G.A) Udaipur"
+                  width={112}
+                  height={112}
+                  decoding="async"
                   className="w-28 h-28 object-contain"
                 />
               </div>
