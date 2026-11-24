@@ -20,12 +20,15 @@ import {
   Tag,
   Sparkles,
   CheckCircle2,
+  ClipboardCheck,
+  Lock,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
 import { StudyMaterial } from '@/data/initialSeedData';
+import { MOCK_SERIES_INITIAL } from '@/data/mockSeriesSeedData';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
-type ActiveSubsection = 'course_materials' | 'current_affairs';
+type ActiveSubsection = 'course_materials' | 'mock_test_pdf' | 'current_affairs';
 type CaCategoryFilter = 'All' | 'Domestic' | 'International';
 
 const PRESET_SUBJECTS = [
@@ -64,19 +67,49 @@ export default function AdminStudyMaterialsPage() {
   const [isCustomSubjectCa, setIsCustomSubjectCa] = useState(false);
   const [isCustomSubjectMat, setIsCustomSubjectMat] = useState(false);
 
-  // Separate Course Materials vs Current Affairs
+  // Mock Test PDF Upload / Edit Modal State
+  const [editingMockPdf, setEditingMockPdf] = useState<StudyMaterial | null>(null);
+  const [isNewMockPdf, setIsNewMockPdf] = useState(false);
+  const [mockPdfSeriesFilter, setMockPdfSeriesFilter] = useState<string>('all');
+
+  // All ongoing Mock Test Series (dynamically includes every existing & newly launched series)
+  const ongoingMockSeriesList = useMemo(() => {
+    const raw = db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL;
+    return raw.filter((s) => s.id !== 'series-current-affairs' && s.status !== 'Archived');
+  }, [db.mockSeries]);
+
+  // Separate Course Materials vs Mock Test PDFs vs Current Affairs
   const courseMaterials = useMemo(
     () =>
       (db.studyMaterials || []).filter(
-        (m) => m.type !== 'Current Affairs' && !m.caCategory
+        (m) =>
+          m.type !== 'Current Affairs' &&
+          !m.caCategory &&
+          m.type !== 'Mock Test PDF' &&
+          !m.seriesId
       ),
     [db.studyMaterials]
   );
 
+  const mockTestPdfsList = useMemo(
+    () =>
+      (db.studyMaterials || []).filter(
+        (m) => m.type === 'Mock Test PDF' || Boolean(m.seriesId)
+      ),
+    [db.studyMaterials]
+  );
+
+  const filteredMockTestPdfs = useMemo(() => {
+    if (mockPdfSeriesFilter === 'all') return mockTestPdfsList;
+    return mockTestPdfsList.filter(
+      (m) => (m.seriesId || m.courseId) === mockPdfSeriesFilter
+    );
+  }, [mockTestPdfsList, mockPdfSeriesFilter]);
+
   const currentAffairsList = useMemo(
     () =>
       (db.studyMaterials || []).filter(
-        (m) => m.type === 'Current Affairs' || Boolean(m.caCategory)
+        (m) => (m.type === 'Current Affairs' || Boolean(m.caCategory)) && m.type !== 'Mock Test PDF' && !m.seriesId
       ),
     [db.studyMaterials]
   );
@@ -160,7 +193,83 @@ Confidential Master Copy. Distribution restricted.`;
     });
   };
 
+  const openMockTestPdfModal = (defaultSeriesId?: string) => {
+    const firstCourse = db.courses[0];
+    const targetSer =
+      ongoingMockSeriesList.find((s) => s.id === defaultSeriesId) ||
+      ongoingMockSeriesList[0];
+    setIsNewMockPdf(true);
+    setEditingMockPdf({
+      id: `mpdf-${Date.now()}`,
+      title: '',
+      courseId: firstCourse?.id || 'crs-tet-1-online',
+      courseName: targetSer?.name || 'Mock Test Series',
+      seriesId: targetSer?.id || 'series-ttet-paper1',
+      seriesName: targetSer?.name || 'Tripura TET: Paper-I 2026',
+      type: 'Mock Test PDF',
+      subject: targetSer?.name || 'Mock Test Series PDF',
+      price: 0,
+      driveLink: '',
+      accessScope: 'enrolled',
+      author: 'C.G.A Examination Wing, Udaipur',
+      pages: 15,
+      fileSize: 'PDF (Google Drive)',
+      uploadedDate: new Date().toISOString().split('T')[0],
+      description: '',
+      previewSections: [],
+    });
+  };
+
   const savingRef = React.useRef(false);
+
+  const handleSaveMockTestPdf = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (savingRef.current) return;
+    if (!editingMockPdf || !editingMockPdf.title.trim()) {
+      showToast('Title Required', 'Please enter a title for the Mock Test PDF.', 'error');
+      return;
+    }
+    if (!editingMockPdf.seriesId) {
+      showToast('Mock Test Series Required', 'Please select the target Mock Test Series.', 'error');
+      return;
+    }
+    if (!editingMockPdf.driveLink || !editingMockPdf.driveLink.trim()) {
+      showToast('Drive Link Required', 'Please provide the Google Drive PDF link.', 'error');
+      return;
+    }
+    const selectedSer = ongoingMockSeriesList.find((s) => s.id === editingMockPdf.seriesId);
+    const seriesTitle = selectedSer?.name || editingMockPdf.seriesName || editingMockPdf.courseName || 'Mock Test Series';
+    const finalMockPdf: StudyMaterial = {
+      ...editingMockPdf,
+      title: editingMockPdf.title.trim(),
+      courseId: db.courses[0]?.id || 'crs-tet-1-online',
+      courseName: seriesTitle,
+      seriesId: editingMockPdf.seriesId,
+      seriesName: seriesTitle,
+      type: 'Mock Test PDF',
+      subject: (editingMockPdf.subject || seriesTitle).trim(),
+      price: 0,
+      driveLink: editingMockPdf.driveLink.trim(),
+      accessScope: 'enrolled',
+      description:
+        editingMockPdf.description.trim() ||
+        `Exclusive Mock Test PDF & Question Paper Set for students enrolled in ${seriesTitle}.`,
+      previewSections: [
+        {
+          heading: `${seriesTitle} — Mock Test PDF`,
+          body:
+            editingMockPdf.description.trim() ||
+            `Exclusive PDF document for enrolled candidates of ${seriesTitle}. Open the Google Drive PDF link to view or download.`,
+        },
+      ],
+    };
+    savingRef.current = true;
+    setEditingMockPdf(null);
+    setActiveSubsection('mock_test_pdf');
+    void saveMaterial(finalMockPdf, isNewMockPdf).finally(() => {
+      savingRef.current = false;
+    });
+  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -256,6 +365,14 @@ Confidential Master Copy. Distribution restricted.`;
 
           <button
             type="button"
+            onClick={() => openMockTestPdfModal(mockPdfSeriesFilter !== 'all' ? mockPdfSeriesFilter : undefined)}
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer shadow-xs transition-all"
+          >
+            <ClipboardCheck className="w-4 h-4" /> Upload Mock Test PDF
+          </button>
+
+          <button
+            type="button"
             onClick={() => openCurrentAffairsModal('Domestic')}
             className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#ea580c] hover:bg-orange-700 text-white text-xs font-bold cursor-pointer shadow-xs transition-all"
           >
@@ -285,6 +402,28 @@ Confidential Master Copy. Distribution restricted.`;
             }`}
           >
             {courseMaterials.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubsection('mock_test_pdf')}
+          className={`flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-xs sm:text-sm font-extrabold transition-all cursor-pointer ${
+            activeSubsection === 'mock_test_pdf'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <ClipboardCheck className="w-4 h-4" />
+          <span>Mock Test PDF</span>
+          <span
+            className={`px-2 py-0.5 rounded-full text-[11px] font-black ${
+              activeSubsection === 'mock_test_pdf'
+                ? 'bg-white/20 text-white'
+                : 'bg-indigo-50 text-indigo-700'
+            }`}
+          >
+            {mockTestPdfsList.length}
           </span>
         </button>
 
@@ -443,7 +582,202 @@ Confidential Master Copy. Distribution restricted.`;
         </div>
       )}
 
-      {/* ==================== SUBSECTION 2: CURRENT AFFAIRS ==================== */}
+      {/* ==================== SUBSECTION 2: MOCK TEST PDF (FOR ENROLLED MOCK SERIES STUDENTS ONLY) ==================== */}
+      {activeSubsection === 'mock_test_pdf' && (
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-indigo-950 via-indigo-900 to-[#0056b3] rounded-3xl p-6 text-white shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div className="space-y-1.5">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 text-amber-300 text-[11px] font-extrabold uppercase tracking-wider">
+                <ClipboardCheck className="w-3.5 h-3.5" /> Exclusive Mock Test Series PDFs
+              </div>
+              <h2 className="text-xl font-extrabold">
+                Mock Test PDF Hub (Targeted to Ongoing Mock Test Series)
+              </h2>
+              <p className="text-xs text-blue-100 max-w-2xl">
+                Upload Google Drive PDF links targeted to any ongoing Mock Test Series (including any newly launched Mock Test Series). Only students enrolled in the selected Mock Test Series can view and open the PDF; all other students see a locked view.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => openMockTestPdfModal(mockPdfSeriesFilter !== 'all' ? mockPdfSeriesFilter : undefined)}
+              className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black shadow-md cursor-pointer shrink-0 transition-all"
+            >
+              <Upload className="w-4 h-4" /> + Upload Mock Test PDF
+            </button>
+          </div>
+
+          {/* Series Filter Bar */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 flex-1">
+              <label className="text-xs font-extrabold text-slate-700 shrink-0">
+                Filter by Mock Test Series ({ongoingMockSeriesList.length} Ongoing Series):
+              </label>
+              <select
+                value={mockPdfSeriesFilter}
+                onChange={(e) => setMockPdfSeriesFilter(e.target.value)}
+                className="w-full sm:max-w-md px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50 font-bold text-xs text-slate-900"
+              >
+                <option value="all">All Ongoing Mock Test Series ({mockTestPdfsList.length} PDFs)</option>
+                {ongoingMockSeriesList.map((ser) => {
+                  const cnt = mockTestPdfsList.filter((m) => (m.seriesId || m.courseId) === ser.id).length;
+                  return (
+                    <option key={ser.id} value={ser.id}>
+                      {ser.name} (₹{ser.price}/- • {cnt} PDF{cnt === 1 ? '' : 's'})
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            <span className="text-xs font-bold text-slate-500">
+              Showing {filteredMockTestPdfs.length} Mock Test PDF(s)
+            </span>
+          </div>
+
+          {filteredMockTestPdfs.length === 0 ? (
+            <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center space-y-4">
+              <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto">
+                <ClipboardCheck className="w-7 h-7" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-extrabold text-[#0a0e2a]">
+                  No Mock Test PDFs Uploaded Yet
+                </h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  Click &quot;+ Upload Mock Test PDF&quot; to attach a Google Drive PDF link to any ongoing Mock Test Series. Only students enrolled in that series will be able to unlock and view it.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => openMockTestPdfModal(mockPdfSeriesFilter !== 'all' ? mockPdfSeriesFilter : undefined)}
+                className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold cursor-pointer inline-flex items-center gap-1.5"
+              >
+                <Upload className="w-4 h-4" /> + Upload Mock Test PDF
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredMockTestPdfs.map((mpdf) => {
+                const targetSer = ongoingMockSeriesList.find(
+                  (s) => s.id === (mpdf.seriesId || mpdf.courseId)
+                );
+                const seriesLabel =
+                  targetSer?.name || mpdf.seriesName || mpdf.courseName || 'Mock Test Series';
+
+                return (
+                  <div
+                    key={mpdf.id}
+                    className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-2xs flex flex-col justify-between hover:border-indigo-300 transition-all"
+                  >
+                    <div>
+                      <div className="h-1.5 w-full bg-indigo-600" />
+                      <div className="p-6 space-y-3.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-[11px] font-extrabold">
+                            <ClipboardCheck className="w-3 h-3" /> Mock Test PDF
+                          </span>
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 text-[#ea580c] border border-amber-200 text-[10px] font-extrabold">
+                            <Lock className="w-3 h-3" /> Series Enrolled Only
+                          </span>
+                        </div>
+
+                        <div className="p-2.5 rounded-xl bg-indigo-50/70 border border-indigo-100">
+                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-500 block">
+                            Targeted Ongoing Mock Test Series:
+                          </span>
+                          <p className="text-xs font-extrabold text-indigo-950 mt-0.5 line-clamp-2">
+                            {seriesLabel}
+                          </p>
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between gap-1.5 text-[11px] text-slate-500">
+                          <span className="font-bold text-slate-700 bg-slate-100 px-2.5 py-0.5 rounded-lg">
+                            {mpdf.subject || 'Mock Test Paper'}
+                          </span>
+                          <span>
+                            {mpdf.pages} Pages • {mpdf.fileSize}
+                          </span>
+                        </div>
+
+                        <h3 className="text-base font-extrabold text-[#0a0e2a] leading-snug">
+                          {mpdf.title}
+                        </h3>
+
+                        <p className="text-xs text-slate-600 leading-relaxed line-clamp-2">
+                          {mpdf.description || 'Exclusive Mock Test PDF for enrolled series students.'}
+                        </p>
+
+                        {mpdf.driveLink && (
+                          <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-700 block">
+                              Shared Google Drive PDF Link
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <a
+                                href={mpdf.driveLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-colors"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" /> Open Drive PDF
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyDriveLink(mpdf.id, mpdf.driveLink)}
+                                className="p-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 cursor-pointer"
+                                title="Copy Drive Link"
+                              >
+                                {copiedId === mpdf.id ? (
+                                  <Check className="w-4 h-4 text-emerald-600" />
+                                ) : (
+                                  <Copy className="w-4 h-4" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs">
+                      <span className="text-[11px] font-semibold text-slate-500">
+                        Uploaded: {mpdf.uploadedDate}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsNewMockPdf(false);
+                            setEditingMockPdf({
+                              ...mpdf,
+                              seriesId: mpdf.seriesId || mpdf.courseId || ongoingMockSeriesList[0]?.id,
+                            });
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-indigo-700 hover:bg-indigo-50 font-extrabold text-xs inline-flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(mpdf)}
+                          className="p-2 rounded-xl bg-red-50 text-[#dc2626] hover:bg-red-100 cursor-pointer"
+                          title="Delete Mock Test PDF"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ==================== SUBSECTION 3: CURRENT AFFAIRS ==================== */}
       {activeSubsection === 'current_affairs' && (
         <div className="space-y-6">
           {/* Current Affairs Banner & Category Filter */}
@@ -1311,13 +1645,191 @@ Confidential Master Copy. Distribution restricted.`;
         </div>
       )}
 
+      {/* ==================== MODAL 3: MOCK TEST PDF UPLOAD & EDIT ==================== */}
+      {editingMockPdf && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/65 p-4 overflow-y-auto"
+          role="dialog"
+          aria-modal="true"
+        >
+          <form
+            onSubmit={handleSaveMockTestPdf}
+            className="bg-white rounded-3xl max-w-xl w-full p-6 space-y-4 shadow-2xl border border-slate-200 text-xs my-8"
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-600 block">
+                  Mock Test PDF Section (Enrolled Series Students Only)
+                </span>
+                <h3 className="text-base font-extrabold text-[#0a0e2a]">
+                  {isNewMockPdf ? 'Upload Mock Test PDF (Google Drive Link)' : 'Edit Mock Test PDF Details'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingMockPdf(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* 1. Target Ongoing Mock Test Series Selection */}
+              <div className="p-3.5 rounded-2xl bg-indigo-50/70 border-2 border-indigo-200 space-y-1.5">
+                <label className="font-extrabold text-indigo-950 block text-xs">
+                  1. Select Targeted Ongoing Mock Test Series *
+                </label>
+                <select
+                  required
+                  value={editingMockPdf.seriesId || ''}
+                  onChange={(e) => {
+                    const ser = ongoingMockSeriesList.find((s) => s.id === e.target.value);
+                    setEditingMockPdf({
+                      ...editingMockPdf,
+                      seriesId: e.target.value,
+                      seriesName: ser?.name || editingMockPdf.seriesName,
+                      courseName: ser?.name || editingMockPdf.courseName,
+                      subject: ser?.name || editingMockPdf.subject,
+                    });
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-indigo-300 bg-white font-bold text-xs text-slate-900"
+                >
+                  {ongoingMockSeriesList.map((ser) => (
+                    <option key={ser.id} value={ser.id}>
+                      {ser.name} (₹{ser.price}/- • {ser.batchLabel || 'Active Batch'} • {ser.status})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-indigo-800 font-medium">
+                  All ongoing &amp; newly launched Mock Test Series appear here automatically. Only students enrolled in the selected Mock Test Series will be able to open this PDF; other students will see a Locked view.
+                </p>
+              </div>
+
+              {/* 2. Mock Test PDF Title */}
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">
+                  2. Mock Test PDF Title *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editingMockPdf.title}
+                  onChange={(e) => setEditingMockPdf({ ...editingMockPdf, title: e.target.value })}
+                  placeholder="e.g., Forester & Forest Guard Mock Test #01 Question Paper & Answer Key PDF"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 font-semibold text-xs"
+                />
+              </div>
+
+              {/* 3. Google Drive PDF Link */}
+              <div className="p-3.5 rounded-2xl bg-blue-50/70 border-2 border-blue-200 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="font-extrabold text-[#0056b3] text-xs flex items-center gap-1.5">
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>3. Google Drive PDF Link *</span>
+                  </label>
+                  {editingMockPdf.driveLink && (
+                    <a
+                      href={editingMockPdf.driveLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] font-bold text-[#0056b3] hover:underline inline-flex items-center gap-1"
+                    >
+                      Test Drive Link ↗
+                    </a>
+                  )}
+                </div>
+                <input
+                  type="url"
+                  required
+                  value={editingMockPdf.driveLink || ''}
+                  onChange={(e) => setEditingMockPdf({ ...editingMockPdf, driveLink: e.target.value })}
+                  placeholder="https://drive.google.com/file/d/.../view?usp=sharing"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-blue-200 bg-white font-mono text-xs focus:ring-2 focus:ring-[#0056b3] focus:outline-none"
+                />
+                <p className="text-[10px] text-slate-500">
+                  Paste the Google Drive share link for the Mock Test PDF. This link is strictly hidden from non-enrolled students.
+                </p>
+              </div>
+
+              {/* 4. Subject / Section Tag, Pages, File Size */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Subject / Paper Tag</label>
+                  <input
+                    type="text"
+                    value={editingMockPdf.subject || ''}
+                    onChange={(e) => setEditingMockPdf({ ...editingMockPdf, subject: e.target.value })}
+                    placeholder="e.g. Full Paper / GK & English"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Pages</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={editingMockPdf.pages}
+                    onChange={(e) => setEditingMockPdf({ ...editingMockPdf, pages: Number(e.target.value) })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">File Format / Size</label>
+                  <input
+                    type="text"
+                    value={editingMockPdf.fileSize}
+                    onChange={(e) => setEditingMockPdf({ ...editingMockPdf, fileSize: e.target.value })}
+                    placeholder="PDF (Google Drive)"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* 5. Description */}
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">
+                  Description / Exam Instructions (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={editingMockPdf.description}
+                  onChange={(e) => setEditingMockPdf({ ...editingMockPdf, description: e.target.value })}
+                  placeholder="Describe the mock test paper syllabus, OMR practice instructions, or answer key notes..."
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setEditingMockPdf(null)}
+                className="px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-bold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold cursor-pointer shadow-xs inline-flex items-center gap-1.5"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                {isNewMockPdf ? 'Upload & Publish Mock Test PDF' : 'Save Mock Test PDF Changes'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog
         isOpen={!!deleteTarget}
         title={
-          deleteTarget?.type === 'Current Affairs' || deleteTarget?.caCategory
-            ? 'Delete Current Affairs Series?'
-            : 'Delete Study Material?'
+          deleteTarget?.type === 'Mock Test PDF' || deleteTarget?.seriesId
+            ? 'Delete Mock Test PDF?'
+            : deleteTarget?.type === 'Current Affairs' || deleteTarget?.caCategory
+              ? 'Delete Current Affairs Series?'
+              : 'Delete Study Material?'
         }
         message={`Are you sure you want to delete "${deleteTarget?.title}"?`}
         onCancel={() => setDeleteTarget(null)}

@@ -38,7 +38,7 @@ import { CustomAcademicEmblemSvg, CustomArrowRightSvg } from '@/components/ui/Cu
 import { getFacultyAvatarUrl, formatFacultyName } from '@/lib/names';
 import { Announcement, CampusGalleryImage, INITIAL_SEED_DATA } from '@/data/initialSeedData';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { compressCampusPhoto, type CompressionResult } from '@/lib/imageCompressor';
+import { compressCampusPhoto, MAX_CAMPUS_IMAGES, type CompressionResult } from '@/lib/imageCompressor';
 
 export default function HomePage() {
   const router = useRouter();
@@ -56,11 +56,12 @@ export default function HomePage() {
     }
   }, [router]);
 
-  // Campus & Classroom Experience Banner / Gallery state
-  const campusImages: CampusGalleryImage[] =
+  // Campus & Classroom Experience Banner / Gallery state (up to MAX_CAMPUS_IMAGES = 20 photos)
+  const campusImages: CampusGalleryImage[] = (
     siteContent.campusImages && siteContent.campusImages.length > 0
       ? siteContent.campusImages
-      : INITIAL_SEED_DATA.siteContent.campusImages || [];
+      : INITIAL_SEED_DATA.siteContent.campusImages || []
+  ).slice(0, MAX_CAMPUS_IMAGES);
 
   const [activeGalleryIdx, setActiveGalleryIdx] = useState(0);
   const [showCampusUploadModal, setShowCampusUploadModal] = useState(false);
@@ -155,6 +156,15 @@ export default function HomePage() {
           : img
       );
     } else {
+      if (currentList.length >= MAX_CAMPUS_IMAGES) {
+        setIsSavingCampusPhoto(false);
+        showToast(
+          '20-Photo Limit Reached',
+          `Maximum ${MAX_CAMPUS_IMAGES} images can be uploaded to the front page. Please replace or delete an existing photo.`,
+          'error'
+        );
+        return;
+      }
       // Admin uploading brand new photo
       const newPhoto: CampusGalleryImage = {
         id: `campus-${Date.now()}`,
@@ -163,7 +173,7 @@ export default function HomePage() {
         caption: campusPhotoCaption.trim() || undefined,
         uploadedAt: new Date().toISOString().split('T')[0],
       };
-      updated = [newPhoto, ...currentList];
+      updated = [newPhoto, ...currentList].slice(0, MAX_CAMPUS_IMAGES);
     }
 
     const ok = await updateSiteContent({ ...siteContent, campusImages: updated });
@@ -239,7 +249,7 @@ export default function HomePage() {
   };
 
   const featuredCourses = courses.filter((c) => c.featured).slice(0, 6);
-  const topAchievements = achievements.slice(0, 4);
+  const topAchievements = achievements.slice(0, 8);
   const topFaculty = faculty.slice(0, 4);
 
   return (
@@ -399,12 +409,23 @@ export default function HomePage() {
                 </p>
               </div>
 
-              {/* Admin Quick Action Button - ONLY Admins can upload */}
+              {/* Admin Quick Action Button - ONLY Admins can upload (up to 20 images) */}
               {isAdmin && (
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <span className="px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 text-xs font-extrabold">
+                    {campusImages.length} / {MAX_CAMPUS_IMAGES} Photos
+                  </span>
                   <button
                     type="button"
                     onClick={() => {
+                      if (campusImages.length >= MAX_CAMPUS_IMAGES) {
+                        showToast(
+                          'Maximum 20 Photos Reached',
+                          `You have uploaded ${MAX_CAMPUS_IMAGES}/${MAX_CAMPUS_IMAGES} front-page photos. Click "Change Photo" on any slide to replace it or delete one first.`,
+                          'info'
+                        );
+                        return;
+                      }
                       setEditingCampusPhoto(null);
                       setCompressedResult(null);
                       setCampusPhotoTitle('');
@@ -414,7 +435,7 @@ export default function HomePage() {
                     className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#ea580c] hover:bg-orange-600 text-white text-xs font-bold shadow-sm cursor-pointer transition-all"
                   >
                     <Upload className="w-4 h-4" />
-                    <span>Upload Classroom Photo</span>
+                    <span>Upload Classroom Photo ({campusImages.length}/{MAX_CAMPUS_IMAGES})</span>
                   </button>
                 </div>
               )}
@@ -1175,10 +1196,12 @@ export default function HomePage() {
                 </div>
                 <div>
                   <h3 className="text-base font-extrabold text-[#0a0e2a]">
-                    {editingCampusPhoto ? 'Change / Replace Classroom Photo' : 'Upload Classroom Photo'}
+                    {editingCampusPhoto
+                      ? 'Change / Replace Classroom Photo'
+                      : `Upload Classroom Photo (${campusImages.length}/${MAX_CAMPUS_IMAGES})`}
                   </h3>
                   <p className="text-[11px] text-slate-500">
-                    Photos are automatically compressed to lossless WebP format before posting.
+                    Up to {MAX_CAMPUS_IMAGES} front-page photos allowed. Auto-compressed to lossless WebP before posting.
                   </p>
                 </div>
               </div>

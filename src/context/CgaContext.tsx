@@ -1308,10 +1308,11 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
       if (typeof window !== 'undefined') {
         try {
           sessionStorage.removeItem('cga_db_cache');
-          localStorage.setItem('cga_site_content', JSON.stringify(content));
-          if (content.campusImages) {
-            localStorage.setItem('cga_campus_images', JSON.stringify(content.campusImages));
-          }
+          localStorage.removeItem('cga_campus_images');
+          localStorage.setItem(
+            'cga_site_content',
+            JSON.stringify({ ...content, campusImages: undefined })
+          );
         } catch {}
       }
 

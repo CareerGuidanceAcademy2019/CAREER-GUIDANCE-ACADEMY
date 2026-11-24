@@ -360,6 +360,10 @@ export default function StudentMyLearningPage() {
     return (db.studyMaterials || []).filter((mat) => {
       if (mat.type === 'Current Affairs' || mat.caCategory) return false;
       const isAdmin = session?.role === 'ADMIN';
+      if (mat.type === 'Mock Test PDF' || mat.seriesId) {
+        const targetSerId = mat.seriesId || mat.courseId;
+        return isAdmin || isSpecialAccess || enrolledSeriesIds.includes(targetSerId);
+      }
       const isFree = mat.price === 0 || mat.accessScope === 'all_logged_in';
       const isEnrolledInCourse = enrolledCourseIds.includes(mat.courseId) || bundledMaterialIds.has(mat.id);
       const isPurchased =
@@ -373,7 +377,7 @@ export default function StudentMyLearningPage() {
         );
       return isAdmin || isFree || isEnrolledInCourse || isPurchased;
     });
-  }, [db.studyMaterials, db.courses, enrolledCourses, db.feePayments, currentStudent.id, currentStudent.phone, currentStudent.email, session?.role]);
+  }, [db.studyMaterials, db.courses, enrolledCourses, enrolledSeriesIds, isSpecialAccess, db.feePayments, currentStudent.id, currentStudent.phone, currentStudent.email, session?.role]);
 
   // 6. Pending Payments awaiting Admin verification
   const pendingPayments: FeePayment[] = useMemo(() => {

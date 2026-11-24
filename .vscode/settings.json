@@ -1,4 +1,5 @@
 {
   "python.defaultInterpreterPath": "C:\\Users\\KIIT0001\\anaconda3\\python.exe",
-  "python.analysis.autoSearchPaths": true
+  "python.analysis.autoSearchPaths": true,
+  "editor.cursorStyle": "block"
 }

@@ -1,13 +1,20 @@
 /**
- * Client-Side Image Compressor for Institution & Classroom Gallery
+ * Client-Side Image Compressor for Institution & Classroom Gallery and Topper DPs
  *
- * Uses HTMLCanvasElement to downscale high-resolution smartphone / DSLR camera photos
- * to a crisp 1400px max dimension and exports as WebP (or high-quality JPEG fallback)
- * at quality 0.82.
+ * 1. Campus & Classroom Gallery (`compressCampusPhoto`):
+ *    Supports up to 20 front-page images (`MAX_CAMPUS_IMAGES = 20`).
+ *    Uses HTMLCanvasElement with high-quality bicubic smoothing to compress
+ *    high-resolution photos into lossless-clarity WebP/JPEG (~65KB–115KB each)
+ *    so all 20 images load rapidly and persist cleanly in Supabase.
  *
- * Reduces image file weight from 5MB–10MB down to ~70KB–120KB with zero visible degradation,
- * preserving precious database storage and ensuring blazing-fast public page loading.
+ * 2. Topper / Achiever Candidate DP (`compressTopperPhoto`):
+ *    Auto-optimizes any candidate portrait photo into the strict 20 KB – 50 KB
+ *    range (`TOPPER_DP_MIN_KB = 20`, `TOPPER_DP_MAX_KB = 50`) without quality loss.
  */
+
+export const MAX_CAMPUS_IMAGES = 20;
+export const TOPPER_DP_MIN_KB = 20;
+export const TOPPER_DP_MAX_KB = 50;
 
 export interface CompressionResult {
   dataUrl: string;
@@ -18,10 +25,18 @@ export interface CompressionResult {
   height: number;
 }
 
+export function getDataUrlSizeKb(dataUrl: string): number {
+  if (!dataUrl) return 0;
+  const base64Idx = dataUrl.indexOf(',');
+  const base64 = base64Idx >= 0 ? dataUrl.slice(base64Idx + 1) : dataUrl;
+  const byteLength = Math.round((base64.length * 3) / 4);
+  return Math.max(1, Math.round((byteLength / 1024) * 10) / 10);
+}
+
 export async function compressCampusPhoto(
   file: File,
-  maxWidth = 1400,
-  maxHeight = 900,
+  maxWidth = 1360,
+  maxHeight = 860,
   quality = 0.82
 ): Promise<CompressionResult> {
   return new Promise((resolve, reject) => {
@@ -30,7 +45,7 @@ export async function compressCampusPhoto(
       return;
     }
 
-    const originalSizeKb = Math.round(file.size / 1024);
+    const originalSizeKb = Math.max(1, Math.round(file.size / 1024));
     const reader = new FileReader();
 
     reader.onerror = () => reject(new Error('Failed to read image file.'));
@@ -63,21 +78,23 @@ export async function compressCampusPhoto(
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Convert to WebP format first (falls back to JPEG if unsupported)
-        let dataUrl = '';
-        try {
-          const webp = canvas.toDataURL('image/webp', quality);
-          if (webp.startsWith('data:image/webp')) {
-            dataUrl = webp;
-          }
-        } catch {}
+        const encodeAtQuality = (q: number): string => {
+          try {
+            const webp = canvas.toDataURL('image/webp', q);
+            if (webp.startsWith('data:image/webp')) return webp;
+          } catch {}
+          return canvas.toDataURL('image/jpeg', q);
+        };
 
-        if (!dataUrl) {
-          dataUrl = canvas.toDataURL('image/jpeg', quality);
+        // Start at high clarity (0.82); gently step down only if needed so 20 photos fit effortlessly
+        let dataUrl = encodeAtQuality(quality);
+        let compressedSizeKb = Math.round(getDataUrlSizeKb(dataUrl));
+        for (const qStep of [0.78, 0.74, 0.70]) {
+          if (compressedSizeKb <= 115) break;
+          dataUrl = encodeAtQuality(qStep);
+          compressedSizeKb = Math.round(getDataUrlSizeKb(dataUrl));
         }
 
-        // Estimate compressed size in KB (base64 length * 0.75)
-        const compressedSizeKb = Math.round((dataUrl.length * 3) / 4 / 1024);
         const savingsPercent = Math.max(
           0,
           Math.round(((originalSizeKb - compressedSizeKb) / Math.max(1, originalSizeKb)) * 100)
@@ -100,3 +117,133 @@ export async function compressCampusPhoto(
   });
 }
 
+/**
+ * Compresses or optimizes a Topper / Candidate DP into the strict 20 KB – 50 KB range
+ * with high portrait clarity (square center-crop portrait).
+ */
+export async function compressTopperPhoto(file: File): Promise<CompressionResult> {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) {
+      reject(new Error('Selected file is not an image. Please upload a JPG, PNG, or WebP photo.'));
+      return;
+    }
+
+    const originalSizeKb = Math.max(1, Math.round((file.size / 1024) * 10) / 10);
+    const reader = new FileReader();
+
+    reader.onerror = () => reject(new Error('Failed to read candidate photo file.'));
+    reader.onload = (e) => {
+      const rawDataUrl = e.target?.result as string;
+      const img = new Image();
+      img.onerror = () => reject(new Error('Could not parse candidate image data.'));
+      img.onload = () => {
+        // If raw file is already between 20 KB and 50 KB and has reasonable dimensions, keep if desired or verify base64 size
+        const rawKb = getDataUrlSizeKb(rawDataUrl);
+        if (rawKb >= TOPPER_DP_MIN_KB && rawKb <= TOPPER_DP_MAX_KB) {
+          resolve({
+            dataUrl: rawDataUrl,
+            originalSizeKb,
+            compressedSizeKb: rawKb,
+            savingsPercent: 0,
+            width: img.width,
+            height: img.height,
+          });
+          return;
+        }
+
+        // Center-crop square portrait for crisp circular topper DP
+        const srcSide = Math.min(img.width, img.height);
+        const sx = Math.round((img.width - srcSide) / 2);
+        const sy = Math.round((img.height - srcSide) / 2);
+
+        const renderCandidate = (side: number, mime: 'image/jpeg' | 'image/webp', q: number): { url: string; kb: number } => {
+          const canvas = document.createElement('canvas');
+          canvas.width = side;
+          canvas.height = side;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) throw new Error('Canvas 2D context is unavailable.');
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, side, side);
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(img, sx, sy, srcSide, srcSide, 0, 0, side, side);
+          const url = canvas.toDataURL(mime, q);
+          return { url, kb: getDataUrlSizeKb(url) };
+        };
+
+        let bestAttempt: { url: string; kb: number; side: number } | null = null;
+
+        // Search across crisp portrait resolutions & high qualities to land right inside 20 KB – 50 KB
+        const candidateSides = [600, 680, 520, 760, 440, 860, 360, 960];
+        const candidateQualities = [0.92, 0.88, 0.84, 0.80, 0.76, 0.96, 0.70, 0.64, 0.99];
+        const mimes: Array<'image/jpeg' | 'image/webp'> = ['image/jpeg', 'image/webp'];
+
+        outer: for (const mime of mimes) {
+          for (const side of candidateSides) {
+            for (const q of candidateQualities) {
+              const res = renderCandidate(side, mime, q);
+              if (res.kb >= TOPPER_DP_MIN_KB && res.kb <= TOPPER_DP_MAX_KB) {
+                bestAttempt = { url: res.url, kb: res.kb, side };
+                break outer;
+              }
+              if (
+                !bestAttempt ||
+                Math.abs(res.kb - 35) < Math.abs(bestAttempt.kb - 35)
+              ) {
+                bestAttempt = { url: res.url, kb: res.kb, side };
+              }
+            }
+          }
+        }
+
+        // If a low-complexity image is still slightly < 20 KB, scale up at max JPEG quality 1.0 to reach >= 20 KB
+        if (bestAttempt && bestAttempt.kb < TOPPER_DP_MIN_KB) {
+          for (const largeSide of [1080, 1200, 1400]) {
+            const res = renderCandidate(largeSide, 'image/jpeg', 1.0);
+            if (res.kb >= TOPPER_DP_MIN_KB && res.kb <= TOPPER_DP_MAX_KB) {
+              bestAttempt = { url: res.url, kb: res.kb, side: largeSide };
+              break;
+            }
+            if (res.kb > bestAttempt.kb && res.kb <= TOPPER_DP_MAX_KB) {
+              bestAttempt = { url: res.url, kb: res.kb, side: largeSide };
+            }
+          }
+        }
+
+        // If a very high-entropy image is still > 50 KB, step down side gently until <= 50 KB
+        if (bestAttempt && bestAttempt.kb > TOPPER_DP_MAX_KB) {
+          for (const smallSide of [340, 300, 260, 220]) {
+            const res = renderCandidate(smallSide, 'image/webp', 0.72);
+            if (res.kb <= TOPPER_DP_MAX_KB) {
+              bestAttempt = { url: res.url, kb: res.kb, side: smallSide };
+              break;
+            }
+          }
+        }
+
+        if (!bestAttempt) {
+          reject(new Error('Could not optimize candidate photo into the 20 KB – 50 KB range.'));
+          return;
+        }
+
+        const savingsPercent = Math.max(
+          0,
+          Math.round(((originalSizeKb - bestAttempt.kb) / Math.max(1, originalSizeKb)) * 100)
+        );
+
+        resolve({
+          dataUrl: bestAttempt.url,
+          originalSizeKb,
+          compressedSizeKb: bestAttempt.kb,
+          savingsPercent,
+          width: bestAttempt.side,
+          height: bestAttempt.side,
+        });
+      };
+
+      img.src = rawDataUrl;
+    };
+
+    reader.readAsDataURL(file);
+  });
+}

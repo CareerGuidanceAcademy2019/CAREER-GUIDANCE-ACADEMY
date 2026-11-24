@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Save, Globe, Plus, Trash2, Camera, Upload, CheckCircle2 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
 import { CampusGalleryImage, SiteContent } from '@/data/initialSeedData';
-import { compressCampusPhoto, type CompressionResult } from '@/lib/imageCompressor';
+import { compressCampusPhoto, MAX_CAMPUS_IMAGES, type CompressionResult } from '@/lib/imageCompressor';
 
 export default function AdminSiteContentCmsPage() {
   const { db, updateSiteContent, showToast } = useCga();
@@ -40,6 +40,15 @@ export default function AdminSiteContentCmsPage() {
 
   const handleAddPhoto = () => {
     if (!compressedResult) return;
+    const currentList = form.campusImages || [];
+    if (currentList.length >= MAX_CAMPUS_IMAGES) {
+      showToast(
+        '20-Photo Limit Reached',
+        `Maximum ${MAX_CAMPUS_IMAGES} photos can be uploaded to the front page banner. Please remove an existing photo first.`,
+        'error'
+      );
+      return;
+    }
     const newImg: CampusGalleryImage = {
       id: `campus-${Date.now()}`,
       url: compressedResult.dataUrl,
@@ -47,12 +56,12 @@ export default function AdminSiteContentCmsPage() {
       caption: photoCaption.trim() || undefined,
       uploadedAt: new Date().toISOString().split('T')[0],
     };
-    const updated = [newImg, ...(form.campusImages || [])];
+    const updated = [newImg, ...currentList].slice(0, MAX_CAMPUS_IMAGES);
     setForm({ ...form, campusImages: updated });
     setCompressedResult(null);
     setPhotoTitle('');
     setPhotoCaption('');
-    showToast('Photo Added', 'Classroom photo added to list. Click Save to publish.', 'info');
+    showToast('Photo Added', `Classroom photo added (${updated.length}/${MAX_CAMPUS_IMAGES}). Click Save to publish.`, 'info');
   };
 
   const handleRemovePhoto = (id: string) => {
@@ -221,10 +230,12 @@ export default function AdminSiteContentCmsPage() {
             <div>
               <h2 className="text-base font-extrabold text-[#0a0e2a] flex items-center gap-2">
                 <Camera className="w-4 h-4 text-[#ea580c]" />
-                <span>6. Campus &amp; Classroom Gallery Photos (Front Top Banner)</span>
+                <span>
+                  6. Campus &amp; Classroom Gallery Photos (Front Top Banner — {(form.campusImages || []).length}/{MAX_CAMPUS_IMAGES} Photos)
+                </span>
               </h2>
               <p className="text-[11px] text-slate-500 mt-0.5">
-                Uploaded photos appear prominently on the public homepage top banner, followed by State Rankers. All photos are auto-compressed without quality loss.
+                Upload up to {MAX_CAMPUS_IMAGES} photos for the public homepage top banner. Every image is automatically compressed without quality loss before it can be posted.
               </p>
             </div>
           </div>

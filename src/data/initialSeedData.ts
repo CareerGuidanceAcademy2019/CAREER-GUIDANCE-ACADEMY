@@ -99,7 +99,9 @@ export interface StudyMaterial {
   title: string;
   courseId: string;
   courseName: string;
-  type: 'Book PDF' | 'Paid Notes' | 'Current Affairs';
+  seriesId?: string;
+  seriesName?: string;
+  type: 'Book PDF' | 'Paid Notes' | 'Current Affairs' | 'Mock Test PDF';
   caCategory?: 'Domestic' | 'International';
   driveLink?: string;
   accessScope?: 'enrolled' | 'all_logged_in';

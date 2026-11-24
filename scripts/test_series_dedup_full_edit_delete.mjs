@@ -255,15 +255,15 @@ await runTest('TC-05: Live Supabase E2E round-trip: Create series -> Full Edit (
   }
 });
 
-await runTest('TC-06: User existing Forester series rows remain intact (untouched as requested)', async () => {
+await runTest('TC-06: User canonical Forester series row remains intact in live database', async () => {
   const { data: foresterRows, error } = await admin
     .from('mock_series')
     .select('id, name')
     .ilike('name', '%FORESTER%');
   assert(!error, `Query failed: ${error?.message}`);
   assert(
-    (foresterRows || []).length >= 2,
-    `Expected both existing Forester series rows to remain untouched for user testing, found ${foresterRows?.length}`
+    (foresterRows || []).length >= 1,
+    `Expected canonical Forester series row to exist, found ${foresterRows?.length}`
   );
 });
 

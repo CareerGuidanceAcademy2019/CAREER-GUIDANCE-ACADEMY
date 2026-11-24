@@ -523,7 +523,8 @@ export async function DELETE(request: Request) {
       }
     }
 
-    // 4. Delete mock_tests, mock_subjects, series_enrollments, legacy enrollments, and mock_series
+    // 4. Delete mock_tests, mock_subjects, study_materials (Mock Test PDFs), series_enrollments, legacy enrollments, and mock_series
+    await supabaseAdmin.from('study_materials').delete().eq('series_id', seriesId);
     await supabaseAdmin.from('mock_tests').delete().eq('series_id', seriesId);
     await supabaseAdmin.from('mock_subjects').delete().eq('series_id', seriesId);
     await supabaseAdmin.from('series_enrollments').delete().eq('series_id', seriesId);

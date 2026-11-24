@@ -22,29 +22,71 @@ import {
   Tag,
   Sparkles,
   Clock,
+  ClipboardCheck,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
 import { StudyMaterial } from '@/data/initialSeedData';
+import { MOCK_SERIES_INITIAL } from '@/data/mockSeriesSeedData';
 import { PayManualModal, type PayManualTarget } from '@/components/payment/PayManualModal';
 
-type StudentMaterialTab = 'course_materials' | 'current_affairs';
+type StudentMaterialTab = 'course_materials' | 'mock_test_pdf' | 'current_affairs';
 type CaCategoryFilter = 'All' | 'Domestic' | 'International';
+
+const SERIES_TO_COURSES_MAP: Record<string, string[]> = {
+  'series-ttet-paper1': ['crs-tet-1-online', 'crs-tet-1-offline', 'crs-tet-1', 'series-ttet-paper1'],
+  'series-ttet-paper2-sci': ['crs-tet-2-sci-online', 'crs-tet-2-sci-offline', 'crs-tet-2-sci', 'series-ttet-paper2-sci'],
+  'series-ttet-paper2-soc': [
+    'crs-tet-2-sst-online',
+    'crs-tet-2-sst-offline',
+    'crs-tet-2-arts-online',
+    'crs-tet-2-arts-offline',
+    'crs-tet-2-arts',
+    'crs-tet-2-soc',
+    'crs-tet-2-sst',
+    'series-ttet-paper2-soc',
+  ],
+  'series-stgt-soc': ['crs-stgt-sst-online', 'crs-stgt-sst-offline', 'crs-stgt-sst', 'series-stgt-soc'],
+  'series-stgt-pure-sci': ['crs-stgt-pure-sci-online', 'crs-stgt-pure-sci-offline', 'crs-stgt-pure-sci', 'series-stgt-pure-sci'],
+  'series-stgt-bio-sci': ['crs-stgt-bio-sci-online', 'crs-stgt-bio-sci-offline', 'crs-stgt-bio-sci', 'series-stgt-bio-sci'],
+  'series-tpsc-combined': ['crs-tpsc-combined-online', 'crs-tpsc-combined-offline', 'crs-tpsc-combined', 'crs-jrbt-online', 'crs-jrbt-offline', 'crs-jrbt', 'series-tpsc-combined'],
+  'series-tcs-tps': ['crs-tcs-tps-online', 'crs-tcs-tps-offline', 'crs-tcs-tps', 'series-tcs-tps'],
+  'series-banking-ssc': ['crs-banking-online', 'crs-banking-offline', 'crs-banking', 'series-banking-ssc'],
+  'series-school-foundation': ['crs-school-7', 'crs-school-8', 'crs-school-9', 'crs-school-10', 'series-school-foundation'],
+};
 
 export default function StudentStudyMaterialsPage() {
   const { db, currentStudent, session, showToast } = useCga();
   const [activeTab, setActiveTab] = useState<StudentMaterialTab>('course_materials');
   const [filterType, setFilterType] = useState<'All' | 'Unlocked' | 'Locked'>('All');
+  const [mockPdfSeriesFilter, setMockPdfSeriesFilter] = useState<string>('all');
   const [caCategoryFilter, setCaCategoryFilter] = useState<CaCategoryFilter>('All');
   const [viewingMaterial, setViewingMaterial] = useState<StudyMaterial | null>(null);
   const [payTarget, setPayTarget] = useState<PayManualTarget | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [currentTime] = useState(() => Date.now());
 
-  // Separate Course Materials vs Current Affairs
+  const ongoingMockSeriesList = useMemo(() => {
+    const raw = db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL;
+    return raw.filter((s) => s.id !== 'series-current-affairs' && s.status !== 'Archived');
+  }, [db.mockSeries]);
+
+  // Separate Course Materials vs Mock Test PDFs vs Current Affairs
   const rawCourseMaterials = useMemo(
     () =>
       (db.studyMaterials || []).filter(
-        (m) => m.type !== 'Current Affairs' && !m.caCategory
+        (m) =>
+          m.type !== 'Current Affairs' &&
+          !m.caCategory &&
+          m.type !== 'Mock Test PDF' &&
+          !m.seriesId
+      ),
+    [db.studyMaterials]
+  );
+
+  const rawMockTestPdfs = useMemo(
+    () =>
+      (db.studyMaterials || []).filter(
+        (m) => m.type === 'Mock Test PDF' || Boolean(m.seriesId)
       ),
     [db.studyMaterials]
   );
@@ -52,7 +94,7 @@ export default function StudentStudyMaterialsPage() {
   const rawCurrentAffairs = useMemo(
     () =>
       (db.studyMaterials || []).filter(
-        (m) => m.type === 'Current Affairs' || Boolean(m.caCategory)
+        (m) => (m.type === 'Current Affairs' || Boolean(m.caCategory)) && m.type !== 'Mock Test PDF' && !m.seriesId
       ),
     [db.studyMaterials]
   );
@@ -262,6 +304,108 @@ export default function StudentStudyMaterialsPage() {
     return true;
   });
 
+  // Strict enrollment resolver for Mock Test PDFs: unlocked ONLY if student is enrolled in the target Mock Test Series
+  const isStudentEnrolledInMockSeries = (seriesId?: string): { enrolled: boolean; expired: boolean; validUntil?: string; pendingVerification: boolean; pendingRef?: string } => {
+    if (!seriesId || !currentStudent) {
+      return { enrolled: false, expired: false, pendingVerification: false };
+    }
+    if (session?.role === 'ADMIN' || currentStudent.email === 'angatsaha825@gmail.com') {
+      return { enrolled: true, expired: false, pendingVerification: false };
+    }
+
+    const studentMatches = (stId?: string) =>
+      stId === currentStudent.id ||
+      stId === 'me' ||
+      (currentStudent.phone && stId === currentStudent.phone) ||
+      (currentStudent.email && stId === currentStudent.email);
+
+    // 1. Direct series_enrollments record
+    const se = (db.seriesEnrollments || []).find(
+      (item) => studentMatches(item.studentId) && item.seriesId === seriesId
+    );
+    if (se) {
+      const exp = Boolean(se.accessValidUntil && new Date(se.accessValidUntil).getTime() < currentTime);
+      return { enrolled: !exp, expired: exp, validUntil: se.accessValidUntil, pendingVerification: false };
+    }
+
+    // 2. LocalStorage series enrollment fallback
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = JSON.parse(localStorage.getItem('cga_series_enrollments') || '[]');
+        const found = stored.find((item: any) => studentMatches(item.studentId) && item.seriesId === seriesId);
+        if (found) {
+          const exp = Boolean(found.accessValidUntil && new Date(found.accessValidUntil).getTime() < currentTime);
+          return { enrolled: !exp, expired: exp, validUntil: found.accessValidUntil, pendingVerification: false };
+        }
+      } catch {}
+    }
+
+    // 3. Verified fee payment for this seriesId
+    const verifiedPay = (db.feePayments || []).find(
+      (fp) =>
+        studentMatches(fp.studentId) &&
+        fp.status === 'Verified' &&
+        (fp.itemId === seriesId || fp.courseId === seriesId)
+    );
+    if (verifiedPay) {
+      return { enrolled: true, expired: false, pendingVerification: false };
+    }
+
+    // 4. Enrolled course that bundles or maps to this mock test series
+    const matchingCourses = SERIES_TO_COURSES_MAP[seriesId] || [seriesId];
+    const courseEnr = (currentStudent.enrollments || []).find((e) => {
+      if (matchingCourses.includes(e.courseId)) return true;
+      const crs = db.courses.find((c) => c.id === e.courseId);
+      return Boolean(crs?.bundledTestIds && Array.isArray(crs.bundledTestIds) && crs.bundledTestIds.includes(seriesId));
+    });
+    if (courseEnr) {
+      const exp = Boolean(courseEnr.accessValidUntil && new Date(courseEnr.accessValidUntil).getTime() < currentTime);
+      return { enrolled: !exp, expired: exp, validUntil: courseEnr.accessValidUntil, pendingVerification: false };
+    }
+
+    // 5. Check pending payment for this series
+    const pendingPay = (db.feePayments || []).find(
+      (fp) =>
+        studentMatches(fp.studentId) &&
+        fp.status === 'Pending' &&
+        (fp.itemId === seriesId || fp.courseId === seriesId)
+    );
+    if (pendingPay) {
+      return {
+        enrolled: false,
+        expired: false,
+        pendingVerification: true,
+        pendingRef: pendingPay.receiptNo || pendingPay.utr || 'Pending',
+      };
+    }
+
+    return { enrolled: false, expired: false, pendingVerification: false };
+  };
+
+  const mockTestPdfsWithAccess = rawMockTestPdfs.map((mpdf) => {
+    const targetSeriesId = mpdf.seriesId || mpdf.courseId;
+    const seriesObj = ongoingMockSeriesList.find((s) => s.id === targetSeriesId);
+    const access = isStudentEnrolledInMockSeries(targetSeriesId);
+    return {
+      ...mpdf,
+      targetSeriesId,
+      targetSeriesName: seriesObj?.name || mpdf.seriesName || mpdf.courseName || 'Mock Test Series',
+      targetSeriesPrice: seriesObj?.price ?? 499,
+      isUnlocked: access.enrolled,
+      isExpired: access.expired,
+      validUntil: access.validUntil,
+      isPendingVerification: access.pendingVerification,
+      pendingPaymentRef: access.pendingRef,
+    };
+  });
+
+  const filteredMockTestPdfs = mockTestPdfsWithAccess.filter((mpdf) => {
+    if (mockPdfSeriesFilter !== 'all' && mpdf.targetSeriesId !== mockPdfSeriesFilter) return false;
+    if (filterType === 'Unlocked') return mpdf.isUnlocked;
+    if (filterType === 'Locked') return !mpdf.isUnlocked;
+    return true;
+  });
+
   const filteredCurrentAffairs = rawCurrentAffairs.filter((ca) => {
     if (caCategoryFilter === 'All') return true;
     return (ca.caCategory || 'Domestic') === caCategoryFilter;
@@ -288,8 +432,8 @@ export default function StudentStudyMaterialsPage() {
           </p>
         </div>
 
-        {/* Access Filter (when on Course Materials tab) */}
-        {activeTab === 'course_materials' && (
+        {/* Access Filter (when on Course Materials or Mock Test PDF tab) */}
+        {(activeTab === 'course_materials' || activeTab === 'mock_test_pdf') && (
           <div className="flex items-center gap-1.5 bg-white p-1.5 rounded-2xl border border-slate-200 self-start">
             {(['All', 'Unlocked', 'Locked'] as const).map((tab) => (
               <button
@@ -330,6 +474,28 @@ export default function StudentStudyMaterialsPage() {
             }`}
           >
             {rawCourseMaterials.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('mock_test_pdf')}
+          className={`flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-xs sm:text-sm font-extrabold transition-all cursor-pointer ${
+            activeTab === 'mock_test_pdf'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <ClipboardCheck className="w-4 h-4" />
+          <span>Mock Test PDF</span>
+          <span
+            className={`px-2 py-0.5 rounded-full text-[11px] font-black ${
+              activeTab === 'mock_test_pdf'
+                ? 'bg-white/20 text-white'
+                : 'bg-indigo-50 text-indigo-700'
+            }`}
+          >
+            {rawMockTestPdfs.length}
           </span>
         </button>
 
@@ -563,7 +729,212 @@ export default function StudentStudyMaterialsPage() {
         </div>
       )}
 
-      {/* ==================== SUBSECTION 2: CURRENT AFFAIRS ==================== */}
+      {/* ==================== SUBSECTION 2: MOCK TEST PDF (ENROLLED MOCK SERIES STUDENTS ONLY) ==================== */}
+      {activeTab === 'mock_test_pdf' && (
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-indigo-950 via-indigo-900 to-[#0056b3] rounded-3xl p-6 text-white shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1.5">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 text-amber-300 text-[11px] font-extrabold uppercase tracking-wider">
+                <ClipboardCheck className="w-3.5 h-3.5" /> Exclusive Mock Test Series PDFs
+              </div>
+              <h2 className="text-xl font-extrabold">
+                Mock Test PDF Library (Ongoing Mock Test Series)
+              </h2>
+              <p className="text-xs text-blue-100 max-w-2xl">
+                Official Google Drive question paper &amp; solution PDFs for ongoing Mock Test Series. Each Mock Test PDF is unlocked exclusively for students enrolled in that specific Mock Test Series; non-enrolled students see a locked view.
+              </p>
+            </div>
+
+            <div className="w-full md:w-72 shrink-0">
+              <label className="text-[10px] font-extrabold uppercase tracking-wider text-blue-200 block mb-1">
+                Filter by Mock Test Series
+              </label>
+              <select
+                value={mockPdfSeriesFilter}
+                onChange={(e) => setMockPdfSeriesFilter(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-white text-slate-900 font-bold text-xs shadow-xs"
+              >
+                <option value="all">All Ongoing Mock Test Series</option>
+                {ongoingMockSeriesList.map((ser) => (
+                  <option key={ser.id} value={ser.id}>
+                    {ser.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {filteredMockTestPdfs.length === 0 ? (
+            <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center space-y-3">
+              <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto">
+                <ClipboardCheck className="w-7 h-7" />
+              </div>
+              <h3 className="text-base font-extrabold text-[#0a0e2a]">
+                No Mock Test PDFs Found
+              </h3>
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                When the Academy uploads Mock Test PDFs for your ongoing Mock Test Series, they will appear here.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredMockTestPdfs.map((mpdf) => (
+                <div
+                  key={mpdf.id}
+                  className={`rounded-3xl border overflow-hidden flex flex-col justify-between transition-all ${
+                    mpdf.isUnlocked
+                      ? 'bg-white border-slate-200 shadow-xs cga-card-hover'
+                      : 'bg-slate-50/90 border-slate-200/80 opacity-95'
+                  }`}
+                >
+                  <div>
+                    <div
+                      className={`h-1.5 w-full ${
+                        mpdf.isUnlocked ? 'bg-indigo-600' : 'bg-slate-300'
+                      }`}
+                    />
+                    <div className="p-6 space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-[11px] font-extrabold">
+                          <ClipboardCheck className="w-3 h-3" /> Mock Test PDF
+                        </span>
+
+                        {mpdf.isUnlocked ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
+                            <Unlock className="w-3 h-3" /> Unlocked (Enrolled)
+                          </span>
+                        ) : mpdf.isPendingVerification ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 text-[11px] font-bold">
+                            <Clock className="w-3 h-3 text-amber-600" /> Verification Pending
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-red-50 text-[#dc2626] border border-red-200 text-[11px] font-bold">
+                            <Lock className="w-3 h-3" /> Locked
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="p-2.5 rounded-xl bg-indigo-50/70 border border-indigo-100">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-500 block">
+                          Target Mock Test Series:
+                        </span>
+                        <p className="text-xs font-extrabold text-indigo-950 mt-0.5 line-clamp-2">
+                          {mpdf.targetSeriesName}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between gap-1.5 text-[11px]">
+                        <span className="font-extrabold text-slate-700 bg-slate-100 px-2.5 py-0.5 rounded-lg line-clamp-1">
+                          {mpdf.subject || 'Mock Test Paper'}
+                        </span>
+                        <span className="text-slate-500 font-semibold">
+                          {mpdf.pages} Pages • {mpdf.fileSize}
+                        </span>
+                      </div>
+
+                      <h2 className="text-base font-extrabold text-[#0a0e2a] leading-snug">
+                        {mpdf.title}
+                      </h2>
+
+                      <p className="text-xs text-slate-600 leading-relaxed line-clamp-2">
+                        {mpdf.description}
+                      </p>
+
+                      <div className="pt-2 flex items-center justify-between text-[11px] font-semibold text-slate-400 border-t border-slate-100">
+                        <span>By {mpdf.author}</span>
+                        <span>Uploaded: {mpdf.uploadedDate}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action Footer — Strictly Unlocked ONLY for Enrolled Series Students */}
+                  <div className="px-6 py-4 bg-slate-50 border-t border-slate-200/80">
+                    {mpdf.isUnlocked ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          {mpdf.driveLink && (
+                            <a
+                              href={mpdf.driveLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-1 py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold inline-flex items-center justify-center gap-1.5 shadow-xs transition-colors"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" /> Open Mock Test PDF (Drive)
+                            </a>
+                          )}
+                          {mpdf.driveLink && (
+                            <button
+                              type="button"
+                              onClick={() => handleCopyDriveLink(mpdf.id, mpdf.driveLink)}
+                              className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 cursor-pointer"
+                              title="Copy Google Drive PDF Link"
+                            >
+                              {copiedId === mpdf.id ? (
+                                <Check className="w-4 h-4 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-4 h-4" />
+                              )}
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-center text-emerald-700 font-bold">
+                          ✓ Unlocked for your enrolled Mock Test Series
+                        </p>
+                      </div>
+                    ) : mpdf.isPendingVerification ? (
+                      <div className="space-y-2">
+                        <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-300 text-[11px] text-amber-900 font-semibold text-center flex items-center justify-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-amber-600 animate-pulse shrink-0" />
+                          <span>
+                            Series Enrollment Verification Pending
+                            {mpdf.pendingPaymentRef ? ` (Ref: ${mpdf.pendingPaymentRef})` : ''}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-center text-slate-500 font-medium">
+                          This Mock Test PDF will unlock automatically as soon as the admin verifies your series enrollment UTR.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5">
+                        <div className="p-2.5 rounded-xl bg-red-50/80 border border-red-200 text-[11px] text-red-800 font-bold flex items-center justify-center gap-1.5 text-center">
+                          <Lock className="w-3.5 h-3.5 text-red-600 shrink-0" />
+                          <span>Locked — Only for students enrolled in {mpdf.targetSeriesName}</span>
+                        </div>
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPayTarget({
+                                itemType: 'mock_series',
+                                itemId: mpdf.targetSeriesId || 'series-ttet-paper1',
+                                title: mpdf.targetSeriesName,
+                                fullAmount: mpdf.targetSeriesPrice,
+                                paymentType: 'full',
+                                category: 'Online Mock Test Series',
+                              })
+                            }
+                            className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold cursor-pointer transition-all shadow-2xs flex-1"
+                          >
+                            <CreditCard className="w-3.5 h-3.5" /> Enroll Series (₹{mpdf.targetSeriesPrice}/-)
+                          </button>
+                          <Link
+                            href={`/student/tests?seriesId=${encodeURIComponent(mpdf.targetSeriesId || 'series-ttet-paper1')}`}
+                            className="inline-flex items-center justify-center gap-1 px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all"
+                          >
+                            View Series <ArrowRight className="w-3.5 h-3.5" />
+                          </Link>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ==================== SUBSECTION 3: CURRENT AFFAIRS ==================== */}
       {activeTab === 'current_affairs' && (
         <div className="space-y-6">
           {/* Current Affairs Banner */}
@@ -946,7 +1317,10 @@ export default function StudentStudyMaterialsPage() {
             </div>
 
             {/* Watermarked Document Canvas or Access Barrier */}
-            {!materialsWithAccess.find((m) => m.id === viewingMaterial.id)?.isUnlocked ? (
+            {!(
+              materialsWithAccess.find((m) => m.id === viewingMaterial.id)?.isUnlocked ||
+              mockTestPdfsWithAccess.find((m) => m.id === viewingMaterial.id)?.isUnlocked
+            ) ? (
               <div className="flex-1 overflow-y-auto bg-slate-50 p-8 sm:p-12 flex flex-col items-center justify-center text-center space-y-4">
                 <div className="w-16 h-16 rounded-3xl bg-amber-100 text-amber-600 flex items-center justify-center shadow-xs">
                   <Lock className="w-8 h-8" />

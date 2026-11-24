@@ -245,15 +245,19 @@ const fromCourse = (c: Course): Row => ({
   is_package_bundle: Boolean(c.isPackageBundle),
 });
 
-const toMaterial = (r: Row, courseName: string): StudyMaterial => {
-  const isCurrentAffairs = Boolean(r.ca_category || r.caCategory || r.type === 'Current Affairs');
+const toMaterial = (r: Row, courseName: string, seriesName?: string): StudyMaterial => {
+  const isMockTestPdf = r.type === 'Mock Test PDF' || Boolean(r.series_id || r.seriesId);
+  const isCurrentAffairs =
+    !isMockTestPdf && Boolean(r.ca_category || r.caCategory || r.type === 'Current Affairs');
   return {
     id: r.id,
     title: r.title,
     courseId: r.course_id,
     courseName,
-    type: isCurrentAffairs ? 'Current Affairs' : r.type,
-    caCategory: r.ca_category || r.caCategory || undefined,
+    seriesId: r.series_id || r.seriesId || undefined,
+    seriesName: seriesName || (isMockTestPdf ? courseName : undefined),
+    type: isMockTestPdf ? 'Mock Test PDF' : isCurrentAffairs ? 'Current Affairs' : r.type,
+    caCategory: isCurrentAffairs ? (r.ca_category || r.caCategory || undefined) : undefined,
     driveLink: r.drive_link || r.driveLink || undefined,
     accessScope: r.access_scope || r.accessScope || 'enrolled',
     subject: r.subject || undefined,
@@ -1475,7 +1479,13 @@ export const cgaService = {
       materials.find((m: Row) => m.id === id)?.title ??
       '';
 
-    const materialList = materials.map((m) => toMaterial(m, courseName(m.course_id)));
+    const materialList = materials.map((m) =>
+      toMaterial(
+        m,
+        courseName(m.series_id || m.course_id),
+        m.series_id ? courseName(m.series_id) : undefined
+      )
+    );
     let localTests: MockTest[] = [];
     let localDeletedIds: string[] = [];
     let localDeletedMaterialIds: string[] = [];
@@ -1847,21 +1857,7 @@ export const cgaService = {
         campusImages: (() => {
           const dbContent = site.data?.content as SiteContent | undefined;
           if (dbContent && Array.isArray(dbContent.campusImages)) {
-            if (typeof window !== 'undefined') {
-              try {
-                localStorage.setItem('cga_campus_images', JSON.stringify(dbContent.campusImages));
-              } catch {}
-            }
-            return dbContent.campusImages;
-          }
-          if (typeof window !== 'undefined') {
-            try {
-              const local = localStorage.getItem('cga_campus_images');
-              if (local) {
-                const parsed = JSON.parse(local);
-                if (Array.isArray(parsed)) return parsed;
-              }
-            } catch {}
+            return dbContent.campusImages.slice(0, 20);
           }
           return INITIAL_SEED_DATA.siteContent.campusImages || [];
         })(),
@@ -3002,18 +2998,24 @@ export const cgaService = {
       }
     } catch {}
 
-    const isCurrentAffairs = m.type === 'Current Affairs' || Boolean(m.caCategory);
-    const dbType = m.type === 'Book PDF' ? 'Book PDF' : 'Paid Notes';
+    const isMockTestPdf = m.type === 'Mock Test PDF';
+    const isCurrentAffairs = !isMockTestPdf && (m.type === 'Current Affairs' || Boolean(m.caCategory));
+    const dbType = isMockTestPdf
+      ? 'Mock Test PDF'
+      : m.type === 'Book PDF'
+        ? 'Book PDF'
+        : 'Paid Notes';
     const { error } = await this.client().from('study_materials').upsert({
       id: m.id,
       title: m.title,
       course_id: m.courseId || 'crs-tet-1-online',
+      series_id: isMockTestPdf ? (m.seriesId || null) : null,
       type: dbType,
       ca_category: isCurrentAffairs ? (m.caCategory || 'Domestic') : null,
       drive_link: m.driveLink || null,
-      access_scope: m.accessScope || 'enrolled',
+      access_scope: isMockTestPdf ? 'enrolled' : (m.accessScope || 'enrolled'),
       subject: m.subject || null,
-      price: m.price !== undefined && m.price !== null ? Number(m.price) : 0,
+      price: isMockTestPdf ? 0 : (m.price !== undefined && m.price !== null ? Number(m.price) : 0),
       author: m.author,
       pages: m.pages,
       file_size: m.fileSize,
@@ -3272,6 +3274,31 @@ export const cgaService = {
   },
 
   async upsertAchievement(a: Achievement): Promise<ServiceResult> {
+    invalidateDbCache();
+    try {
+      let token: string | undefined;
+      try {
+        const s = (await this.client().auth.getSession()).data?.session;
+        token = s?.access_token;
+      } catch {}
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch('/api/admin/achievements', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(a),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.success) {
+        invalidateDbCache();
+        return { success: true };
+      }
+      if (!res.ok && res.status === 400 && json.error) {
+        return { success: false, error: json.error };
+      }
+    } catch {}
+
     const { error } = await this.client().from('achievements').upsert({
       id: a.id,
       name: a.name,
@@ -3282,10 +3309,32 @@ export const cgaService = {
       quote: a.quote,
       category: a.category,
     });
+    if (!error) invalidateDbCache();
     return error ? { success: false, error: msg(error, 'Save failed.') } : { success: true };
   },
   async deleteAchievement(id: string) {
+    invalidateDbCache();
+    try {
+      let token: string | undefined;
+      try {
+        const s = (await this.client().auth.getSession()).data?.session;
+        token = s?.access_token;
+      } catch {}
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`/api/admin/achievements?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers,
+      });
+      if (res.ok) {
+        invalidateDbCache();
+        return { success: true };
+      }
+    } catch {}
+
     const { error } = await this.client().from('achievements').delete().eq('id', id);
+    if (!error) invalidateDbCache();
     return error ? { success: false, error: msg(error, 'Delete failed.') } : { success: true };
   },
 
@@ -3499,10 +3548,11 @@ export const cgaService = {
       if (typeof window !== 'undefined') {
         try {
           sessionStorage.removeItem('cga_db_cache');
-          localStorage.setItem('cga_site_content', JSON.stringify(content));
-          if (content.campusImages) {
-            localStorage.setItem('cga_campus_images', JSON.stringify(content.campusImages));
-          }
+          localStorage.removeItem('cga_campus_images');
+          localStorage.setItem(
+            'cga_site_content',
+            JSON.stringify({ ...content, campusImages: undefined })
+          );
         } catch {}
       }
 
