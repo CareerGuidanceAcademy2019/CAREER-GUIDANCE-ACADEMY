@@ -1343,7 +1343,7 @@ export default function StudentMyLearningPage() {
                           <div>
                             <span className="text-slate-400 text-[10px] block">Questions</span>
                             <span className="font-extrabold text-slate-900">
-                              {test.questions?.length || 0} MCQs
+                              {test.questionCount || test.questions?.length || 0} MCQs
                             </span>
                           </div>
                           <div>

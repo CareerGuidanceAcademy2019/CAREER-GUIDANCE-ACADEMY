@@ -88,13 +88,15 @@ export async function POST(request: Request) {
     }
 
     // Fetch existing DB questions & passage groups to ensure complete synchronization
-    const [existingGroupsRes, existingQsRes] = await Promise.all([
+    const [existingGroupsRes, existingQsRes, existingTestRes] = await Promise.all([
       admin.from('mock_question_groups').select('*').eq('test_id', t.id).order('position', { ascending: true }),
       admin.from('mock_questions').select('*').eq('test_id', t.id).order('position', { ascending: true }),
+      admin.from('mock_tests').select('questions').eq('id', t.id).maybeSingle(),
     ]);
 
     const existingDbGroups = existingGroupsRes.data || [];
     const existingDbQs = existingQsRes.data || [];
+    const existingJsonQs = Array.isArray(existingTestRes.data?.questions) ? existingTestRes.data.questions : [];
 
     // Build unified questionGroups list
     const groupMap = new Map<string, any>();
@@ -174,6 +176,8 @@ export async function POST(request: Request) {
           };
         });
       unifiedQuestions = [...fromDb, ...rawQList];
+    } else if (!t.syncQuestions && unifiedQuestions.length === 0 && existingJsonQs.length > 0) {
+      unifiedQuestions = existingJsonQs;
     }
 
     // Validate single correct answer per question

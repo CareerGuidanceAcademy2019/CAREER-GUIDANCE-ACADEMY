@@ -2326,7 +2326,7 @@ Explanation: Sepahijala Sanctuary houses Clouded Leopard National Park and Phayr
                             {test.title}
                           </h2>
                           <p className="text-xs text-slate-500 mt-1">
-                            {test.questions.length} Questions • {test.totalMarks} Marks • {test.durationMinutes} Mins • -
+                            {test.questionCount || test.questions.length} Questions • {test.totalMarks} Marks • {test.durationMinutes} Mins • -
                             {test.negativeMarking} Negative
                           </p>
                         </div>

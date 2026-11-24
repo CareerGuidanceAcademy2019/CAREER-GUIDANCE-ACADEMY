@@ -1929,7 +1929,8 @@ export default function StudentMockTestsPage() {
                 }
 
                 for (const st of db.seriesTests || []) {
-                  if (!st.questions || st.questions.length === 0 || seenTestIds.has(st.id)) continue;
+                  const qLen = Number(st.questionCount || st.questions?.length || 0);
+                  if (qLen === 0 || seenTestIds.has(st.id)) continue;
                   seenTestIds.add(st.id);
                   allAvailableTests.push(st);
                 }

@@ -328,6 +328,8 @@ const toTest = (r: Row, courseName: string, isStudent = false, hasSubmitted = fa
       ? 'Published'
       : 'Draft';
 
+  const qCount = Number(r.question_count || questions.length || 0);
+
   return {
     id: r.id,
     title: r.title,
@@ -340,12 +342,13 @@ const toTest = (r: Row, courseName: string, isStudent = false, hasSubmitted = fa
     courseName: courseName || r.course_name || (r.series_id ? 'Tripura TET Mock Test Series' : ''),
     batchName: r.batch_name || (r.series_id ? 'CGA Mock Test Series' : 'TET Target Batch'),
     durationMinutes: r.duration_minutes || 30,
-    totalMarks: Number(r.total_marks || (questions.length ? questions.length * Number(r.marks_per_question || 1) : 30)),
+    totalMarks: Number(r.total_marks || (qCount ? qCount * Number(r.marks_per_question || 1) : 30)),
     marksPerQuestion: Number(r.marks_per_question || 1),
     negativeMarking: Number(r.negative_marking || 0),
     scheduledDate: r.scheduled_date || (r.window_start ? new Date(r.window_start).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]),
     status: normalizedStatus,
     attemptsAllowed: Number(r.attempts_allowed || 1),
+    questionCount: qCount,
     subject: r.subject || r.subject_id || undefined,
     driveLink: r.drive_link ?? undefined,
     contentStatus: r.content_status ?? 'draft',
@@ -465,8 +468,8 @@ const toSeriesAttempt = (r: Row, studentName: string, studentCode: string, stude
   rank: r.rank ?? null,
 });
 
-// High-Speed Multi-Tier Cache (In-Memory + SessionStorage) with 5-minute TTL
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+// High-Speed Multi-Tier Cache (In-Memory + SessionStorage + LocalStorage) with 15-minute TTL
+const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 let dbCache: { data: CgaDatabase; timestamp: number; sessionKey: string } | null = null;
 let pendingLoadPromise: Promise<CgaDatabase> | null = null;
 
@@ -478,6 +481,9 @@ export function invalidateDbCache(): void {
   if (typeof window !== 'undefined') {
     try {
       sessionStorage.removeItem('cga_db_cache');
+    } catch {}
+    try {
+      localStorage.removeItem('cga_db_cache_v2');
     } catch {}
   }
 }
@@ -1342,10 +1348,10 @@ export const cgaService = {
       return dbCache.data;
     }
 
-    // 2. High-Speed SessionStorage Cache: Instant across page reloads & new tabs (0.1ms)
+    // 2. High-Speed SessionStorage / LocalStorage Cache: Instant across page reloads & new tabs (0.1ms)
     if (!forceRefresh && typeof window !== 'undefined') {
       try {
-        const stored = sessionStorage.getItem('cga_db_cache');
+        const stored = sessionStorage.getItem('cga_db_cache') || localStorage.getItem('cga_db_cache_v2');
         if (stored) {
           const parsed = JSON.parse(stored);
           if (parsed && parsed.sessionKey === sessionKey && (now - parsed.timestamp < CACHE_TTL_MS)) {
@@ -1373,19 +1379,68 @@ export const cgaService = {
     const isStudentOnly = Boolean(session && session.role === 'STUDENT' && session.userId);
     const stuId = session?.userId ?? '';
 
+    const MOCK_TEST_META_COLS =
+      'id,title,course_id,series_id,subject_id,subject,batch_name,duration_minutes,total_marks,marks_per_question,negative_marking,status,content_status,test_type,test_no,scheduled_date,window_start,window_end,window_hours,shuffle,show_solutions,question_count,attempts_allowed,drive_link,purge_after,retention_days,archive_downloaded_at,purge_requires_archive';
+    const TEST_ATTEMPT_SUMMARY_COLS =
+      'id,test_id,student_id,score,total_marks,correct_count,wrong_count,unattempted_count,accuracy,time_taken_minutes,submitted_at';
+    const MOCK_ATTEMPT_SUMMARY_COLS =
+      'id,test_id,student_id,started_at,submitted_at,score,total_marks,correct_count,wrong_count,unattempted_count,accuracy,time_taken_seconds,time_taken_minutes,rank';
+
     const loadTask = (async () => {
       try {
-        // Fire all queries in a single parallel batch across Supabase REST (student-scoped for 100+ concurrent user speed)
+        // Fetch public catalog via Vercel Edge CDN (/api/public/bootstrap) when running in browser
+        // so public & student visits consume 0 bytes of direct Supabase catalog egress on CDN hits.
+        const fetchPublicBootstrap = async (): Promise<{
+          site: any;
+          faculty: Row[];
+          courses: Row[];
+          achievements: Row[];
+          seriesRaw: Row[];
+          subjectsRaw: Row[];
+          announcements: Row[];
+          allMockTestsRaw: Row[];
+        }> => {
+          if (typeof window !== 'undefined') {
+            try {
+              const bustParam = forceRefresh ? `?bust=${Date.now()}` : '';
+              const res = await fetch(`/api/public/bootstrap${bustParam}`);
+              if (res.ok) {
+                const json = await res.json();
+                if (json && json.success) {
+                  return {
+                    site: { data: { content: json.siteContent } },
+                    faculty: json.faculty ?? [],
+                    courses: json.courses ?? [],
+                    achievements: json.achievements ?? [],
+                    seriesRaw: json.mockSeries ?? [],
+                    subjectsRaw: json.mockSubjects ?? [],
+                    announcements: json.announcements ?? [],
+                    allMockTestsRaw: json.mockTestsMeta ?? [],
+                  };
+                }
+              }
+            } catch {}
+          }
+          // Fallback to direct lightweight metadata queries (excluding 1.64 MB mock_tests.questions)
+          const [site, faculty, courses, achievements, seriesRaw, subjectsRaw, announcements, allMockTestsRaw] =
+            await Promise.all([
+              Promise.resolve(sb.from('site_content').select('content').eq('id', 1).maybeSingle()).catch(() => ({
+                data: null,
+              })),
+              one(sb.from('faculty').select('*').order('name')),
+              one(sb.from('courses').select('*').order('name')),
+              one(sb.from('achievements').select('*')),
+              one(sb.from('mock_series').select('*').order('price')),
+              one(sb.from('mock_subjects').select('*').order('sort_order')),
+              one(sb.from('announcements').select('*').order('date', { ascending: false })),
+              one(sb.from('mock_tests').select(MOCK_TEST_META_COLS)),
+            ]);
+          return { site, faculty, courses, achievements, seriesRaw, subjectsRaw, announcements, allMockTestsRaw };
+        };
+
         const [
-          site,
-          faculty,
-          courses,
-          achievements,
-          seriesRaw,
-          subjectsRaw,
+          pub,
           materials,
-          allMockTestsRaw,
-          announcements,
           profiles,
           enrollments,
           payments,
@@ -1394,34 +1449,9 @@ export const cgaService = {
           seriesEnrRaw,
           seriesAttemptsRaw,
           peersRaw,
-        ]: [
-          any,
-          Row[],
-          Row[],
-          Row[],
-          Row[],
-          Row[],
-          Row[],
-          Row[],
-          Row[],
-          Row[],
-          Row[],
-          Row[],
-          Row[],
-          Row[],
-          Row[],
-          Row[],
-          Row[]
         ] = await Promise.all([
-          Promise.resolve(sb.from('site_content').select('content').eq('id', 1).maybeSingle()).catch(() => ({ data: null })),
-          one(sb.from('faculty').select('*').order('name')),
-          one(sb.from('courses').select('*').order('name')),
-          one(sb.from('achievements').select('*')),
-          one(sb.from('mock_series').select('*').order('price')),
-          one(sb.from('mock_subjects').select('*').order('sort_order')),
+          fetchPublicBootstrap(),
           session ? one(sb.from('study_materials').select('*').order('uploaded_date', { ascending: false })) : Promise.resolve([] as Row[]),
-          one(sb.from('mock_tests').select('*')),
-          session ? one(sb.from('announcements').select('*').order('date', { ascending: false })) : Promise.resolve([] as Row[]),
           session
             ? isStudentOnly
               ? one(sb.from('profiles').select('*').eq('id', stuId))
@@ -1440,7 +1470,7 @@ export const cgaService = {
           session
             ? isStudentOnly
               ? one(sb.from('test_attempts').select('*').eq('student_id', stuId).order('submitted_at', { ascending: false }))
-              : one(sb.from('test_attempts').select('*').order('submitted_at', { ascending: false }))
+              : one(sb.from('test_attempts').select(TEST_ATTEMPT_SUMMARY_COLS).order('submitted_at', { ascending: false }))
             : Promise.resolve([] as Row[]),
           session && session.role === 'ADMIN'
             ? one(sb.from('enquiries').select('*').order('created_at', { ascending: false }))
@@ -1453,7 +1483,7 @@ export const cgaService = {
           session
             ? isStudentOnly
               ? one(sb.from('mock_attempts').select('*').eq('student_id', stuId).order('submitted_at', { ascending: false }))
-              : one(sb.from('mock_attempts').select('*').order('submitted_at', { ascending: false }))
+              : one(sb.from('mock_attempts').select(MOCK_ATTEMPT_SUMMARY_COLS).order('submitted_at', { ascending: false }))
             : Promise.resolve([] as Row[]),
           session && session.role === 'STUDENT'
             ? (async (): Promise<Row[]> => {
@@ -1466,6 +1496,17 @@ export const cgaService = {
               })()
             : Promise.resolve([] as Row[]),
         ]);
+
+        const {
+          site,
+          faculty,
+          courses,
+          achievements,
+          seriesRaw,
+          subjectsRaw,
+          announcements,
+          allMockTestsRaw,
+        } = pub;
 
         const tests = allMockTestsRaw;
         const seriesTestsRaw = allMockTestsRaw.filter((t: Row) => Boolean(t.series_id));
@@ -1964,15 +2005,16 @@ export const cgaService = {
     };
 
     if (typeof window !== 'undefined') {
+      const serialized = JSON.stringify({
+        data: resultDb,
+        timestamp: Date.now(),
+        sessionKey,
+      });
       try {
-        sessionStorage.setItem(
-          'cga_db_cache',
-          JSON.stringify({
-            data: resultDb,
-            timestamp: Date.now(),
-            sessionKey,
-          })
-        );
+        sessionStorage.setItem('cga_db_cache', serialized);
+      } catch {}
+      try {
+        localStorage.setItem('cga_db_cache_v2', serialized);
       } catch {}
     }
 
@@ -3184,7 +3226,7 @@ export const cgaService = {
       validSubjId = null;
     }
 
-    const { error } = await this.client().from('mock_tests').upsert({
+    const fallbackPayload: Record<string, any> = {
       id: t.id,
       title: t.title,
       subject: t.subject ?? null,
@@ -3194,7 +3236,6 @@ export const cgaService = {
       subject_id: validSubjId,
       test_type: (t as any).testType ?? 'sectional',
       test_no: (t as any).testNo ?? 1,
-      question_count: t.questions?.length || 0,
       batch_name: t.batchName || '',
       duration_minutes: t.durationMinutes || 60,
       total_marks: t.totalMarks || (t.questions?.length ? t.questions.length * (t.marksPerQuestion || 1) : 30),
@@ -3203,10 +3244,15 @@ export const cgaService = {
       scheduled_date: t.scheduledDate || '',
       status: t.status || 'Draft',
       attempts_allowed: Number(t.attemptsAllowed || (t as any).attempts_allowed || 1),
-      questions: t.questions || [],
       window_start: (t as any).windowStart ?? null,
       window_end: (t as any).windowEnd ?? null,
-    });
+    };
+    if (Array.isArray(t.questions) && (t.questions.length > 0 || (t as any).syncQuestions)) {
+      fallbackPayload.questions = t.questions;
+      fallbackPayload.question_count = t.questions.length;
+    }
+
+    const { error } = await this.client().from('mock_tests').upsert(fallbackPayload);
 
     if (error) {
       return { success: false, error: msg(error, 'Could not save mock test to database.') };

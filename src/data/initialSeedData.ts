@@ -197,6 +197,7 @@ export interface MockTest {
   scheduledDate: string;
   status: 'Published' | 'Draft';
   attemptsAllowed?: number;
+  questionCount?: number;
   questions: MCQQuestion[];
   questionGroups?: MockQuestionGroup[];
   contentStatus?: 'draft' | 'active' | 'expired' | 'purged';

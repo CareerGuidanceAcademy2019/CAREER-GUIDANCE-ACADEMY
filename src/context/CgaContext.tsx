@@ -281,7 +281,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
           } else {
             sessionStorage.removeItem('cga_auth_session');
           }
-        } catch {}
+        } catch { }
       }
       setIsHydrated(true);
       // Trigger database load without blocking login redirect so 100+ concurrent logins navigate immediately
@@ -294,7 +294,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
     let active = true;
     let initialSession: AuthSession | null = null;
 
-    // 0ms instant hydration from sessionStorage (eliminates any layout spinner or blank cards)
+    // 0ms instant hydration from sessionStorage / localStorage (eliminates any layout spinner or blank cards)
     if (typeof window !== 'undefined') {
       try {
         const cached = sessionStorage.getItem('cga_auth_session');
@@ -307,7 +307,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
             setIsHydrated(true);
           }
         }
-        const cachedDb = sessionStorage.getItem('cga_db_cache');
+        const cachedDb = sessionStorage.getItem('cga_db_cache') || localStorage.getItem('cga_db_cache_v2');
         if (cachedDb) {
           const parsedDb = JSON.parse(cachedDb);
           if (parsedDb && parsedDb.data && parsedDb.data.courses?.length > 0) {
@@ -315,22 +315,14 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
             setIsDbLoading(false);
           }
         }
-      } catch {}
+      } catch { }
     }
 
-    // Fire session verification and initial database fetch in parallel (cuts cold-load latency by ~50%)
+    // Resolve session first (fast local session check) and then load database once to avoid double egress
     (async () => {
       try {
-        const sessionPromise = cgaService.getSession().catch(() => null);
-        const initialDbPromise = cgaService.loadDatabase(initialSession, false).catch(() => null);
-
-        const [s, initialDb] = await Promise.all([sessionPromise, initialDbPromise]);
+        const s = await cgaService.getSession().catch(() => initialSession);
         if (!active) return;
-
-        if (initialDb) {
-          setDb(initialDb);
-          setIsDbLoading(false);
-        }
 
         sessionRef.current = s;
         setSession(s);
@@ -341,14 +333,10 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
             } else {
               sessionStorage.removeItem('cga_auth_session');
             }
-          } catch {}
+          } catch { }
         }
         setIsHydrated(true);
-
-        // If authenticated session differs from initialSession, refresh scoped data
-        if ((s?.userId || null) !== (initialSession?.userId || null) || (s?.role || null) !== (initialSession?.role || null)) {
-          await refresh(false);
-        }
+        await refresh(false);
       } catch {
         if (active) {
           setIsHydrated(true);
@@ -728,7 +716,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
           try {
             const customP = JSON.parse(localStorage.getItem('cga_custom_payments') || '[]');
             targetPayment = customP.find((p: any) => p.id === paymentId || p.receiptNo === paymentId);
-          } catch {}
+          } catch { }
         }
         if (!targetPayment && typeof window !== 'undefined') {
           try {
@@ -752,7 +740,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
                 remarks: `Admin approved. Ref: ${r.referenceCode}`,
               };
             }
-          } catch {}
+          } catch { }
         }
 
         if (!targetPayment) return { success: false, error: 'Payment record not found.' };
@@ -763,15 +751,15 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
           const paymentExists = prev.feePayments.some((p) => p.id === targetPayment!.id || p.receiptNo === targetPayment!.receiptNo);
           const nextPayments = paymentExists
             ? prev.feePayments.map((p) =>
-                p.id === targetPayment!.id || p.receiptNo === targetPayment!.receiptNo
-                  ? {
-                      ...p,
-                      status: 'Verified' as const,
-                      reviewedBy: sessionRef.current?.name || 'Administrator',
-                      reviewedAt: new Date().toISOString(),
-                    }
-                  : p
-              )
+              p.id === targetPayment!.id || p.receiptNo === targetPayment!.receiptNo
+                ? {
+                  ...p,
+                  status: 'Verified' as const,
+                  reviewedBy: sessionRef.current?.name || 'Administrator',
+                  reviewedAt: new Date().toISOString(),
+                }
+                : p
+            )
             : [{ ...targetPayment!, status: 'Verified' as const }, ...prev.feePayments];
 
           // Unlock enrollment / clear due for the student
@@ -805,7 +793,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
                   localStorage.setItem('cga_material_access', JSON.stringify(maList));
                 }
               }
-            } catch {}
+            } catch { }
           }
 
           const crs = prev.courses.find((c) => c.id === targetItemId);
@@ -845,18 +833,18 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
 
           const nextSeriesEnrollments = isSeries && targetItemId
             ? [
-                ...prev.seriesEnrollments.filter(
-                  (se) => !(se.studentId === targetPayment.studentId && se.seriesId === targetItemId)
-                ),
-                {
-                  id: `ser-enr-${Date.now()}`,
-                  studentId: targetPayment.studentId,
-                  seriesId: targetItemId,
-                  paymentId: targetPayment.id,
-                  enrolledAt: new Date().toISOString(),
-                  accessValidUntil: new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString(),
-                },
-              ]
+              ...prev.seriesEnrollments.filter(
+                (se) => !(se.studentId === targetPayment.studentId && se.seriesId === targetItemId)
+              ),
+              {
+                id: `ser-enr-${Date.now()}`,
+                studentId: targetPayment.studentId,
+                seriesId: targetItemId,
+                paymentId: targetPayment.id,
+                enrolledAt: new Date().toISOString(),
+                accessValidUntil: new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString(),
+              },
+            ]
             : prev.seriesEnrollments;
 
           return {
@@ -888,11 +876,11 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
           feePayments: prev.feePayments.map((p) =>
             p.id === paymentId
               ? {
-                  ...p,
-                  status: 'Rejected' as const,
-                  rejectionReason: reason,
-                  reviewedAt: new Date().toISOString(),
-                }
+                ...p,
+                status: 'Rejected' as const,
+                rejectionReason: reason,
+                reviewedAt: new Date().toISOString(),
+              }
               : p
           ),
         }));
@@ -1344,7 +1332,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
             'cga_site_content',
             JSON.stringify({ ...content, campusImages: undefined })
           );
-        } catch {}
+        } catch { }
       }
 
       // 3. Persist to database via service
@@ -1402,9 +1390,9 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         mockSeries: prev.mockSeries.map((s) => (s.id === series.id ? series : s)),
         mockSubjects: res.subjects
           ? [
-              ...(prev.mockSubjects || []).filter((sub) => sub.seriesId !== series.id),
-              ...res.subjects,
-            ]
+            ...(prev.mockSubjects || []).filter((sub) => sub.seriesId !== series.id),
+            ...res.subjects,
+          ]
           : prev.mockSubjects,
       }));
       showToast('Mock Test Series Updated', `${series.name} (₹${series.price}/-) updated successfully.`, 'success');
@@ -1649,35 +1637,35 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
 
   const currentStudent = session
     ? db.students.find((s) => s.id === session.userId) ||
-      (session.role === 'ADMIN'
-        ? {
-            id: session.userId,
-            studentCode: 'CGA-ADMIN',
-            name: session.name,
-            email: session.email,
-            phone: session.email === 'careerguidanceacademy2019@gmail.com' ? '7005929189' : '7629882835',
-            password: '',
-            photo: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
-            guardianName: 'Institute Administration',
-            address: 'Career Guidance Academy, Udaipur',
-            permanentAddress: 'Udaipur, Tripura',
-            qualification: 'Post Graduate',
-            targetExam: 'All Exams (Admin Preview)',
-            joinedDate: new Date().toISOString().slice(0, 10),
-            status: 'Active',
-            enrollments: db.courses.map((c) => ({
-              courseId: c.id,
-              courseName: c.name,
-              batchName: c.batchName,
-              facultyName: c.facultyName,
-              enrolledDate: new Date().toISOString().slice(0, 10),
-              progress: 100,
-              totalFee: c.price,
-              paidAmount: c.price,
-              dueAmount: 0,
-            })),
-          }
-        : null)
+    (session.role === 'ADMIN'
+      ? {
+        id: session.userId,
+        studentCode: 'CGA-ADMIN',
+        name: session.name,
+        email: session.email,
+        phone: session.email === 'careerguidanceacademy2019@gmail.com' ? '7005929189' : '7629882835',
+        password: '',
+        photo: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
+        guardianName: 'Institute Administration',
+        address: 'Career Guidance Academy, Udaipur',
+        permanentAddress: 'Udaipur, Tripura',
+        qualification: 'Post Graduate',
+        targetExam: 'All Exams (Admin Preview)',
+        joinedDate: new Date().toISOString().slice(0, 10),
+        status: 'Active',
+        enrollments: db.courses.map((c) => ({
+          courseId: c.id,
+          courseName: c.name,
+          batchName: c.batchName,
+          facultyName: c.facultyName,
+          enrolledDate: new Date().toISOString().slice(0, 10),
+          progress: 100,
+          totalFee: c.price,
+          paidAmount: c.price,
+          dueAmount: 0,
+        })),
+      }
+      : null)
     : null;
 
   return (
@@ -1720,9 +1708,9 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         updateBatchDuration,
         extendBatchDuration,
         updateStudentEnrollmentDuration,
-      transferStudentEnrollment,
-      removeStudentEnrollment,
-      enrollStudentAsAdmin,
+        transferStudentEnrollment,
+        removeStudentEnrollment,
+        enrollStudentAsAdmin,
         saveStudent,
         adminSetStudentPassword,
         toggleStudentStatus,

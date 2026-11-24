@@ -86,11 +86,11 @@ export async function compressCampusPhoto(
           return canvas.toDataURL('image/jpeg', q);
         };
 
-        // Start at high clarity (0.82); gently step down only if needed so 20 photos fit effortlessly
+        // Start at high clarity (0.80); step down smoothly so 20 photos stay compact (~55-75KB each) for minimal DB egress
         let dataUrl = encodeAtQuality(quality);
         let compressedSizeKb = Math.round(getDataUrlSizeKb(dataUrl));
-        for (const qStep of [0.78, 0.74, 0.70]) {
-          if (compressedSizeKb <= 115) break;
+        for (const qStep of [0.76, 0.72, 0.66, 0.60]) {
+          if (compressedSizeKb <= 75) break;
           dataUrl = encodeAtQuality(qStep);
           compressedSizeKb = Math.round(getDataUrlSizeKb(dataUrl));
         }
