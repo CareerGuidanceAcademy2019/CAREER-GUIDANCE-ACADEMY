@@ -38,8 +38,10 @@ export function SessionHeartbeat() {
   const checkSession = useCallback(async (force = false) => {
     if (!isProtectedRoute || isCheckingRef.current || isTerminated) return;
     const now = Date.now();
-    // Throttle routine checks, but immediately execute on forced trigger (tab activation)
-    if (!force && now - lastCheckRef.current < 3000) return;
+    // Enforce 60s cooldown on tab focus/visibilitychange and 120s on routine checks
+    // to prevent redundant Supabase Auth/RPC egress when switching tabs or apps.
+    const minGapMs = force ? 60_000 : 120_000;
+    if (now - lastCheckRef.current < minGapMs) return;
 
     isCheckingRef.current = true;
     lastCheckRef.current = now;
@@ -64,12 +66,12 @@ export function SessionHeartbeat() {
       checkSession();
     }, 1500);
 
-    // Heartbeat timers: 3 minutes active tab, 10 minutes hidden tab
+    // Heartbeat timers: 5 minutes active tab, 15 minutes hidden tab
     let intervalId: NodeJS.Timeout | null = null;
 
     const setupInterval = () => {
       if (intervalId) clearInterval(intervalId);
-      const delay = document.hidden ? 600000 : 180000;
+      const delay = document.hidden ? 900_000 : 300_000;
       intervalId = setInterval(() => checkSession(false), delay);
     };
 

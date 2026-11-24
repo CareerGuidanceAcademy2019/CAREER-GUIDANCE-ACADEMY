@@ -468,8 +468,10 @@ const toSeriesAttempt = (r: Row, studentName: string, studentCode: string, stude
   rank: r.rank ?? null,
 });
 
-// High-Speed Multi-Tier Cache (In-Memory + SessionStorage + LocalStorage) with 15-minute TTL
-const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+// High-Speed Multi-Tier Cache (In-Memory + SessionStorage + LocalStorage)
+const CACHE_TTL_MS = 20 * 60 * 1000; // 20 minutes for user session DB snapshot
+const PUBLIC_BOOTSTRAP_CACHE_KEY = 'cga_public_bootstrap_v3';
+const PUBLIC_BOOTSTRAP_TTL_MS = 30 * 60 * 1000; // 30 minutes on-device public catalog cache
 let dbCache: { data: CgaDatabase; timestamp: number; sessionKey: string } | null = null;
 let pendingLoadPromise: Promise<CgaDatabase> | null = null;
 
@@ -484,6 +486,7 @@ export function invalidateDbCache(): void {
     } catch {}
     try {
       localStorage.removeItem('cga_db_cache_v2');
+      localStorage.removeItem(PUBLIC_BOOTSTRAP_CACHE_KEY);
     } catch {}
   }
 }
@@ -1401,12 +1404,42 @@ export const cgaService = {
           allMockTestsRaw: Row[];
         }> => {
           if (typeof window !== 'undefined') {
+            // 0ms On-Device Public Catalog Cache (30-min TTL) — eliminates repeat catalog requests
+            // even across login/logout or when student-specific data refreshes
+            if (!forceRefresh) {
+              try {
+                const rawPub = localStorage.getItem(PUBLIC_BOOTSTRAP_CACHE_KEY);
+                if (rawPub) {
+                  const cachedPub = JSON.parse(rawPub);
+                  if (cachedPub && cachedPub.payload && Date.now() - cachedPub.timestamp < PUBLIC_BOOTSTRAP_TTL_MS) {
+                    const p = cachedPub.payload;
+                    return {
+                      site: { data: { content: p.siteContent } },
+                      faculty: p.faculty ?? [],
+                      courses: p.courses ?? [],
+                      achievements: p.achievements ?? [],
+                      seriesRaw: p.mockSeries ?? [],
+                      subjectsRaw: p.mockSubjects ?? [],
+                      announcements: p.announcements ?? [],
+                      allMockTestsRaw: p.mockTestsMeta ?? [],
+                    };
+                  }
+                }
+              } catch {}
+            }
+
             try {
               const bustParam = forceRefresh ? `?bust=${Date.now()}` : '';
               const res = await fetch(`/api/public/bootstrap${bustParam}`);
               if (res.ok) {
                 const json = await res.json();
                 if (json && json.success) {
+                  try {
+                    localStorage.setItem(
+                      PUBLIC_BOOTSTRAP_CACHE_KEY,
+                      JSON.stringify({ timestamp: Date.now(), payload: json })
+                    );
+                  } catch {}
                   return {
                     site: { data: { content: json.siteContent } },
                     faculty: json.faculty ?? [],

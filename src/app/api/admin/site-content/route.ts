@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireAdmin, createAdminSupabase } from '@/lib/supabase/server';
 import { checkRateLimit, createRateLimitResponse, getClientIp, RATE_LIMIT_RULES } from '@/lib/rateLimit';
 import { MAX_CAMPUS_IMAGES } from '@/lib/imageCompressor';
+import { uploadDataUrlToMedia, deleteMediaByPublicUrl, isRasterDataUrl } from '@/lib/mediaStorage';
 
 export async function GET() {
   try {
@@ -68,7 +69,8 @@ export async function POST(request: Request) {
       ? existingContent.campusImages
       : [];
 
-    // Support atomic single-image operations so uploading photo #11..#20 never has to re-send all 20 base64 images
+    // Support atomic single-image operations so uploading photo #11..#20 never has to re-send all 20 images
+    // Automatically uploads any raster base64 data URL into Supabase Storage `media` bucket (1-year CDN cache)
     if (body.action === 'add_campus_image' && body.image) {
       if (existingImages.length >= MAX_CAMPUS_IMAGES) {
         return NextResponse.json(
@@ -76,7 +78,16 @@ export async function POST(request: Request) {
           { status: 400 }
         );
       }
-      const nextImages = [body.image, ...existingImages].slice(0, MAX_CAMPUS_IMAGES);
+      const imgObj = { ...body.image };
+      if (isRasterDataUrl(imgObj.url)) {
+        imgObj.url = await uploadDataUrlToMedia(
+          adminSupabase,
+          imgObj.url,
+          'campus',
+          String(imgObj.id || `campus-${Date.now()}`)
+        );
+      }
+      const nextImages = [imgObj, ...existingImages].slice(0, MAX_CAMPUS_IMAGES);
       const mergedContent = { ...existingContent, campusImages: nextImages };
       const { error: upsertErr } = await adminSupabase.from('site_content').upsert(
         { id: 1, content: mergedContent, updated_at: new Date().toISOString() },
@@ -93,8 +104,21 @@ export async function POST(request: Request) {
     }
 
     if (body.action === 'update_campus_image' && body.image) {
+      const prevImg = existingImages.find((img: any) => img.id === body.image.id);
+      const imgPatch = { ...body.image };
+      if (isRasterDataUrl(imgPatch.url)) {
+        imgPatch.url = await uploadDataUrlToMedia(
+          adminSupabase,
+          imgPatch.url,
+          'campus',
+          String(imgPatch.id || `campus-${Date.now()}`)
+        );
+        if (prevImg?.url && prevImg.url !== imgPatch.url) {
+          await deleteMediaByPublicUrl(adminSupabase, prevImg.url);
+        }
+      }
       const nextImages = existingImages.map((img: any) =>
-        img.id === body.image.id ? { ...img, ...body.image } : img
+        img.id === imgPatch.id ? { ...img, ...imgPatch } : img
       );
       const mergedContent = { ...existingContent, campusImages: nextImages };
       const { error: upsertErr } = await adminSupabase.from('site_content').upsert(
@@ -112,6 +136,7 @@ export async function POST(request: Request) {
     }
 
     if (body.action === 'delete_campus_image' && body.imageId) {
+      const removedImg = existingImages.find((img: any) => img.id === body.imageId);
       const nextImages = existingImages.filter((img: any) => img.id !== body.imageId);
       const mergedContent = { ...existingContent, campusImages: nextImages };
       const { error: upsertErr } = await adminSupabase.from('site_content').upsert(
@@ -120,6 +145,9 @@ export async function POST(request: Request) {
       );
       if (upsertErr) {
         return NextResponse.json({ error: upsertErr.message }, { status: 500 });
+      }
+      if (removedImg?.url) {
+        await deleteMediaByPublicUrl(adminSupabase, removedImg.url);
       }
       return NextResponse.json({
         success: true,
@@ -143,7 +171,8 @@ export async function POST(request: Request) {
       ...newContent,
     };
 
-    // Ensure campusImages is strictly preserved as passed and capped at MAX_CAMPUS_IMAGES (20)
+    // Ensure campusImages is strictly preserved as passed, capped at MAX_CAMPUS_IMAGES (20),
+    // and any inline base64 raster images are offloaded to Supabase Storage `media` bucket
     if (Array.isArray(newContent.campusImages)) {
       if (newContent.campusImages.length > MAX_CAMPUS_IMAGES) {
         return NextResponse.json(
@@ -151,7 +180,21 @@ export async function POST(request: Request) {
           { status: 400 }
         );
       }
-      mergedContent.campusImages = newContent.campusImages;
+      const processedImages = await Promise.all(
+        newContent.campusImages.map(async (img: any, idx: number) => {
+          if (img && isRasterDataUrl(img.url)) {
+            const publicUrl = await uploadDataUrlToMedia(
+              adminSupabase,
+              img.url,
+              'campus',
+              String(img.id || `campus-${Date.now()}-${idx}`)
+            );
+            return { ...img, url: publicUrl };
+          }
+          return img;
+        })
+      );
+      mergedContent.campusImages = processedImages;
     }
 
     // Ensure urgentPopupAnnouncements array is preserved cleanly when updated from Public Site CMS

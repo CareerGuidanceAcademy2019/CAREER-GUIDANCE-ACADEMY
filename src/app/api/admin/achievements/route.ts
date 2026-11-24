@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createAdminSupabase, requireAdmin } from '@/lib/supabase/server';
 import { checkRateLimit, createRateLimitResponse, getClientIp, RATE_LIMIT_RULES } from '@/lib/rateLimit';
 import { getDataUrlSizeKb, TOPPER_DP_MIN_KB, TOPPER_DP_MAX_KB } from '@/lib/imageCompressor';
+import { uploadDataUrlToMedia, deleteMediaByPublicUrl, isRasterDataUrl } from '@/lib/mediaStorage';
 
 export async function POST(request: Request) {
   const adminId = await requireAdmin(request);
@@ -47,6 +48,22 @@ export async function POST(request: Request) {
     const id = String(body.id || `ach-${Date.now()}`).trim();
     const admin = createAdminSupabase();
 
+    // Offload raster base64 candidate DPs to Supabase Storage `media` bucket (1-year CDN cache)
+    let storedPhotoUrl = photo;
+    if (isRasterDataUrl(photo)) {
+      const { data: existingAch } = await admin
+        .from('achievements')
+        .select('photo')
+        .eq('id', id)
+        .maybeSingle();
+
+      storedPhotoUrl = await uploadDataUrlToMedia(admin, photo, 'achievements', id);
+
+      if (existingAch?.photo && existingAch.photo !== storedPhotoUrl) {
+        await deleteMediaByPublicUrl(admin, existingAch.photo);
+      }
+    }
+
     const { data, error } = await admin
       .from('achievements')
       .upsert({
@@ -55,7 +72,7 @@ export async function POST(request: Request) {
         exam: String(body.exam).trim(),
         rank: String(body.rank).trim(),
         year: String(body.year || '2026').trim(),
-        photo,
+        photo: storedPhotoUrl,
         quote: String(body.quote || '').trim(),
         category: String(body.category || 'Teaching and Recruitment Exams').trim(),
       })
@@ -92,9 +109,19 @@ export async function DELETE(request: Request) {
   }
 
   const admin = createAdminSupabase();
+  const { data: existingAch } = await admin
+    .from('achievements')
+    .select('photo')
+    .eq('id', id)
+    .maybeSingle();
+
   const { error } = await admin.from('achievements').delete().eq('id', id);
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+
+  if (existingAch?.photo) {
+    await deleteMediaByPublicUrl(admin, existingAch.photo);
   }
 
   return NextResponse.json({ success: true, id });

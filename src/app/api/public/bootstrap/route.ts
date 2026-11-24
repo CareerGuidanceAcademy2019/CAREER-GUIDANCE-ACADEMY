@@ -54,7 +54,7 @@ export async function GET(request: Request) {
 
     const cacheHeader = bust
       ? 'private, no-cache, no-store, must-revalidate'
-      : 'public, s-maxage=120, stale-while-revalidate=600';
+      : 'public, max-age=180, s-maxage=600, stale-while-revalidate=3600';
 
     return NextResponse.json(
       {

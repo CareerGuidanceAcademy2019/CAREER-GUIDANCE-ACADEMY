@@ -157,27 +157,46 @@ export default function AdminPaymentSettingsPage() {
       return;
     }
 
-    const updatedSettings: PaymentSettingsRecord = {
-      ...settings,
-      ...(qrTarget === 'primary'
-        ? {
-            qrImageUrl: qrPreview,
-            upiId: qrUpiId.trim(),
-            qrLabel: qrLabel.trim() || 'Primary Institute QR',
-          }
-        : {
-            qrImageUrlBackup: qrPreview,
-            upiIdBackup: qrUpiId.trim(),
-            qrLabelBackup: qrLabel.trim() || 'Secondary / Alternate QR',
-          }),
-    };
-
-    setSettings(updatedSettings);
-    setQrModalOpen(false);
-
+    let finalQrUrl = qrPreview;
     try {
       const { createClient } = await import('@/lib/supabase/client');
       const sb = createClient();
+
+      // Upload base64 QR image to public Supabase `media` bucket (1-year CDN cache) instead of storing in Postgres
+      if (qrPreview.startsWith('data:image/')) {
+        const resp = await fetch(qrPreview);
+        const blob = await resp.blob();
+        const ext = blob.type.includes('png') ? 'png' : blob.type.includes('webp') ? 'webp' : 'jpg';
+        const objectPath = `payment-qr/${qrTarget}-upi-qr-${Date.now()}.${ext}`;
+        const { error: uploadErr } = await sb.storage.from('media').upload(objectPath, blob, {
+          contentType: blob.type || 'image/jpeg',
+          cacheControl: '31536000',
+          upsert: true,
+        });
+        if (!uploadErr) {
+          const { data: pub } = sb.storage.from('media').getPublicUrl(objectPath);
+          if (pub?.publicUrl) finalQrUrl = pub.publicUrl;
+        }
+      }
+
+      const updatedSettings: PaymentSettingsRecord = {
+        ...settings,
+        ...(qrTarget === 'primary'
+          ? {
+              qrImageUrl: finalQrUrl,
+              upiId: qrUpiId.trim(),
+              qrLabel: qrLabel.trim() || 'Primary Institute QR',
+            }
+          : {
+              qrImageUrlBackup: finalQrUrl,
+              upiIdBackup: qrUpiId.trim(),
+              qrLabelBackup: qrLabel.trim() || 'Secondary / Alternate QR',
+            }),
+      };
+
+      setSettings(updatedSettings);
+      setQrModalOpen(false);
+
       await sb
         .from('payment_settings')
         .update({
@@ -204,6 +223,22 @@ export default function AdminPaymentSettingsPage() {
         'success'
       );
     } catch {
+      const updatedSettings: PaymentSettingsRecord = {
+        ...settings,
+        ...(qrTarget === 'primary'
+          ? {
+              qrImageUrl: finalQrUrl,
+              upiId: qrUpiId.trim(),
+              qrLabel: qrLabel.trim() || 'Primary Institute QR',
+            }
+          : {
+              qrImageUrlBackup: finalQrUrl,
+              upiIdBackup: qrUpiId.trim(),
+              qrLabelBackup: qrLabel.trim() || 'Secondary / Alternate QR',
+            }),
+      };
+      setSettings(updatedSettings);
+      setQrModalOpen(false);
       localStorage.setItem('cga_active_qr_image', updatedSettings.qrImageUrl || '/cga-upi-qr.webp');
       if (updatedSettings.qrImageUrlBackup) {
         localStorage.setItem('cga_backup_qr_image', updatedSettings.qrImageUrlBackup);
