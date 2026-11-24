@@ -240,7 +240,7 @@ export function UrgentAnnouncementModal() {
             </div>
           ) : (
             <span className="text-[11px] font-medium text-slate-500">
-              Click the top-right ✕ or Continue to enter the portal
+              Use the top-right close button or Continue to enter the portal
             </span>
           )}
 

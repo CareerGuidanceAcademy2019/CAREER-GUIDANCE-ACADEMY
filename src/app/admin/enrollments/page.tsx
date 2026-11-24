@@ -494,7 +494,7 @@ export default function AdminEnrollmentsPage() {
             className="w-full px-4 py-3.5 pr-10 rounded-2xl border-2 border-blue-200 bg-white font-extrabold text-slate-800 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#0056b3] focus:border-[#0056b3] shadow-xs cursor-pointer appearance-none transition-all"
           >
             {(categoryFilter === 'all' || categoryFilter === 'mock_series') && (
-              <optgroup label={`── 🎯 MOCK TEST SERIES PACKAGES (${allMockSeries.length}) ──`}>
+              <optgroup label={`── MOCK TEST SERIES PACKAGES (${allMockSeries.length}) ──`}>
                 {allMockSeries.map((s) => {
                   const count = seriesEnrollmentCounts[s.id] || 0;
                   return (
@@ -507,7 +507,7 @@ export default function AdminEnrollmentsPage() {
             )}
 
             {(categoryFilter === 'all' || categoryFilter === 'course') && (
-              <optgroup label={`── 📚 CLASSROOM & ONLINE COURSE BATCHES (${allCourses.length}) ──`}>
+              <optgroup label={`── CLASSROOM & ONLINE COURSE BATCHES (${allCourses.length}) ──`}>
                 {allCourses.map((c) => {
                   const count = courseEnrollmentCounts[c.id] || 0;
                   return (

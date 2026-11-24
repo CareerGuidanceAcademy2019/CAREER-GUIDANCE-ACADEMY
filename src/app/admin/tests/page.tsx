@@ -5010,7 +5010,7 @@ Explanation: Paragraph 1 highlights exponential industrial growth and urban expa
                                           : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                       }`}
                                     >
-                                      {editingQuestionState.correctOptionIndex === 0 ? '✓ Correct Answer' : 'Set as Correct'}
+                                      {editingQuestionState.correctOptionIndex === 0 ? 'Correct Answer' : 'Set as Correct'}
                                     </button>
                                   </div>
                                   <input
@@ -5048,7 +5048,7 @@ Explanation: Paragraph 1 highlights exponential industrial growth and urban expa
                                           : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                       }`}
                                     >
-                                      {editingQuestionState.correctOptionIndex === 1 ? '✓ Correct Answer' : 'Set as Correct'}
+                                      {editingQuestionState.correctOptionIndex === 1 ? 'Correct Answer' : 'Set as Correct'}
                                     </button>
                                   </div>
                                   <input
@@ -5086,7 +5086,7 @@ Explanation: Paragraph 1 highlights exponential industrial growth and urban expa
                                           : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                       }`}
                                     >
-                                      {editingQuestionState.correctOptionIndex === 2 ? '✓ Correct Answer' : 'Set as Correct'}
+                                      {editingQuestionState.correctOptionIndex === 2 ? 'Correct Answer' : 'Set as Correct'}
                                     </button>
                                   </div>
                                   <input
@@ -5124,7 +5124,7 @@ Explanation: Paragraph 1 highlights exponential industrial growth and urban expa
                                           : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                       }`}
                                     >
-                                      {editingQuestionState.correctOptionIndex === 3 ? '✓ Correct Answer' : 'Set as Correct'}
+                                      {editingQuestionState.correctOptionIndex === 3 ? 'Correct Answer' : 'Set as Correct'}
                                     </button>
                                   </div>
                                   <input

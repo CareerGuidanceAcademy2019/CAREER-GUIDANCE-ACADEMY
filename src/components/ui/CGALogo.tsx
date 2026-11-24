@@ -24,7 +24,7 @@ export function CGALogo({
   }[size];
 
   const content = (
-    <div className="inline-flex items-center gap-2.5 sm:gap-3 group select-none min-w-0">
+    <div className="inline-flex items-center gap-2.5 sm:gap-3 group select-none min-w-0 max-w-full overflow-hidden">
       <div
         className={`${dimensions} relative rounded-full overflow-hidden bg-white shadow-xs ring-1 ring-slate-200/80 group-hover:ring-[#0056b3]/50 transition-all shrink-0 flex items-center justify-center`}
       >
@@ -38,18 +38,24 @@ export function CGALogo({
         />
       </div>
       {showText && (
-        <div className="flex flex-col min-w-0">
-          <div className="flex items-center gap-1.5">
+        <div className="flex flex-col min-w-0 flex-1 overflow-hidden">
+          <div className="flex items-center gap-1.5 min-w-0">
             <span
               className={`font-bold tracking-tight leading-snug truncate ${
-                size === 'lg' || size === 'xl' ? 'text-lg sm:text-2xl' : 'text-sm sm:text-base'
+                size === 'lg' || size === 'xl'
+                  ? 'text-lg sm:text-2xl'
+                  : size === 'sm'
+                  ? 'text-xs sm:text-sm'
+                  : 'text-sm sm:text-base'
               } ${variant === 'light' ? 'text-white' : 'text-[#0a0e2a]'}`}
             >
               Career Guidance Academy
             </span>
-            <span className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded bg-[#0056b3] text-white shrink-0">
-              C.G.A
-            </span>
+            {size !== 'sm' && (
+              <span className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded bg-[#0056b3] text-white shrink-0">
+                C.G.A
+              </span>
+            )}
           </div>
           <span
             className={`text-[11px] font-normal tracking-normal truncate ${
@@ -65,7 +71,10 @@ export function CGALogo({
 
   if (href) {
     return (
-      <Link href={href} className="focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0056b3] rounded-lg">
+      <Link
+        href={href}
+        className="inline-flex min-w-0 max-w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0056b3] rounded-lg"
+      >
         {content}
       </Link>
     );

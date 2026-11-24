@@ -659,7 +659,7 @@ export default function StudentStudyMaterialsPage() {
                         </p>
                       ) : mat.isPurchased ? (
                         <p className="text-[10px] text-center text-emerald-700 font-bold">
-                          ✓ Full Lifetime Access Unlocked (Paid &amp; Verified)
+                          Full Lifetime Access Unlocked (Paid &amp; Verified)
                         </p>
                       ) : null}
                     </div>
@@ -878,7 +878,7 @@ export default function StudentStudyMaterialsPage() {
                           )}
                         </div>
                         <p className="text-[10px] text-center text-emerald-700 font-bold">
-                          ✓ Unlocked for your enrolled Mock Test Series
+                          Unlocked for your enrolled Mock Test Series
                         </p>
                       </div>
                     ) : mpdf.isPendingVerification ? (

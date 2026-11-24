@@ -832,42 +832,42 @@ export default function AdminPaymentsPage() {
       {(sectionView === 'unified' || sectionView === 'verifications') && (
         <div className="space-y-6">
           {/* Export & Reconciliation Bar */}
-      <div className="bg-gradient-to-r from-blue-50/70 via-indigo-50/50 to-slate-50 border border-blue-200/80 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
+      <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-2xs flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4">
+        <div className="flex items-start sm:items-center gap-3.5 min-w-0">
           <div className="p-2.5 rounded-xl bg-[#0056b3] text-white shrink-0">
             <Download className="w-5 h-5" />
           </div>
-          <div>
+          <div className="min-w-0">
             <h4 className="text-xs font-bold text-[#0a0e2a] uppercase tracking-wider">
               Daily Bank Reconciliation Export (.CSV)
             </h4>
-            <p className="text-xs text-slate-600 mt-0.5">
+            <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
               Export all verified admissions, fees, and material purchases with student codes, UTR numbers, and receipt numbers.
             </p>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 self-stretch md:self-auto">
+        <div className="flex flex-wrap items-center gap-2.5 w-full xl:w-auto shrink-0">
           <input
             type="date"
             value={exportStartDate}
             onChange={(e) => setExportStartDate(e.target.value)}
-            className="px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-700"
+            className="px-3 py-2 rounded-xl border border-slate-200 bg-slate-50/70 text-xs font-medium text-slate-700"
             title="Start Date"
           />
-          <span className="text-xs text-slate-400 font-bold">to</span>
+          <span className="text-xs text-slate-400 font-semibold">to</span>
           <input
             type="date"
             value={exportEndDate}
             onChange={(e) => setExportEndDate(e.target.value)}
-            className="px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-700"
+            className="px-3 py-2 rounded-xl border border-slate-200 bg-slate-50/70 text-xs font-medium text-slate-700"
             title="End Date"
           />
           <button
             type="button"
             onClick={handleDownloadReconciliation}
             disabled={isExporting}
-            className="px-4 py-2 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-bold shadow-xs inline-flex items-center gap-1.5 cursor-pointer transition-all shrink-0"
+            className="px-4 py-2 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-semibold shadow-2xs inline-flex items-center gap-1.5 cursor-pointer transition-all shrink-0"
           >
             <Download className="w-3.5 h-3.5" /> Download Report
           </button>

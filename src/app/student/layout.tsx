@@ -64,7 +64,8 @@ export default function StudentPortalLayout({ children }: { children: React.Reac
   }, []);
 
   const currentPageLabel =
-    STUDENT_NAV.find((item) => pathname.startsWith(item.href))?.label || 'Student Portal';
+    STUDENT_NAV.find((item) => pathname.startsWith(item.href))?.label ||
+    (pathname.startsWith('/student/my-courses') ? 'My Courses' : 'Dashboard');
 
   if (!isHydrated) {
     return (
@@ -153,17 +154,19 @@ export default function StudentPortalLayout({ children }: { children: React.Reac
         onMouseLeave={scheduleCloseSidebar}
         aria-label="Student Portal Sidebar"
         aria-hidden={!sidebarOpen}
-        className={`fixed top-0 left-0 bottom-0 z-50 w-72 max-w-[85vw] bg-[#0b1120] text-white border-r border-slate-800/90 shadow-2xl flex flex-col transition-transform duration-200 ease-out ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'
+        className={`fixed top-0 left-0 bottom-0 z-50 w-72 sm:w-76 max-w-[85vw] overflow-hidden bg-[#0b1120] text-white border-r border-slate-800/90 shadow-2xl flex flex-col transition-all duration-200 ease-out ${
+          sidebarOpen ? 'translate-x-0 visible opacity-100' : '-translate-x-full invisible opacity-0 pointer-events-none'
         }`}
       >
-        <div className="p-4 sm:p-5 border-b border-slate-800/80 flex items-center justify-between gap-2">
-          <CGALogo size="sm" variant="light" href="/student/dashboard" />
+        <div className="p-4 border-b border-slate-800/80 flex items-center justify-between gap-2 overflow-hidden">
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <CGALogo size="sm" variant="light" href="/student/dashboard" />
+          </div>
           <button
             type="button"
             onClick={() => setSidebarOpen(false)}
             aria-label="Close navigation menu"
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
@@ -261,7 +264,9 @@ export default function StudentPortalLayout({ children }: { children: React.Reac
           </div>
         </header>
 
-        <main className="flex-1 p-4 sm:p-8 max-w-7xl w-full mx-auto">{children}</main>
+        <main className="flex-1 px-4 sm:px-8 lg:px-10 py-6 sm:py-9 max-w-7xl w-full mx-auto">
+          {children}
+        </main>
       </div>
     </div>
   );

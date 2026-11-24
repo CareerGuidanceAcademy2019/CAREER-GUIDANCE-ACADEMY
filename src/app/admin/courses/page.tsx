@@ -991,7 +991,7 @@ export default function AdminCoursesAndBatchesPage() {
                     className="w-full px-3.5 py-2.5 rounded-xl border border-indigo-300 bg-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                   <p className="text-[11px] text-indigo-800 leading-relaxed">
-                    💡 This link will be shown to enrolled students in their <strong>My Learning</strong> section so they can join live lectures. You can also update or post this link anytime directly from the batch table.
+                    Note: This link will be shown to enrolled students in their <strong>My Learning</strong> section so they can join live lectures. You can also update or post this link anytime directly from the batch table.
                   </p>
                 </div>
               )}

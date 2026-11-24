@@ -41,19 +41,47 @@ const cmsApiCode = fs.readFileSync(path.resolve('src/app/api/admin/site-content/
 const modalCode = fs.readFileSync(path.resolve('src/components/layout/UrgentAnnouncementModal.tsx'), 'utf8');
 const rootLayoutCode = fs.readFileSync(path.resolve('src/app/layout.tsx'), 'utf8');
 
-await runTest('TC-01: Admin & Student sidebars are hidden by default and open automatically on 3-bars mouse hover or click', async () => {
+await runTest('TC-01: Admin & Student sidebars are hidden by default with overflow-hidden & invisible when closed, and open on 3-bars hover or click', async () => {
   assert(
     adminLayoutCode.includes('id="admin-sidebar-trigger-btn"') &&
       adminLayoutCode.includes('onMouseEnter={openSidebar}') &&
-      adminLayoutCode.includes("sidebarOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'"),
-    'Admin layout must hide sidebar by default (-translate-x-full) and open on mouse hover or click on the 3-bars button'
+      adminLayoutCode.includes('overflow-hidden') &&
+      adminLayoutCode.includes("'-translate-x-full invisible opacity-0 pointer-events-none'"),
+    'Admin layout must hide sidebar completely when closed (overflow-hidden + invisible + opacity-0) and open on mouse hover or click'
   );
   assert(
     studentLayoutCode.includes('id="student-sidebar-trigger-btn"') &&
       studentLayoutCode.includes('onMouseEnter={openSidebar}') &&
-      studentLayoutCode.includes("sidebarOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'"),
-    'Student layout must hide sidebar by default (-translate-x-full) and open on mouse hover or click on the 3-bars button'
+      studentLayoutCode.includes('overflow-hidden') &&
+      studentLayoutCode.includes("'-translate-x-full invisible opacity-0 pointer-events-none'"),
+    'Student layout must hide sidebar completely when closed (overflow-hidden + invisible + opacity-0) and open on mouse hover or click'
   );
+});
+
+await runTest('TC-01B: Zero emojis exist anywhere in portal UI source files (src/)', async () => {
+  function walk(dir, out = []) {
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, ent.name);
+      if (ent.isDirectory()) walk(p, out);
+      else if (/\.(ts|tsx|css)$/.test(ent.name)) out.push(p);
+    }
+    return out;
+  }
+  const emojiRx = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu;
+  const files = walk(path.resolve('src'));
+  const offenders = [];
+  for (const f of files) {
+    const lines = fs.readFileSync(f, 'utf8').split(/\r?\n/);
+    lines.forEach((line, idx) => {
+      // Skip regex character class definitions used to strip bullets/checkmarks from user input
+      if (line.includes('.replace(/^[\\s')) return;
+      const matches = line.match(emojiRx);
+      if (matches) {
+        offenders.push(`${path.relative(process.cwd(), f)}:${idx + 1} (${matches.join(' ')})`);
+      }
+    });
+  }
+  assert.equal(offenders.length, 0, `Found unexpected emoji(s) in src/: ${offenders.join(', ')}`);
 });
 
 await runTest('TC-02: Admin Public Site CMS includes Urgent Entry Popup Announcements manager with URL/Link pasting', async () => {

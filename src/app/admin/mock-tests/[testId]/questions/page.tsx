@@ -1848,7 +1848,7 @@ export default function AdminMockTestQuestionsPage() {
                         </label>
                         {hasMultipleCorrect ? (
                           <span className="text-[11px] font-black text-red-900 bg-amber-200 px-3 py-1 rounded-lg border-2 border-red-500 animate-pulse">
-                            ⚠️ Multiple Answers Selected: {selectedLabels}
+                            Alert: Multiple Answers Selected: {selectedLabels}
                           </span>
                         ) : (
                           <span className="text-[11px] font-extrabold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-300">
@@ -1999,7 +1999,7 @@ export default function AdminMockTestQuestionsPage() {
 
                               {isSelectedInList && hasMultipleCorrect ? (
                                 <span className="text-xs font-extrabold text-red-800 bg-amber-200 border border-red-400 px-3 py-1 rounded-xl shrink-0 inline-flex items-center gap-1">
-                                  ⚠️ Multiple Selected
+                                  Multiple Selected
                                 </span>
                               ) : (isSelectedInList || isPrimaryCorrect) ? (
                                 <span className="text-xs font-extrabold text-emerald-700 bg-emerald-100 px-3 py-1 rounded-xl shrink-0 inline-flex items-center gap-1">

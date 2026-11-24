@@ -250,7 +250,7 @@ export default function AdminSiteContentCmsPage() {
                 Urgent Entry Popup Announcements (Pop-Out First on Portal Entry)
               </h2>
               <p className="text-xs text-slate-600 mt-0.5">
-                Post one or multiple urgent notices here. When students or visitors open the portal, these announcements pop out first as a slide carousel with a top-right close (✕) button and optional clickable URL link.
+                Post one or multiple urgent notices here. When students or visitors open the portal, these announcements pop out first as a slide carousel with a top-right close button and optional clickable URL link.
               </p>
             </div>
             <div className="px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold shrink-0 self-start">

@@ -20,8 +20,19 @@
   --color-cga-red: var(--cga-red);
   --color-cga-orange: var(--cga-orange);
   --color-cga-surface: var(--cga-surface);
-  --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  --font-sans: var(--font-geist-sans), 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   --font-mono: var(--font-geist-mono), monospace;
+
+  /* Humanised editorial weight & type scale: prevents heavy cramped text */
+  --font-weight-bold: 600;
+  --font-weight-extrabold: 700;
+  --font-weight-black: 700;
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.55;
+  --text-sm: 0.925rem;
+  --text-sm--line-height: 1.6;
+  --text-base: 1rem;
+  --text-base--line-height: 1.65;
 }
 
 html {
@@ -32,6 +43,8 @@ body {
   background: #fafaf9;
   color: #0f172a;
   font-family: var(--font-geist-sans), 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  line-height: 1.6;
+  letter-spacing: -0.005em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -40,6 +53,11 @@ body {
 
 h1, h2, h3, h4 {
   letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+p {
+  line-height: 1.65;
 }
 
 /* Custom utility classes for editorial academic polish */
