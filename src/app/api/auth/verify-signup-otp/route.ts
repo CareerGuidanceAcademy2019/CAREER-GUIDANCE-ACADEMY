@@ -69,13 +69,25 @@ export async function POST(request: Request) {
     }
 
     if (verifyError || !verifyData?.user) {
-      // Check if user already confirmed via email link
+      // Check if user already confirmed via email link (using indexed profiles lookup + getUserById instead of 50-user listUsers page)
       try {
         const admin = createAdminSupabase();
-        const { data: userData } = await admin.auth.admin.listUsers();
-        const foundUser = userData?.users?.find(
-          (u) => u.email?.toLowerCase() === cleanEmail
-        );
+        const { data: profileRow } = await admin
+          .from('profiles')
+          .select('id')
+          .eq('email', cleanEmail)
+          .maybeSingle();
+
+        let foundUser: any = null;
+        if (profileRow?.id) {
+          const { data: uRes } = await admin.auth.admin.getUserById(profileRow.id);
+          foundUser = uRes?.user ?? null;
+        }
+        if (!foundUser) {
+          const { data: userData } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+          foundUser = userData?.users?.find((u) => u.email?.toLowerCase() === cleanEmail);
+        }
+
         if (foundUser && foundUser.email_confirmed_at) {
           await admin
             .from('profiles')

@@ -13,10 +13,14 @@ import {
   Printer,
   BookOpen,
   Layers,
+  Sparkles,
+  Check,
+  ShoppingBag,
 } from 'lucide-react';
 import { Course } from '@/data/initialSeedData';
 import { CustomWaitlistSvg } from '@/components/ui/CustomIcons';
 import { formatFacultyName } from '@/lib/names';
+import { useCga } from '@/context/CgaContext';
 
 interface CourseCardProps {
   course: Course;
@@ -24,7 +28,45 @@ interface CourseCardProps {
   isPending?: boolean;
   onSelectCourse?: (course: Course) => void;
   onJoinWaitlist?: (course: Course) => void;
+  compact?: boolean;
+  index?: number;
 }
+
+const SEED_COURSE_IDS = new Set([
+  'crs-tcs-tps-offline',
+  'crs-tcs-tps-online',
+  'crs-tpsc-combined-offline',
+  'crs-tpsc-combined-online',
+  'crs-tet-1-offline',
+  'crs-tet-1-online',
+  'crs-tet-2-sci-offline',
+  'crs-tet-2-sci-online',
+  'crs-tet-2-sst-offline',
+  'crs-tet-2-sst-online',
+  'crs-stgt-sst-offline',
+  'crs-stgt-sst-online',
+  'crs-stgt-pure-sci-offline',
+  'crs-stgt-pure-sci-online',
+  'crs-stgt-bio-sci-offline',
+  'crs-stgt-bio-sci-online',
+  'crs-jrbt-offline',
+  'crs-jrbt-online',
+  'crs-banking-offline',
+  'crs-banking-online',
+  'crs-school-7',
+  'crs-school-8',
+  'crs-school-9',
+  'crs-school-10',
+]);
+
+// Distinct rich academic card gradients for Courses (differentiated from the blue/indigo Mock Test cards)
+const COURSE_CARD_GRADIENTS = [
+  'from-[#052e2b] via-[#064e3b] to-[#0f172a]', // Deep Emerald & Midnight Slate
+  'from-[#2e1026] via-[#4c1d3d] to-[#111827]', // Royal Burgundy & Plum Charcoal
+  'from-[#311b08] via-[#5c3111] to-[#111827]', // Warm Bronze & Dark Umber
+  'from-[#082f49] via-[#0e4f68] to-[#0f172a]', // Deep Teal & Ocean Slate
+  'from-[#1e1038] via-[#341b5e] to-[#111827]', // Royal Mulberry & Deep Violet
+];
 
 export function CourseCard({
   course,
@@ -32,253 +74,252 @@ export function CourseCard({
   isPending = false,
   onSelectCourse,
   onJoinWaitlist,
+  compact = false,
+  index = 0,
 }: CourseCardProps) {
+  const { session } = useCga();
   const isOpen = course.status === 'Open for Admission' && course.seatsAvailable > 0;
+  const isNewLaunch = !SEED_COURSE_IDS.has(course.id);
   const seatsTaken = Math.max(0, course.batchSize - course.seatsAvailable);
-  const fillPercent = Math.min(100, Math.round((seatsTaken / course.batchSize) * 100));
+  const fillPercent = Math.min(100, Math.round((seatsTaken / Math.max(1, course.batchSize)) * 100));
 
-  const categoryColor =
-    course.category === 'Teaching and Recruitment Exams'
-      ? 'bg-blue-50 text-[#0056b3] border-blue-200'
-      : course.category === 'Banking, SSC and Railway'
-      ? 'bg-orange-50 text-[#ea580c] border-orange-200'
-      : course.category === 'School Coaching'
-      ? course.board === 'CBSE'
-        ? 'bg-purple-50 text-purple-700 border-purple-200'
-        : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-      : 'bg-slate-100 text-slate-700 border-slate-200';
+  // Pick a distinct gradient based on category/index so Courses have their own signature look
+  const hashIndex =
+    index > 0
+      ? index
+      : course.id.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+  const gradient = COURSE_CARD_GRADIENTS[hashIndex % COURSE_CARD_GRADIENTS.length];
+
+  const mrpPrice = Math.max(course.price + 1500, Math.round(course.price * 1.25));
+  const discountPercent = Math.max(10, Math.round(((mrpPrice - course.price) / mrpPrice) * 100));
+
+  const highlights =
+    Array.isArray(course.syllabusHighlights) && course.syllabusHighlights.length > 0
+      ? course.syllabusHighlights.slice(0, compact ? 3 : 4)
+      : [
+          'Complete Official Syllabus Coverage',
+          'Weekly OMR & Online CBT Mock Tests',
+          'Printed & View-Only Digital Study Notes',
+          'Personal Mentorship & Doubt Clearing',
+        ].slice(0, compact ? 3 : 4);
+
+  const targetEnrollPath = `/student/courses?enrol=${encodeURIComponent(course.id)}`;
+  const buyHref = session
+    ? targetEnrollPath
+    : `/login?next=${encodeURIComponent(targetEnrollPath)}`;
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs cga-card-hover flex flex-col justify-between overflow-hidden relative">
-      {/* Top accent stripe */}
-      <div
-        className={`h-1 w-full ${
-          isOpen ? 'bg-[#0056b3]' : 'bg-slate-300'
-        }`}
-      />
+    <div
+      className={`bg-gradient-to-br ${gradient} text-white shadow-xl border border-white/15 cga-card-hover flex flex-col justify-between overflow-hidden relative ${
+        compact ? 'p-5' : 'p-6'
+      }`}
+    >
+      {/* Top decorative glow & accent bar */}
+      <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-400 via-emerald-400 to-cyan-400" />
+      <div className="absolute -top-8 -right-8 w-32 h-32 bg-white/[0.06] rounded-full blur-2xl pointer-events-none" />
 
-      <div className="p-6 flex-1 flex flex-col">
-        {/* Category & Status Header */}
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+      <div className="space-y-3 relative z-10 flex-1 flex flex-col">
+        {/* Top Badges Row */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border whitespace-nowrap ${categoryColor}`}
+              className={`px-2.5 py-0.5 font-black text-[10px] uppercase tracking-wider ${
+                isNewLaunch
+                  ? 'bg-lime-400 text-slate-950'
+                  : isOpen
+                  ? 'bg-amber-400 text-slate-950'
+                  : 'bg-red-500/90 text-white'
+              }`}
             >
-              {course.subCategory}
+              {isNewLaunch
+                ? 'NEW COURSE LAUNCH!'
+                : isOpen
+                ? 'ADMISSIONS OPEN!'
+                : 'BATCH CLOSED'}
             </span>
+
             <span
-              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border whitespace-nowrap ${
+              className={`px-2.5 py-0.5 font-extrabold text-[10px] uppercase tracking-wider border ${
                 course.mode === 'Online'
-                  ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                  : 'bg-amber-50 text-amber-800 border-amber-200'
+                  ? 'bg-cyan-400/20 text-cyan-200 border-cyan-400/40'
+                  : 'bg-white/15 text-amber-200 border-white/25'
               }`}
             >
               {course.mode === 'Online' ? 'Online Live' : 'Offline Classroom'}
             </span>
+
             {course.isPackageBundle && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border whitespace-nowrap bg-purple-50 text-purple-700 border-purple-200">
-                <Layers className="w-3 h-3" /> Combined Package
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-extrabold bg-purple-400/25 text-purple-200 border border-purple-300/40">
+                <Layers className="w-3 h-3" /> Bundle
               </span>
             )}
           </div>
 
-          {isOpen ? (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap shrink-0">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-              Open for Admission
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-red-50 text-[#dc2626] border border-red-200 whitespace-nowrap shrink-0">
-              <Lock className="w-3 h-3 shrink-0" />
-              Batch Closed
-            </span>
-          )}
+          <span className="text-[11px] font-bold text-emerald-200 truncate max-w-[160px]">
+            {course.subCategory}
+          </span>
         </div>
 
-        {/* Course Category Sub-label */}
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
-          {course.category}
+        {/* Category & Title */}
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-white/65 mb-0.5">
+            {course.category} {course.board ? `• ${course.board}` : ''}
+          </p>
+          <h3 className={`${compact ? 'text-base' : 'text-lg'} font-black text-white leading-snug line-clamp-2`}>
+            {course.name}
+          </h3>
+        </div>
+
+        {/* Single-Line Overview */}
+        <p className="text-xs text-white/85 leading-relaxed line-clamp-1" title={course.description}>
+          {course.description || `${course.name} — ${course.batchName} coached by ${formatFacultyName(course.facultyName)}.`}
         </p>
 
-        {/* Course Title */}
-        <h3 className="text-lg font-extrabold text-[#0a0e2a] leading-snug mb-2 line-clamp-2">
-          {course.name}
-        </h3>
-
-        {/* Description */}
-        <p className="text-sm text-slate-600 leading-relaxed mb-3 line-clamp-2">
-          {course.description}
-        </p>
-
-        {/* Material Delivery Notice */}
-        <div className="mb-3 space-y-1.5">
-          {course.mode === 'Offline' ? (
-            <div className="text-[11px] font-semibold text-emerald-800 bg-emerald-50/90 px-2.5 py-1.5 rounded-xl border border-emerald-200/80 flex items-center gap-1.5">
-              <Printer className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-              <span>Physical printed booklets at Udaipur center + view-only softcopy</span>
-            </div>
-          ) : (
-            <div className="text-[11px] font-semibold text-blue-800 bg-blue-50/90 px-2.5 py-1.5 rounded-xl border border-blue-200/80 flex items-center gap-1.5">
-              <BookOpen className="w-3.5 h-3.5 text-[#0056b3] shrink-0" />
-              <span>Digital study material in secure View-Only Reader mode</span>
-            </div>
-          )}
-
-          {course.isPackageBundle && ((course.bundledMaterialIds && course.bundledMaterialIds.length > 0) || (course.bundledTestIds && course.bundledTestIds.length > 0)) && (
-            <div className="text-[11px] font-bold text-purple-900 bg-purple-50/90 px-2.5 py-1.5 rounded-xl border border-purple-200/80 flex items-center gap-1.5">
-              <Layers className="w-3.5 h-3.5 text-purple-700 shrink-0" />
-              <span>Includes {(course.bundledMaterialIds?.length || 0)} study notes + {(course.bundledTestIds?.length || 0)} CBT mock tests</span>
-            </div>
-          )}
-        </div>
-
-        {/* Key Metadata Grid */}
-        <div className="grid grid-cols-2 gap-2.5 bg-slate-50/90 rounded-xl p-3.5 border border-slate-100 text-xs mb-4 mt-auto">
-          <div className="flex items-start gap-2 min-w-0">
-            <GraduationCap className="w-4 h-4 text-[#0056b3] shrink-0 mt-0.5" />
-            <div className="min-w-0">
-              <span className="text-slate-400 block text-[11px]">Faculty</span>
-              <span className="font-semibold text-slate-800 truncate block">
-                {formatFacultyName(course.facultyName)}
+        {/* Distinct Framed Price & Schedule Panel */}
+        <div className="p-3 bg-white/[0.08] border border-white/15 space-y-1.5">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <span className={`${compact ? 'text-2xl' : 'text-3xl'} font-black text-amber-300`}>
+                ₹{course.price.toLocaleString('en-IN')}/-
               </span>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-2 min-w-0">
-            <Clock className="w-4 h-4 text-[#ea580c] shrink-0 mt-0.5" />
-            <div className="min-w-0">
-              <span className="text-slate-400 block text-[11px]">Duration</span>
-              <span className="font-semibold text-slate-800 truncate block">{course.duration}</span>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-2 min-w-0">
-            <Calendar className="w-4 h-4 text-[#0056b3] shrink-0 mt-0.5" />
-            <div className="min-w-0">
-              <span className="text-slate-400 block text-[11px]">Batch Starts</span>
-              <span className="font-semibold text-slate-800 whitespace-nowrap block">
-                {new Date(course.startDate).toLocaleDateString('en-IN', {
-                  day: '2-digit',
-                  month: 'short',
-                  year: 'numeric',
-                })}
+              <span className="text-[10px] text-white/80 font-bold uppercase">Only</span>
+              <span className="text-xs text-white/50 line-through">
+                ₹{mrpPrice.toLocaleString('en-IN')}
               </span>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-2 min-w-0">
-            <Users className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-            <div className="min-w-0">
-              <span className="text-slate-400 block text-[11px]">Batch Size</span>
-              <span className="font-semibold text-slate-800 whitespace-nowrap block">
-                {course.batchSize} Seats ({course.seatsAvailable} left)
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Seat availability progress bar */}
-        <div className="mb-4">
-          <div className="flex items-center justify-between gap-2 text-xs mb-1.5">
-            <span className="font-medium text-slate-600 truncate">
-              {isOpen ? (
-                <>
-                  <strong className="text-[#0056b3]">{course.seatsAvailable} seats</strong> available
-                  out of {course.batchSize}
-                </>
-              ) : (
-                <span className="text-[#dc2626] font-semibold">
-                  All {course.batchSize} seats filled • Waitlist: {course.waitingListCount}
+              {course.monthlyFee ? (
+                <span className="text-[11px] font-extrabold text-cyan-300 bg-cyan-950/60 border border-cyan-400/30 px-2 py-0.5">
+                  + ₹{course.monthlyFee.toLocaleString('en-IN')}/mo
                 </span>
-              )}
-            </span>
-            <span className="text-slate-400 font-semibold whitespace-nowrap shrink-0">
-              {fillPercent}% Full
+              ) : null}
+            </div>
+
+            <span className="px-2 py-0.5 bg-emerald-500/25 border border-emerald-400/40 text-emerald-200 text-[10px] font-black uppercase">
+              {discountPercent}% OFF
             </span>
           </div>
-          <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-300 ${
-                !isOpen
-                  ? 'bg-[#dc2626]'
-                  : course.seatsAvailable <= 6
-                  ? 'bg-[#ea580c]'
-                  : 'bg-[#0056b3]'
-              }`}
-              style={{ width: `${fillPercent}%` }}
-            />
+
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-white/80 pt-1 border-t border-white/10">
+            <span className="truncate">
+              <strong className="text-white">Faculty:</strong> {formatFacultyName(course.facultyName)}
+            </span>
+            <span className="text-amber-200 font-semibold whitespace-nowrap">
+              {course.duration} • {course.seatsAvailable} Seats Left
+            </span>
           </div>
         </div>
+
+        {/* Checkmarked Highlights (Image 1 reference style) */}
+        <ul className="space-y-1.5 text-xs text-white/90 pt-1">
+          {highlights.map((item, idx) => (
+            <li key={idx} className="flex items-start gap-1.5 font-medium">
+              <Check className="w-3.5 h-3.5 text-emerald-300 shrink-0 mt-0.5" />
+              <span className="line-clamp-1">{item}</span>
+            </li>
+          ))}
+          <li className="flex items-start gap-1.5 font-medium text-amber-200">
+            {course.mode === 'Offline' ? (
+              <>
+                <Printer className="w-3.5 h-3.5 text-amber-300 shrink-0 mt-0.5" />
+                <span className="line-clamp-1">Printed Notes at Udaipur Center + View-Only PDF</span>
+              </>
+            ) : (
+              <>
+                <BookOpen className="w-3.5 h-3.5 text-cyan-300 shrink-0 mt-0.5" />
+                <span className="line-clamp-1">Interactive Live Classes + View-Only Softcopy Notes</span>
+              </>
+            )}
+          </li>
+        </ul>
+
+        {/* Seat progress bar in detailed view */}
+        {!compact && (
+          <div className="pt-2 mt-auto">
+            <div className="flex items-center justify-between gap-2 text-[11px] mb-1 text-white/80">
+              <span className="truncate">
+                {isOpen ? (
+                  <>
+                    <strong className="text-amber-300">{course.seatsAvailable} seats</strong> open out of{' '}
+                    {course.batchSize}
+                  </>
+                ) : (
+                  <span className="text-red-300 font-semibold">
+                    All {course.batchSize} seats filled • Waitlist: {course.waitingListCount}
+                  </span>
+                )}
+              </span>
+              <span className="text-white/60 font-semibold shrink-0">{fillPercent}% Full</span>
+            </div>
+            <div className="w-full h-1.5 bg-white/15 overflow-hidden">
+              <div
+                className={`h-full transition-all duration-300 ${
+                  !isOpen
+                    ? 'bg-red-500'
+                    : course.seatsAvailable <= 6
+                    ? 'bg-amber-400'
+                    : 'bg-emerald-400'
+                }`}
+                style={{ width: `${fillPercent}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Price & CTA Footer */}
-      <div className="px-6 py-4 bg-slate-50 border-t border-slate-200/80 flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 block">
-            Admission & Monthly Fee
-          </span>
-          <div className="flex flex-wrap items-baseline gap-x-1.5">
-            <span className="text-lg font-extrabold text-[#0a0e2a] whitespace-nowrap">
-              ₹{course.price.toLocaleString('en-IN')}
-            </span>
-            {course.monthlyFee ? (
-              <span className="text-xs font-bold text-[#0056b3] whitespace-nowrap">
-                + ₹{course.monthlyFee.toLocaleString('en-IN')}/mo
-              </span>
-            ) : null}
-          </div>
-        </div>
-
+      {/* Bottom Full-Width CTA Button (Image 1 style) */}
+      <div className="pt-4 mt-4 border-t border-white/15 relative z-10">
         {isEnrolled ? (
           <Link
             href="/student/my-learning"
-            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-xs whitespace-nowrap shrink-0"
+            className="w-full py-2.5 px-4 bg-emerald-500/25 hover:bg-emerald-500/35 border border-emerald-400/50 text-emerald-200 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all"
           >
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
-            Enrolled
+            <CheckCircle2 className="w-4 h-4 text-emerald-300 shrink-0" />
+            <span>Enrolled &amp; Active — Open Classroom</span>
           </Link>
         ) : isPending ? (
           <Link
             href="/student/my-learning"
-            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200 transition-colors shadow-xs whitespace-nowrap shrink-0"
+            className="w-full py-2.5 px-4 bg-amber-500/25 border border-amber-400/50 text-amber-200 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all"
           >
-            <Clock className="w-4 h-4 shrink-0 text-amber-700 animate-pulse" />
-            Verification Pending
+            <Clock className="w-4 h-4 shrink-0 text-amber-300 animate-pulse" />
+            <span>Verification Pending (Admin Review)</span>
           </Link>
         ) : onSelectCourse ? (
           isOpen ? (
             <button
               type="button"
               onClick={() => onSelectCourse(course)}
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-[#0056b3] text-white hover:bg-[#1e3a8a] transition-colors shadow-sm cursor-pointer whitespace-nowrap shrink-0"
+              className="w-full py-2.5 px-4 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-md cursor-pointer transition-all"
             >
-              Enrol Now
+              <ShoppingBag className="w-3.5 h-3.5 shrink-0" />
+              <span>Buy / Enrol Now @ ₹{course.price.toLocaleString('en-IN')}/-</span>
               <ArrowRight className="w-3.5 h-3.5 shrink-0" />
             </button>
           ) : (
             <button
               type="button"
               onClick={() => onJoinWaitlist && onJoinWaitlist(course)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold bg-amber-50 text-[#ea580c] border border-amber-200 hover:bg-amber-100 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+              className="w-full py-2.5 px-4 bg-white/15 hover:bg-white/25 border border-white/30 text-amber-200 font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all"
             >
               <CustomWaitlistSvg className="w-3.5 h-3.5" />
-              Join Waitlist
+              <span>Batch Full — Join Waiting List</span>
             </button>
           )
         ) : isOpen ? (
           <Link
-            href={`/student/courses?enrol=${course.id}`}
-            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-[#0056b3] text-white hover:bg-[#1e3a8a] transition-colors shadow-sm whitespace-nowrap shrink-0"
+            href={buyHref}
+            className="w-full py-2.5 px-4 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-md transition-all"
           >
-            Enrol Now
+            <ShoppingBag className="w-3.5 h-3.5 shrink-0" />
+            <span>Buy / Enrol Now @ ₹{course.price.toLocaleString('en-IN')}/-</span>
             <ArrowRight className="w-3.5 h-3.5 shrink-0" />
           </Link>
         ) : (
           <Link
             href="/contact"
-            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors whitespace-nowrap shrink-0"
+            className="w-full py-2.5 px-4 bg-white/10 hover:bg-white/20 border border-white/20 text-slate-200 font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all"
           >
-            Enquire Waitlist
+            <Lock className="w-3.5 h-3.5" />
+            <span>Admissions Closed — Enquire Waitlist</span>
           </Link>
         )}
       </div>

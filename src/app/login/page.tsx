@@ -203,7 +203,9 @@ function LoginInner() {
       if (password) {
         const loginRes = await login(unconfirmedEmail, password);
         if (loginRes.success && loginRes.session) {
-          router.push(PORTAL_HOME[loginRes.session.role]);
+          const next = params.get('next') || params.get('redirect');
+          const role = loginRes.session.role;
+          router.push(next && next.startsWith(PORTAL_PREFIX[role]) ? next : PORTAL_HOME[role]);
           return;
         }
       }
@@ -509,7 +511,11 @@ function LoginInner() {
               {tab.createPrompt}{' '}
               <Link
                 id={`login-create-${tab.id.toLowerCase()}`}
-                href={tab.createHref}
+                href={
+                  params.get('next')
+                    ? `${tab.createHref}?next=${encodeURIComponent(params.get('next')!)}`
+                    : tab.createHref
+                }
                 className="font-extrabold text-[#0056b3] hover:underline inline-flex items-center gap-1"
               >
                 <UserPlus className="w-3.5 h-3.5" /> {tab.createLabel}

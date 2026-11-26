@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import {
   FileText,
   Lock,
@@ -55,6 +56,7 @@ const SERIES_TO_COURSES_MAP: Record<string, string[]> = {
 };
 
 export default function StudentStudyMaterialsPage() {
+  const searchParams = useSearchParams();
   const { db, currentStudent, session, showToast } = useCga();
   const [activeTab, setActiveTab] = useState<StudentMaterialTab>('course_materials');
   const [filterType, setFilterType] = useState<'All' | 'Unlocked' | 'Locked'>('All');
@@ -64,6 +66,70 @@ export default function StudentStudyMaterialsPage() {
   const [payTarget, setPayTarget] = useState<PayManualTarget | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [currentTime] = useState(() => Date.now());
+  const autoOpenedBuyMatRef = useRef<string | null>(null);
+
+  // Auto-open Study Material payment checkout modal when redirected from public Buy button (?buy= or ?pkg=)
+  useEffect(() => {
+    const buyId = searchParams.get('buy') || searchParams.get('pkg');
+    if (!buyId || !currentStudent || autoOpenedBuyMatRef.current === buyId) return;
+
+    if (buyId === 'series-current-affairs') {
+      autoOpenedBuyMatRef.current = buyId;
+      setActiveTab('current_affairs');
+      setPayTarget({
+        itemType: 'mock_series',
+        itemId: 'series-current-affairs',
+        title: 'Current Affairs Subscription (Monthly ₹49 / 1-Year ₹499)',
+        category: 'Current Affairs (Domestic & International)',
+        fullAmount: 499,
+        instalmentAmount: 49,
+        instalmentAvailable: true,
+        paymentType: 'instalment_1',
+      });
+      return;
+    }
+
+    const foundMat = (db.studyMaterials || []).find((m) => m.id === buyId);
+    if (foundMat) {
+      autoOpenedBuyMatRef.current = buyId;
+      if (foundMat.type === 'Current Affairs' || foundMat.caCategory) {
+        setActiveTab('current_affairs');
+        setPayTarget({
+          itemType: 'mock_series',
+          itemId: 'series-current-affairs',
+          title: 'Current Affairs Subscription (Monthly ₹49 / 1-Year ₹499)',
+          category: 'Current Affairs (Domestic & International)',
+          fullAmount: 499,
+          instalmentAmount: 49,
+          instalmentAvailable: true,
+          paymentType: 'instalment_1',
+        });
+      } else if (foundMat.type === 'Mock Test PDF' && foundMat.seriesId) {
+        setActiveTab('mock_test_pdf');
+        setPayTarget({
+          itemType: 'mock_series',
+          itemId: foundMat.seriesId,
+          title: foundMat.seriesName || foundMat.courseName || 'Mock Test Series',
+          category: 'Mock Test Series Subscription',
+          fullAmount: 399,
+          paymentType: 'full',
+        });
+      } else {
+        setActiveTab('course_materials');
+        const matPrice = foundMat.price !== undefined && foundMat.price !== null ? Number(foundMat.price) : 199;
+        if (matPrice > 0) {
+          setPayTarget({
+            itemType: 'material',
+            itemId: foundMat.id,
+            title: `${foundMat.title} (${foundMat.courseName || 'Notes PDF'})`,
+            fullAmount: matPrice,
+            paymentType: 'full',
+            category: 'Study Material & Notes',
+          });
+        }
+      }
+    }
+  }, [searchParams, currentStudent, db.studyMaterials]);
 
   const ongoingMockSeriesList = useMemo(() => {
     const raw = db.mockSeries && db.mockSeries.length > 0 ? db.mockSeries : MOCK_SERIES_INITIAL;
@@ -120,21 +186,6 @@ export default function StudentStudyMaterialsPage() {
         enrolledAt: fromCourse.enrolledDate,
         accessValidUntil: fromCourse.accessValidUntil,
       };
-    }
-
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem('cga_series_enrollments');
-        if (stored) {
-          const list = JSON.parse(stored);
-          const found = list.find(
-            (se: any) =>
-              (se.studentId === currentStudent.id || se.studentId === 'me') &&
-              se.seriesId === 'series-current-affairs'
-          );
-          if (found) return found;
-        }
-      } catch {}
     }
 
     const verifiedPayment = (db.feePayments || []).find(
@@ -250,28 +301,20 @@ export default function StudentStudyMaterialsPage() {
 
     if (typeof window !== 'undefined') {
       try {
-        const maList = JSON.parse(localStorage.getItem('cga_material_access') || '[]');
-        hasLocalAccess = maList.some(
-          (m: any) => studentMatches(m.studentId) && m.materialId === mat.id
-        );
-
         const customP = JSON.parse(localStorage.getItem('cga_custom_payments') || '[]');
         const localP = customP.find(
           (p: any) =>
             studentMatches(p.studentId) &&
             (p.itemId === mat.id || p.courseId === mat.id || (p.remarks && p.remarks.includes(mat.id)))
         );
-        if (localP) {
-          if (localP.status === 'Verified') localVerified = true;
-          if (localP.status === 'Pending') {
-            localPending = true;
-            localPendingRef = localP.receiptNo || localP.utr || 'Pending';
-          }
+        if (localP && localP.status === 'Pending') {
+          localPending = true;
+          localPendingRef = localP.receiptNo || localP.utr || 'Pending';
         }
       } catch {}
     }
 
-    const isPurchased = Boolean(verifiedPayment || hasLocalAccess || localVerified);
+    const isPurchased = Boolean(verifiedPayment);
 
     // 5. Check pending payment awaiting admin verification
     const pendingPayment = (db.feePayments || []).find(
@@ -328,19 +371,7 @@ export default function StudentStudyMaterialsPage() {
       return { enrolled: !exp, expired: exp, validUntil: se.accessValidUntil, pendingVerification: false };
     }
 
-    // 2. LocalStorage series enrollment fallback
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = JSON.parse(localStorage.getItem('cga_series_enrollments') || '[]');
-        const found = stored.find((item: any) => studentMatches(item.studentId) && item.seriesId === seriesId);
-        if (found) {
-          const exp = Boolean(found.accessValidUntil && new Date(found.accessValidUntil).getTime() < currentTime);
-          return { enrolled: !exp, expired: exp, validUntil: found.accessValidUntil, pendingVerification: false };
-        }
-      } catch {}
-    }
-
-    // 3. Verified fee payment for this seriesId
+    // 2. Verified fee payment for this seriesId
     const verifiedPay = (db.feePayments || []).find(
       (fp) =>
         studentMatches(fp.studentId) &&

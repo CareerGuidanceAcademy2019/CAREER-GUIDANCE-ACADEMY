@@ -150,13 +150,18 @@ export async function proxy(request: NextRequest) {
         const { data, error } = await supabase.auth.getUser();
         if (data?.user) {
           user = data.user;
-        } else if (error && (error.status === 0 || error.status === 500 || error.status === 502 || error.status === 503 || error.status === 504)) {
-          // Fail-open on transient network/GoTrue timeout during rush hour so active students are not kicked out
+        } else if (
+          !path.startsWith('/admin') &&
+          error &&
+          (error.status === 0 || error.status === 500 || error.status === 502 || error.status === 503 || error.status === 504)
+        ) {
+          // Fail-open on transient network/GoTrue timeout during rush hour for active students only (never for /admin)
           user = { id: 'transient-pass' } as any;
         }
       } catch {
-        // Fail-open on transient network timeout when cookie is present
-        user = { id: 'transient-pass' } as any;
+        if (!path.startsWith('/admin')) {
+          user = { id: 'transient-pass' } as any;
+        }
       }
     }
   }
@@ -171,8 +176,10 @@ export async function proxy(request: NextRequest) {
 
   if (isProtected && !user) {
     const url = request.nextUrl.clone();
+    const fullTarget = `${path}${request.nextUrl.search || ''}`;
     url.pathname = '/login';
-    url.searchParams.set('next', safeNext(path));
+    url.search = '';
+    url.searchParams.set('next', safeNext(fullTarget));
     return NextResponse.redirect(url);
   }
 

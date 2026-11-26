@@ -145,7 +145,15 @@ export default function RegisterPage() {
       setConfirmEmailSent(true);
       return;
     }
-    router.push('/student/dashboard');
+    let nextDest = '/student/dashboard';
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search);
+      const rawNext = sp.get('next');
+      if (rawNext && rawNext.startsWith('/student')) {
+        nextDest = rawNext;
+      }
+    }
+    router.push(nextDest);
   };
 
   const handleVerifySignupOtp = async (e: React.FormEvent) => {

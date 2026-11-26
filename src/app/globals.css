@@ -57,10 +57,10 @@
   --radius-4xl: 0px;
 }
 
-/* Zoomed-out root scale across phone, tablet, and desktop so pages fit comfortably without feeling zoomed-in */
+/* Root scale: comfortably larger on mobile phones (<640px) while keeping tablet & desktop unchanged */
 html {
   scroll-behavior: smooth;
-  font-size: 13.5px;
+  font-size: 15px;
 }
 
 @media (min-width: 640px) {

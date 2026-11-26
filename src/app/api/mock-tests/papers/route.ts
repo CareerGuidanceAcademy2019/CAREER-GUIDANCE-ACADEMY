@@ -1,16 +1,22 @@
 import { NextResponse } from 'next/server';
-import { createServerSupabase, createAdminSupabase } from '@/lib/supabase/server';
+import { createAdminSupabase, requireActiveSession } from '@/lib/supabase/server';
 
 export async function GET(request: Request) {
   try {
+    const active = await requireActiveSession(request);
+    if (!active) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const { role, user } = active;
+    const isAdmin =
+      role === 'admin' ||
+      role === 'ADMIN' ||
+      user?.email === 'angatsaha825@gmail.com' ||
+      user?.email === 'careerguidanceacademy2019@gmail.com';
+
     const { searchParams } = new URL(request.url);
     const seriesId = searchParams.get('seriesId');
     const subjectId = searchParams.get('subjectId');
-
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
 
     const supabaseAdmin = createAdminSupabase();
 
@@ -37,6 +43,7 @@ export async function GET(request: Request) {
     // Filter out papers whose publish_at is in the future (unless user is admin)
     const now = new Date();
     const papers = (data || []).filter((p) => {
+      if (isAdmin) return true;
       if (p.publish_at && new Date(p.publish_at) > now) return false;
       if (p.expire_at && new Date(p.expire_at) < now) return false;
       return true;

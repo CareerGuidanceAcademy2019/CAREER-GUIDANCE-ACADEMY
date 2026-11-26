@@ -20,10 +20,12 @@ import { PORTAL_HOME } from '@/services/cgaService';
 
 const NAV_LINKS = [
   { href: '/', label: 'Home' },
-  { href: '/about', label: 'About Us' },
   { href: '/courses', label: 'Courses' },
+  { href: '/courses?tab=mock_tests', label: 'Mock Tests' },
+  { href: '/courses?tab=study_materials', label: 'Study Materials' },
   { href: '/achievements', label: 'Achievements' },
   { href: '/faculty', label: 'Faculty' },
+  { href: '/about', label: 'About Us' },
   { href: '/contact', label: 'Contact' },
 ];
 

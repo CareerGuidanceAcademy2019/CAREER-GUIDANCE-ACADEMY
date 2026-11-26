@@ -61,12 +61,13 @@ export default function StudentMockTestsPage() {
 
   // Series, Subject, and Subsections Navigation
   const [selectedSeriesId, setSelectedSeriesId] = useState<string>(
-    () => searchParams.get('seriesId') || 'series-ttet-paper1'
+    () => searchParams.get('seriesId') || searchParams.get('buySeries') || searchParams.get('pkg') || 'series-ttet-paper1'
   );
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>('all');
+  const autoOpenedSeriesBuyRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const paramSeries = searchParams.get('seriesId');
+    const paramSeries = searchParams.get('seriesId') || searchParams.get('buySeries') || searchParams.get('pkg');
     if (paramSeries) {
       setSelectedSeriesId(paramSeries);
       setSelectedSubjectId('all');
@@ -788,6 +789,15 @@ export default function StudentMockTestsPage() {
       paymentType: 'full',
     });
   };
+
+  // Auto-open Mock Test Series payment modal when redirected from public Buy button (?buySeries= or ?pkg=)
+  useEffect(() => {
+    const buySeriesId = searchParams.get('buySeries') || searchParams.get('pkg');
+    if (!buySeriesId || !currentStudent || autoOpenedSeriesBuyRef.current === buySeriesId) return;
+    autoOpenedSeriesBuyRef.current = buySeriesId;
+    handleOpenSeriesCheckout(buySeriesId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, currentStudent, db.mockSeries]);
 
   // ==================== CBT LAUNCH TRANSITION SCREEN (NO FLASH OF ENROLL SECTION) ====================
   if (isStartingTest) {

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -33,6 +33,7 @@ import {
 import { PublicHeader } from '@/components/layout/PublicHeader';
 import { PublicFooter } from '@/components/layout/PublicFooter';
 import { CourseCard } from '@/components/public/CourseCard';
+import { PublicOfferingsCatalog } from '@/components/public/PublicOfferingsCatalog';
 import { useCga } from '@/context/CgaContext';
 import { CustomAcademicEmblemSvg, CustomArrowRightSvg } from '@/components/ui/CustomIcons';
 import { getFacultyAvatarUrl, formatFacultyName } from '@/lib/names';
@@ -915,39 +916,20 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ==================== 7. FEATURED COURSES ==================== */}
-        <section className="py-16 lg:py-20 bg-white">
+        {/* ==================== 7. ALL COURSES, MOCK TEST SERIES & STUDY MATERIALS (VIEW-ONLY PUBLIC SHOWCASE) ==================== */}
+        <section id="portal-offerings" className="py-14 lg:py-18 bg-white border-t border-slate-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-10 gap-4">
-              <div>
-                <span className="text-xs font-extrabold uppercase tracking-widest text-[#0056b3]">
-                  Admissions Open
-                </span>
-                <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0a0e2a] mt-1">
-                  Featured Preparation Courses
-                </h2>
-              </div>
-              <Link
-                href="/courses"
-                className="inline-flex items-center gap-2 text-sm font-bold text-[#0056b3] hover:underline"
-              >
-                View All Batches <ArrowRight className="w-4 h-4" />
-              </Link>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {isDbLoading && featuredCourses.length === 0 ? (
-                [0, 1, 2].map((i) => <CourseCardSkeleton key={i} />)
-              ) : featuredCourses.length === 0 ? (
-                <div className="col-span-full text-center py-12 text-slate-500">
-                  No featured courses found at this time.
+            <Suspense
+              fallback={
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {[0, 1, 2].map((i) => (
+                    <CourseCardSkeleton key={i} />
+                  ))}
                 </div>
-              ) : (
-                featuredCourses.map((course) => (
-                  <CourseCard key={course.id} course={course} />
-                ))
-              )}
-            </div>
+              }
+            >
+              <PublicOfferingsCatalog showHeaderTitle={true} />
+            </Suspense>
           </div>
         </section>
 

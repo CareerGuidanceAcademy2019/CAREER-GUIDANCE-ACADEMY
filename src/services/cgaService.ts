@@ -470,7 +470,7 @@ const toSeriesAttempt = (r: Row, studentName: string, studentCode: string, stude
 
 // High-Speed Multi-Tier Cache (In-Memory + SessionStorage + LocalStorage)
 const CACHE_TTL_MS = 20 * 60 * 1000; // 20 minutes for user session DB snapshot
-const PUBLIC_BOOTSTRAP_CACHE_KEY = 'cga_public_bootstrap_v3';
+const PUBLIC_BOOTSTRAP_CACHE_KEY = 'cga_public_bootstrap_v4';
 const PUBLIC_BOOTSTRAP_TTL_MS = 30 * 60 * 1000; // 30 minutes on-device public catalog cache
 let dbCache: { data: CgaDatabase; timestamp: number; sessionKey: string } | null = null;
 let pendingLoadPromise: Promise<CgaDatabase> | null = null;
@@ -1402,6 +1402,7 @@ export const cgaService = {
           subjectsRaw: Row[];
           announcements: Row[];
           allMockTestsRaw: Row[];
+          publicMaterialsRaw: Row[];
         }> => {
           if (typeof window !== 'undefined') {
             // 0ms On-Device Public Catalog Cache (30-min TTL) — eliminates repeat catalog requests
@@ -1422,6 +1423,7 @@ export const cgaService = {
                       subjectsRaw: p.mockSubjects ?? [],
                       announcements: p.announcements ?? [],
                       allMockTestsRaw: p.mockTestsMeta ?? [],
+                      publicMaterialsRaw: p.studyMaterialsMeta ?? [],
                     };
                   }
                 }
@@ -1449,6 +1451,7 @@ export const cgaService = {
                     subjectsRaw: json.mockSubjects ?? [],
                     announcements: json.announcements ?? [],
                     allMockTestsRaw: json.mockTestsMeta ?? [],
+                    publicMaterialsRaw: json.studyMaterialsMeta ?? [],
                   };
                 }
               }
@@ -1468,7 +1471,26 @@ export const cgaService = {
               one(sb.from('announcements').select('*').order('date', { ascending: false })),
               one(sb.from('mock_tests').select(MOCK_TEST_META_COLS)),
             ]);
-          return { site, faculty, courses, achievements, seriesRaw, subjectsRaw, announcements, allMockTestsRaw };
+          return { site, faculty, courses, achievements, seriesRaw, subjectsRaw, announcements, allMockTestsRaw, publicMaterialsRaw: [] };
+        };
+
+        const PROFILE_STUDENT_SAFE_COLS =
+          'id,role,name,email,phone,photo,student_code,guardian_name,address,permanent_address,qualification,target_exam,joined_date,last_login_at,status,created_at';
+
+        const fetchAuthenticatedMaterials = async (): Promise<Row[]> => {
+          if (!session) return [];
+          if (isStudentOnly && typeof window !== 'undefined') {
+            try {
+              const res = await fetch('/api/materials/list', { cache: 'no-store' });
+              if (res.ok) {
+                const json = await res.json();
+                if (json && Array.isArray(json.materials)) {
+                  return json.materials;
+                }
+              }
+            } catch {}
+          }
+          return one(sb.from('study_materials').select('*').order('uploaded_date', { ascending: false }));
         };
 
         const [
@@ -1484,10 +1506,10 @@ export const cgaService = {
           peersRaw,
         ] = await Promise.all([
           fetchPublicBootstrap(),
-          session ? one(sb.from('study_materials').select('*').order('uploaded_date', { ascending: false })) : Promise.resolve([] as Row[]),
+          fetchAuthenticatedMaterials(),
           session
             ? isStudentOnly
-              ? one(sb.from('profiles').select('*').eq('id', stuId))
+              ? one(sb.from('profiles').select(PROFILE_STUDENT_SAFE_COLS).eq('id', stuId))
               : one(sb.from('profiles').select('*').order('created_at', { ascending: false }))
             : Promise.resolve([] as Row[]),
           session
@@ -1539,8 +1561,10 @@ export const cgaService = {
           subjectsRaw,
           announcements,
           allMockTestsRaw,
+          publicMaterialsRaw,
         } = pub;
 
+        const effectiveMaterialsRaw = materials.length > 0 ? materials : (publicMaterialsRaw ?? []);
         const tests = allMockTestsRaw;
         const seriesTestsRaw = allMockTestsRaw.filter((t: Row) => Boolean(t.series_id));
         const peers = peersRaw;
@@ -1550,10 +1574,10 @@ export const cgaService = {
     const courseName = (id: string) =>
       courses.find((c: Row) => c.id === id)?.name ??
       seriesRaw.find((s: Row) => s.id === id)?.name ??
-      materials.find((m: Row) => m.id === id)?.title ??
+      effectiveMaterialsRaw.find((m: Row) => m.id === id)?.title ??
       '';
 
-    const materialList = materials.map((m) =>
+    const materialList = effectiveMaterialsRaw.map((m) =>
       toMaterial(
         m,
         courseName(m.series_id || m.course_id),
@@ -1750,7 +1774,7 @@ export const cgaService = {
         name: p.name,
         email: p.email,
         phone: p.phone ?? '',
-        password: p.login_password || '',
+        password: session?.role === 'ADMIN' ? (p.login_password || '') : undefined,
         photo: p.photo ?? '',
         guardianName: p.guardian_name ?? '',
         address: p.address ?? '',

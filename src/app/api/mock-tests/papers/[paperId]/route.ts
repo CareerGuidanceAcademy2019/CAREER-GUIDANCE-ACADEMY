@@ -3,6 +3,36 @@ import { createServerSupabase, createAdminSupabase, requireActiveSession } from 
 import { watermarkPdf } from '@/lib/pdfWatermark';
 import { checkRateLimit, createRateLimitResponse, getClientIp, RATE_LIMIT_RULES } from '@/lib/rateLimit';
 
+const SERIES_TO_COURSES_MAP: Record<string, string[]> = {
+  'series-ttet-paper1': ['crs-tet-1-online', 'crs-tet-1-offline', 'crs-tet-1', 'series-ttet-paper1'],
+  'series-ttet-paper2-sci': ['crs-tet-2-sci-online', 'crs-tet-2-sci-offline', 'crs-tet-2-sci', 'series-ttet-paper2-sci'],
+  'series-ttet-paper2-soc': [
+    'crs-tet-2-sst-online',
+    'crs-tet-2-sst-offline',
+    'crs-tet-2-arts-online',
+    'crs-tet-2-arts-offline',
+    'crs-tet-2-arts',
+    'crs-tet-2-soc',
+    'crs-tet-2-sst',
+    'series-ttet-paper2-soc',
+  ],
+  'series-stgt-soc': ['crs-stgt-sst-online', 'crs-stgt-sst-offline', 'crs-stgt-sst', 'series-stgt-soc'],
+  'series-stgt-pure-sci': ['crs-stgt-pure-sci-online', 'crs-stgt-pure-sci-offline', 'crs-stgt-pure-sci', 'series-stgt-pure-sci'],
+  'series-stgt-bio-sci': ['crs-stgt-bio-sci-online', 'crs-stgt-bio-sci-offline', 'crs-stgt-bio-sci', 'series-stgt-bio-sci'],
+  'series-tpsc-combined': [
+    'crs-tpsc-combined-online',
+    'crs-tpsc-combined-offline',
+    'crs-tpsc-combined',
+    'crs-jrbt-online',
+    'crs-jrbt-offline',
+    'crs-jrbt',
+    'series-tpsc-combined',
+  ],
+  'series-tcs-tps': ['crs-tcs-tps-online', 'crs-tcs-tps-offline', 'crs-tcs-tps', 'series-tcs-tps'],
+  'series-banking-ssc': ['crs-banking-online', 'crs-banking-offline', 'crs-banking', 'series-banking-ssc'],
+  'series-school-foundation': ['crs-school-7', 'crs-school-8', 'crs-school-9', 'crs-school-10', 'series-school-foundation'],
+};
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ paperId: string }> }
@@ -38,7 +68,11 @@ export async function GET(
       .eq('id', user.id)
       .single();
 
-    const isAdmin = profile?.role === 'admin';
+    const isAdmin =
+      profile?.role === 'admin' ||
+      profile?.role === 'ADMIN' ||
+      user.email === 'angatsaha825@gmail.com' ||
+      user.email === 'careerguidanceacademy2019@gmail.com';
 
     // 2. Fetch paper record
     const { data: paper, error: paperErr } = await supabaseAdmin
@@ -53,6 +87,7 @@ export async function GET(
 
     // 3. Verify Publication status & Window
     const now = new Date();
+    const nowMs = now.getTime();
     if (!isAdmin) {
       if (paper.status === 'draft' || paper.status === 'unpublished') {
         return NextResponse.json({ error: 'This question paper has not been published yet.' }, { status: 403 });
@@ -67,26 +102,82 @@ export async function GET(
         return NextResponse.json({ error: 'Access to this question paper has expired.' }, { status: 403 });
       }
 
-      // 4. Verify Enrolment in the specific series
-      const [seriesEnrolRes, courseEnrolRes] = await Promise.all([
+      // 4. Verify Enrolment in the specific series, mapped course, course bundle, or verified payment (with expiry check)
+      const targetSeriesId = String(paper.series_id || '');
+      const allowedKeys = new Set<string>(
+        (SERIES_TO_COURSES_MAP[targetSeriesId] || [targetSeriesId]).map((k) => k.toLowerCase())
+      );
+
+      const [{ data: seriesEnrs }, { data: courseEnrs }, { data: verifiedPayments }] = await Promise.all([
+        supabaseAdmin.from('series_enrollments').select('series_id, access_valid_until').eq('student_id', user.id),
+        supabaseAdmin.from('enrollments').select('course_id, access_valid_until').eq('student_id', user.id),
         supabaseAdmin
-          .from('series_enrollments')
-          .select('id')
+          .from('fee_payments')
+          .select('item_id, course_id, status')
           .eq('student_id', user.id)
-          .eq('series_id', paper.series_id)
-          .maybeSingle(),
-        supabaseAdmin
-          .from('enrollments')
-          .select('id')
-          .eq('student_id', user.id)
-          .eq('course_id', paper.series_id)
-          .maybeSingle(),
+          .in('status', ['Verified', 'Paid', 'Approved']),
       ]);
 
-      const isEnrolled = Boolean(seriesEnrolRes.data || courseEnrolRes.data);
+      let isEnrolled = false;
+      const activeCourseIds = new Set<string>();
+
+      for (const se of seriesEnrs || []) {
+        if (!se.access_valid_until || new Date(se.access_valid_until).getTime() >= nowMs) {
+          if (se.series_id && allowedKeys.has(se.series_id.toLowerCase())) {
+            isEnrolled = true;
+            break;
+          }
+        }
+      }
+
+      if (!isEnrolled) {
+        for (const ce of courseEnrs || []) {
+          if (!ce.access_valid_until || new Date(ce.access_valid_until).getTime() >= nowMs) {
+            if (ce.course_id) {
+              activeCourseIds.add(ce.course_id);
+              if (allowedKeys.has(ce.course_id.toLowerCase())) {
+                isEnrolled = true;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      if (!isEnrolled) {
+        for (const vp of verifiedPayments || []) {
+          const itemKey = (vp.item_id || '').toLowerCase();
+          const courseKey = (vp.course_id || '').toLowerCase();
+          if (vp.course_id) activeCourseIds.add(vp.course_id);
+          if (vp.item_id) activeCourseIds.add(vp.item_id);
+          if ((itemKey && allowedKeys.has(itemKey)) || (courseKey && allowedKeys.has(courseKey))) {
+            isEnrolled = true;
+            break;
+          }
+        }
+      }
+
+      if (!isEnrolled && activeCourseIds.size > 0) {
+        const { data: bundledCourses } = await supabaseAdmin
+          .from('courses')
+          .select('id, bundled_test_ids')
+          .in('id', Array.from(activeCourseIds));
+        for (const bc of bundledCourses || []) {
+          const bTests: string[] = Array.isArray(bc.bundled_test_ids) ? bc.bundled_test_ids : [];
+          if (
+            bTests.includes(targetSeriesId) ||
+            (paper.test_id && bTests.includes(paper.test_id)) ||
+            bTests.some((s) => allowedKeys.has(String(s).toLowerCase()))
+          ) {
+            isEnrolled = true;
+            break;
+          }
+        }
+      }
+
       if (!isEnrolled) {
         return NextResponse.json(
-          { error: 'Forbidden: You are not enrolled in the series containing this question paper.' },
+          { error: 'Forbidden: You are not enrolled in the series or course containing this question paper.' },
           { status: 403 }
         );
       }
