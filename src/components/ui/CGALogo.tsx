@@ -6,6 +6,7 @@ import Link from 'next/link';
 interface CGALogoProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
   showText?: boolean;
+  showAddress?: boolean;
   variant?: 'dark' | 'light';
   href?: string;
 }
@@ -13,6 +14,7 @@ interface CGALogoProps {
 export function CGALogo({
   size = 'md',
   showText = true,
+  showAddress = true,
   variant = 'dark',
   href = '/',
 }: CGALogoProps) {
@@ -38,10 +40,12 @@ export function CGALogo({
         />
       </div>
       {showText && (
-        <div className="flex flex-col min-w-0 flex-1 overflow-hidden">
+        <div className="flex flex-col min-w-0 flex-1">
           <div className="flex items-center gap-1.5 min-w-0">
             <span
-              className={`font-bold tracking-tight leading-snug truncate ${
+              className={`font-bold tracking-tight leading-snug ${
+                showAddress ? 'truncate' : 'whitespace-nowrap'
+              } ${
                 size === 'lg' || size === 'xl'
                   ? 'text-lg sm:text-2xl'
                   : size === 'sm'
@@ -57,13 +61,15 @@ export function CGALogo({
               </span>
             )}
           </div>
-          <span
-            className={`text-[11px] font-normal tracking-normal truncate ${
-              variant === 'light' ? 'text-slate-300' : 'text-slate-500'
-            }`}
-          >
-            Chanban, Udaipur • Tripura 799120
-          </span>
+          {showAddress && (
+            <span
+              className={`text-[11px] font-normal tracking-normal truncate ${
+                variant === 'light' ? 'text-slate-300' : 'text-slate-500'
+              }`}
+            >
+              Chanban, Udaipur • Tripura 799120
+            </span>
+          )}
         </div>
       )}
     </div>

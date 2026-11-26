@@ -83,41 +83,17 @@ export function PublicHeader({ variant = 'default' }: PublicHeaderProps) {
               {db.siteContent.contact.phonePrimary}
             </a>
           </div>
-
-          <div className="flex items-center gap-2 ml-auto shrink-0">
-            <a
-              href={db.siteContent.whatsappGroupUrl || 'https://chat.whatsapp.com/'}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-[#25D366] hover:bg-[#1ebe5b] text-slate-950 font-black text-[11px] transition-all"
-              title="Join Official C.G.A WhatsApp Group"
-            >
-              <span>WhatsApp Group</span>
-            </a>
-            <a
-              href={db.siteContent.facebookProfileUrl || 'https://www.facebook.com/'}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-[#1877F2] hover:bg-blue-600 text-white font-black text-[11px] transition-all"
-              title="Visit Official C.G.A Facebook Profile"
-            >
-              <span>Facebook Profile</span>
-            </a>
-            <span className="hidden lg:inline-block px-2.5 py-0.5 rounded bg-white/10 border border-white/15 text-[11px] font-medium text-amber-200 tracking-wide">
-              {db.siteContent.heroBadge}
-            </span>
-          </div>
         </div>
       </div>
 
       {/* Main Navigation Bar */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-15 sm:h-16 flex items-center justify-between gap-3">
-        <div className="min-w-0 shrink">
-          <CGALogo size="sm" />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-15 sm:h-16 flex items-center justify-between gap-2">
+        <div className="shrink-0">
+          <CGALogo size="sm" showAddress={false} />
         </div>
 
         {/* Desktop Nav Links */}
-        <nav className="hidden lg:flex items-center gap-1 shrink-0" aria-label="Main Navigation">
+        <nav className="hidden lg:flex items-center gap-0.5 xl:gap-1 shrink-0" aria-label="Main Navigation">
           {NAV_LINKS.map((item) => {
             const isActive =
               item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
@@ -126,7 +102,7 @@ export function PublicHeader({ variant = 'default' }: PublicHeaderProps) {
                 key={item.href}
                 href={item.href}
                 prefetch={true}
-                className={`px-3.5 py-2 rounded-lg text-sm font-medium transition-all ${
+                className={`px-2 xl:px-3 py-2 rounded-lg text-xs xl:text-sm font-medium whitespace-nowrap transition-all ${
                   isActive
                     ? 'bg-slate-100 text-[#0056b3] font-semibold'
                     : 'text-slate-700 hover:text-[#0056b3] hover:bg-slate-50'

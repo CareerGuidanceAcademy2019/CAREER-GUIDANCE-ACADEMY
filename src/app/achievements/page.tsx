@@ -112,9 +112,9 @@ export default function AchievementsPage() {
                       <img
                         src={item.photo}
                         alt={`Photograph of student ${item.name}, ${item.rank} in ${item.exam}`}
-                        className="w-24 h-24 rounded-full object-cover mx-auto ring-4 ring-amber-100 shadow-md"
+                        className="w-32 h-32 rounded-full object-cover mx-auto ring-4 ring-amber-200 shadow-lg"
                       />
-                      <span className="absolute -bottom-1 -right-1 bg-[#ea580c] text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full shadow whitespace-nowrap">
+                      <span className="absolute -bottom-1 -right-1 bg-[#ea580c] text-white text-xs font-extrabold px-2.5 py-0.5 rounded-full shadow whitespace-nowrap">
                         {item.year}
                       </span>
                     </div>
@@ -122,8 +122,8 @@ export default function AchievementsPage() {
                       <span className="inline-block px-3 py-1 rounded-full bg-amber-50 text-[#ea580c] border border-amber-200 text-xs font-extrabold whitespace-nowrap">
                         {item.rank}
                       </span>
-                      <h3 className="text-lg font-extrabold text-[#0a0e2a] mt-2">{item.name}</h3>
-                      <p className="text-xs font-bold text-[#0056b3] mt-0.5">{item.exam}</p>
+                      <h3 className="text-xl sm:text-2xl font-extrabold text-[#0a0e2a] mt-2 leading-tight">{item.name}</h3>
+                      <p className="text-xs sm:text-sm font-bold text-[#0056b3] mt-1">{item.exam}</p>
                     </div>
                   </div>
                   <div className="p-5 flex-1 flex flex-col justify-between bg-slate-50/60">

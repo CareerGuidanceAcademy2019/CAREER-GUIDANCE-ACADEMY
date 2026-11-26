@@ -198,15 +198,13 @@ export function PublicOfferingsCatalog({
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
             <span className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-widest text-[#0056b3]">
-              <Sparkles className="w-3.5 h-3.5 text-[#ea580c]" /> Official Public Portal Catalogue (View-Only Mode)
+              <Sparkles className="w-3.5 h-3.5 text-[#ea580c]" /> Official Portal Catalogue
             </span>
             <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0a0e2a] mt-1">
-              Explore Our Courses, Mock Test Series &amp; Study Materials
+              Courses, Mock Test Series &amp; Study Materials
             </h2>
-            <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-3xl">
-              Browse everything Career Guidance Academy offers. Switch tabs below to view all{' '}
-              <strong>Courses &amp; Batches</strong>, <strong>Online Mock Test Series</strong>, and{' '}
-              <strong>Study Materials &amp; Notes</strong> separately. Click <strong>Buy / Enrol Now</strong> on any card to sign in and complete enrollment.
+            <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-2xl">
+              Switch tabs below to browse Courses, Online Mock Tests, and Study Notes. Click <strong>Buy / Enrol</strong> to sign in and enroll.
             </p>
           </div>
 

@@ -44,9 +44,6 @@ export function CookieConsentBanner() {
           <div className="space-y-1">
             <h2 className="text-sm font-bold text-white flex items-center gap-2">
               <span>Your Privacy &amp; Essential Cookies</span>
-              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                DPDP 2023 Compliant
-              </span>
             </h2>
             <p className="text-xs text-slate-300 leading-relaxed">
               Career Guidance Academy uses strictly necessary authentication cookies to keep your student session secure. We do <strong>not</strong> use commercial ad trackers, sell personal data, or deploy invasive tracking pixels. Read our{' '}

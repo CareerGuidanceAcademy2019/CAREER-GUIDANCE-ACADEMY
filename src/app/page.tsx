@@ -425,9 +425,8 @@ export default function HomePage() {
                 <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0a0e2a] mt-2">
                   Modern Infrastructure &amp; Dynamic Learning Spaces
                 </h2>
-                <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-2xl">
-                  Step inside Career Guidance Academy at Chanban, Udaipur. Explore our multimedia smart classrooms,
-                  fully equipped OMR testing center, and dedicated faculty study desks.
+                <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-xl">
+                  Multimedia smart classrooms, OMR testing center, and dedicated mentorship desks at Chanban, Udaipur.
                 </p>
               </div>
 
@@ -668,24 +667,26 @@ export default function HomePage() {
                   key={topper.id}
                   className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs cga-card-hover flex flex-col"
                 >
-                  <div className="p-5 flex items-center gap-3.5 border-b border-slate-100">
+                  <div className="p-5 flex flex-col items-center text-center border-b border-slate-100">
                     <img
                       src={topper.photo}
                       alt={`Photograph of student ${topper.name}, ${topper.rank} in ${topper.exam}`}
                       loading="lazy"
                       decoding="async"
-                      className="w-16 h-16 rounded-full object-cover ring-2 ring-[#ea580c] shrink-0"
+                      className="w-24 h-24 rounded-full object-cover ring-4 ring-[#ea580c]/30 shadow-md shrink-0"
                     />
-                    <div>
-                      <span className="inline-block px-2.5 py-0.5 rounded bg-amber-50 text-[#ea580c] border border-amber-200 text-[11px] font-extrabold">
+                    <div className="mt-3 space-y-1">
+                      <span className="inline-block px-2.5 py-0.5 rounded bg-amber-50 text-[#ea580c] border border-amber-200 text-xs font-extrabold">
                         {topper.rank}
                       </span>
-                      <h3 className="text-base font-extrabold text-[#0a0e2a] mt-1">{topper.name}</h3>
-                      <p className="text-xs font-semibold text-[#0056b3]">{topper.exam}</p>
+                      <h3 className="text-lg sm:text-xl font-extrabold text-[#0a0e2a] leading-tight">
+                        {topper.name}
+                      </h3>
+                      <p className="text-xs font-bold text-[#0056b3]">{topper.exam}</p>
                     </div>
                   </div>
-                  <div className="p-5 flex-1 flex flex-col justify-between bg-slate-50/50">
-                    <p className="text-xs text-slate-600 italic leading-relaxed">
+                  <div className="p-4 flex-1 flex flex-col justify-between bg-slate-50/50">
+                    <p className="text-xs text-slate-600 italic leading-relaxed line-clamp-3 text-center">
                       “{topper.quote}”
                     </p>
                     <div className="mt-3 pt-2 border-t border-slate-200/60 flex items-center justify-between gap-2 text-[11px] font-bold text-slate-400">
@@ -714,7 +715,7 @@ export default function HomePage() {
                   Notices &amp; Examination Announcements
                 </h2>
                 <p className="text-xs sm:text-sm text-slate-600 mt-1">
-                  Stay updated with official batch dates, mock test schedules, and government notifications.
+                  Latest batch dates, mock schedules, and official exam updates.
                 </p>
               </div>
 
@@ -894,36 +895,34 @@ export default function HomePage() {
         </section>
 
         {/* ==================== 5. WELCOME & ACADEMIC INTRO ==================== */}
-        <section className="py-16 lg:py-20 bg-white">
+        <section className="py-10 lg:py-12 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="max-w-3xl mx-auto text-center mb-12">
+            <div className="max-w-2xl mx-auto text-center">
               <span className="text-xs font-extrabold uppercase tracking-widest text-[#0056b3]">
                 Welcome to Career Guidance Academy
               </span>
-              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-[#0a0e2a] mt-2">
-                Gomati District’s Premier Competitive Coaching Destination
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0a0e2a] mt-1.5">
+                Gomati District’s Premier Coaching Destination
               </h2>
-              <div className="w-16 h-1 bg-[#ea580c] mx-auto mt-4 rounded-full" />
-              <p className="text-sm sm:text-base text-slate-600 mt-4 leading-relaxed">
-                Founded in 2019 at Chanban, Udaipur, Career Guidance Academy (C.G.A) delivers
-                disciplined, syllabus-focused classroom and online coaching for Teaching Eligibility
-                (Tripura TET, STGT), Civil &amp; General Recruitment (TPSC, JRBT, Banking, SSC,
-                Railways), and Secondary/Higher Secondary Foundation batches.
+              <div className="w-14 h-1 bg-[#ea580c] mx-auto mt-3 rounded-full" />
+              <p className="text-xs sm:text-sm text-slate-600 mt-3 leading-relaxed">
+                Est. 2019 at Chanban, Udaipur — focused classroom &amp; online coaching for Tripura TET,
+                STGT, TPSC, JRBT, Banking, SSC, Railways, and TBSE/CBSE Foundation batches.
               </p>
             </div>
           </div>
         </section>
 
         {/* ==================== 6. SPECIALIZED ACADEMIC WINGS ==================== */}
-        <section className="py-14 bg-slate-50 border-y border-slate-200">
+        <section className="py-12 bg-slate-50 border-y border-slate-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
+            <div className="flex flex-col md:flex-row md:items-end justify-between mb-6 gap-3">
               <div>
                 <span className="text-xs font-extrabold uppercase tracking-widest text-[#0056b3]">
                   Structured Curriculum
                 </span>
                 <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0a0e2a] mt-1">
-                  Our Four Specialized Academic Wings
+                  Four Specialized Academic Wings
                 </h2>
               </div>
               <Link
@@ -935,44 +934,44 @@ export default function HomePage() {
               </Link>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              <div className="p-6 rounded-3xl bg-white border border-slate-200 shadow-xs hover:border-[#0056b3] transition-all">
-                <div className="w-10 h-10 rounded-2xl bg-blue-50 text-[#0056b3] flex items-center justify-center font-bold mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+              <div className="p-5 bg-white border border-slate-200 shadow-xs hover:border-[#0056b3] transition-all">
+                <div className="w-9 h-9 bg-blue-50 text-[#0056b3] flex items-center justify-center font-bold mb-3">
                   1
                 </div>
                 <h3 className="text-base font-extrabold text-[#0a0e2a]">Teaching Exams Wing</h3>
-                <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-                  Rigorous preparation for Tripura TET (Paper I &amp; Paper II). Complete syllabus coverage for CDP, Languages, Science, and Social Studies.
+                <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                  Tripura TET Paper I &amp; II — CDP, Languages, Science &amp; Social Studies.
                 </p>
               </div>
 
-              <div className="p-6 rounded-3xl bg-white border border-slate-200 shadow-xs hover:border-[#ea580c] transition-all">
-                <div className="w-10 h-10 rounded-2xl bg-amber-50 text-[#ea580c] flex items-center justify-center font-bold mb-4">
+              <div className="p-5 bg-white border border-slate-200 shadow-xs hover:border-[#ea580c] transition-all">
+                <div className="w-9 h-9 bg-amber-50 text-[#ea580c] flex items-center justify-center font-bold mb-3">
                   2
                 </div>
                 <h3 className="text-base font-extrabold text-[#0a0e2a]">STGT &amp; High School Wing</h3>
-                <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-                  Specialized subject batches for Graduate Teachers (Secondary): Pure Science (PCM), Bio Science (CBZ), and Social Studies.
+                <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                  Graduate Teacher batches for Pure Science, Bio Science &amp; Social Studies.
                 </p>
               </div>
 
-              <div className="p-6 rounded-3xl bg-white border border-slate-200 shadow-xs hover:border-emerald-600 transition-all">
-                <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold mb-4">
+              <div className="p-5 bg-white border border-slate-200 shadow-xs hover:border-emerald-600 transition-all">
+                <div className="w-9 h-9 bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold mb-3">
                   3
                 </div>
                 <h3 className="text-base font-extrabold text-[#0a0e2a]">TPSC &amp; General Exams</h3>
-                <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-                  Comprehensive coverage of Tripura GK, Current Affairs, English, Quantitative Aptitude &amp; Reasoning for TPSC Combined &amp; JRBT.
+                <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                  Tripura GK, Current Affairs, English, Quant &amp; Reasoning for TPSC &amp; JRBT.
                 </p>
               </div>
 
-              <div className="p-6 rounded-3xl bg-white border border-slate-200 shadow-xs hover:border-sky-600 transition-all">
-                <div className="w-10 h-10 rounded-2xl bg-sky-50 text-sky-700 flex items-center justify-center font-bold mb-4">
+              <div className="p-5 bg-white border border-slate-200 shadow-xs hover:border-sky-600 transition-all">
+                <div className="w-9 h-9 bg-sky-50 text-sky-700 flex items-center justify-center font-bold mb-3">
                   4
                 </div>
                 <h3 className="text-base font-extrabold text-[#0a0e2a]">Board Foundation Wing</h3>
-                <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-                  TBSE &amp; CBSE Classes VII to X foundation batches building concepts in Mathematics, Science, and English for future competitive exams.
+                <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                  TBSE &amp; CBSE Classes VII–X strong foundation in Maths, Science &amp; English.
                 </p>
               </div>
             </div>
@@ -1037,57 +1036,57 @@ export default function HomePage() {
         </section>
 
         {/* ==================== 9. METHODOLOGY ==================== */}
-        <section className="py-16 bg-slate-50 border-t border-slate-200">
+        <section className="py-12 bg-slate-50 border-t border-slate-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center max-w-2xl mx-auto mb-12">
+            <div className="text-center max-w-xl mx-auto mb-8">
               <span className="text-xs font-extrabold uppercase tracking-widest text-[#0056b3]">
                 Proven System
               </span>
               <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0a0e2a] mt-1">
-                Our 6-Step Preparation Methodology
+                Our 6-Step Preparation System
               </h2>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {[
                 {
                   num: '01',
-                  title: 'Complete Syllabus Mapping',
-                  desc: 'Every lecture strictly adheres to official TRBT, TPSC, and TBSE guidelines with updated questions.',
+                  title: 'Syllabus Mapping',
+                  desc: 'Strict alignment with TRBT, TPSC & TBSE exam guidelines.',
                 },
                 {
                   num: '02',
-                  title: 'Handcrafted Printed Handouts',
-                  desc: 'Concise, high-yield chapter notes and conceptual formula booklets distributed to students.',
+                  title: 'Printed Handouts',
+                  desc: 'High-yield chapter notes and concise formula booklets.',
                 },
                 {
                   num: '03',
-                  title: 'Weekly OMR & Online CBT Mocks',
-                  desc: 'Timed exam-simulated tests with negative marking, instant scorecards, and ranking.',
+                  title: 'Weekly OMR & CBT Mocks',
+                  desc: 'Timed exam simulations with instant scorecards & ranks.',
                 },
                 {
                   num: '04',
-                  title: 'One-on-One Doubt Solving',
-                  desc: 'Dedicated daily clearing hours with faculty ensuring zero conceptual bottlenecks.',
+                  title: '1-on-1 Doubt Solving',
+                  desc: 'Dedicated faculty clearing hours for every student.',
                 },
                 {
                   num: '05',
-                  title: 'Tripura Current Affairs Digests',
-                  desc: 'Domestic & International capsules with special emphasis on Tripura state GK.',
+                  title: 'Tripura Current Affairs',
+                  desc: 'Domestic, International & Tripura State GK capsules.',
                 },
                 {
                   num: '06',
-                  title: 'Rigorous Past 10-Yr Paper Analysis',
-                  desc: 'Dissecting previous years questions to spot recurring themes and patterns.',
+                  title: '10-Yr Paper Analysis',
+                  desc: 'Past paper trend breakdown to spot high-weight topics.',
                 },
               ].map((step, i) => (
                 <div
                   key={i}
-                  className="p-6 rounded-2xl bg-white border border-slate-200 shadow-2xs hover:border-[#0056b3] transition-colors"
+                  className="p-5 bg-white border border-slate-200 shadow-2xs hover:border-[#0056b3] transition-colors"
                 >
-                  <span className="text-2xl font-black text-[#ea580c] block mb-2">{step.num}</span>
+                  <span className="text-xl font-black text-[#ea580c] block mb-1">{step.num}</span>
                   <h3 className="text-base font-extrabold text-[#0a0e2a]">{step.title}</h3>
-                  <p className="text-xs text-slate-600 mt-2 leading-relaxed">{step.desc}</p>
+                  <p className="text-xs text-slate-600 mt-1 leading-relaxed">{step.desc}</p>
                 </div>
               ))}
             </div>
@@ -1095,19 +1094,18 @@ export default function HomePage() {
         </section>
 
         {/* ==================== 10. CALL TO ACTION BANNER ==================== */}
-        <section className="py-16 bg-white">
+        <section className="py-12 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="cga-gradient-hero rounded-3xl p-8 sm:p-12 text-white shadow-xl flex flex-col lg:flex-row items-center justify-between gap-8">
-              <div className="space-y-3 max-w-2xl text-center lg:text-left">
-                <span className="inline-block px-3 py-1 rounded-full bg-white/10 text-amber-300 text-xs font-bold uppercase tracking-wider">
-                  Admissions Open for 2026–27 Session
+            <div className="cga-gradient-hero p-7 sm:p-10 text-white shadow-xl flex flex-col lg:flex-row items-center justify-between gap-6">
+              <div className="space-y-2 max-w-xl text-center lg:text-left">
+                <span className="inline-block px-3 py-1 bg-white/10 text-amber-300 text-xs font-bold uppercase tracking-wider">
+                  Admissions Open • 2026–27
                 </span>
-                <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight">
+                <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
                   Ready to Secure Your State Rank in Tripura?
                 </h2>
-                <p className="text-sm text-blue-100 leading-relaxed">
-                  Join hundreds of successful candidates who transformed their preparation at Career
-                  Guidance Academy. Enrol online or visit our Udaipur campus today.
+                <p className="text-xs sm:text-sm text-blue-100 leading-relaxed">
+                  Enrol online or visit our Chanban, Udaipur campus today.
                 </p>
               </div>
 
