@@ -278,7 +278,7 @@ export default function HomePage() {
                   {siteContent.heroSubtitle}
                 </p>
 
-                {/* Primary & Secondary CTAs */}
+                {/* Primary, Secondary & Social Community CTAs */}
                 <div className="flex flex-wrap items-center gap-3 pt-1">
                   <Link
                     href="/courses"
@@ -294,6 +294,26 @@ export default function HomePage() {
                   >
                     <span>Student Login</span>
                   </Link>
+
+                  <a
+                    href={siteContent.whatsappGroupUrl || 'https://chat.whatsapp.com/'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2.5 bg-[#25D366] hover:bg-[#1ebe5b] text-slate-950 font-black text-xs sm:text-sm shadow-xs transition-all inline-flex items-center gap-1.5"
+                  >
+                    <span>Join WhatsApp Group</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </a>
+
+                  <a
+                    href={siteContent.facebookProfileUrl || 'https://www.facebook.com/'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2.5 bg-[#1877F2] hover:bg-blue-600 text-white font-black text-xs sm:text-sm shadow-xs transition-all inline-flex items-center gap-1.5"
+                  >
+                    <span>Facebook Profile</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </a>
                 </div>
 
                 {/* Key Pillars */}
@@ -577,7 +597,50 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ==================== 3. TOPPERS & ACHIEVEMENTS PREVIEW (IMMEDIATELY AFTER BANNER) ==================== */}
+        {/* ==================== 2B. DAILY CURRENT AFFAIR QUIZZES HIGHLIGHT BANNER ==================== */}
+        <section className="bg-gradient-to-r from-[#0a0e2a] via-[#1e3a8a] to-[#0a0e2a] border-b-2 border-amber-400 py-5">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="text-center sm:text-left space-y-1">
+              <Link
+                href="/daily-current-affairs"
+                className="inline-flex items-center gap-2 px-4 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-sm sm:text-base lg:text-lg tracking-wide shadow-md transition-all"
+              >
+                <span>Click here for daily current affair quizs</span>
+                <ArrowRight className="w-4 h-4 shrink-0" />
+              </Link>
+              <p className="text-xs sm:text-sm text-amber-100 font-semibold line-clamp-1">
+                Practice daily updated Tripura, National &amp; International Current Affairs MCQs posted by C.G.A faculty.
+              </p>
+            </div>
+
+            <Link
+              href="/daily-current-affairs"
+              className="px-5 py-2.5 bg-[#ea580c] hover:bg-orange-600 text-white font-black text-xs sm:text-sm shadow-md inline-flex items-center gap-1.5 shrink-0 transition-all"
+            >
+              <span>Open Daily Current Affair MCQs</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        </section>
+
+        {/* ==================== 2C. EXPLORE ALL COURSES, MOCK TEST SERIES & STUDY MATERIALS (JUST BEFORE ACHIEVEMENTS) ==================== */}
+        <section id="portal-offerings" className="py-12 lg:py-16 bg-white border-b border-slate-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <Suspense
+              fallback={
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {[0, 1, 2].map((i) => (
+                    <CourseCardSkeleton key={i} />
+                  ))}
+                </div>
+              }
+            >
+              <PublicOfferingsCatalog showHeaderTitle={true} />
+            </Suspense>
+          </div>
+        </section>
+
+        {/* ==================== 3. TOPPERS & ACHIEVEMENTS PREVIEW (MOBILE HORIZONTAL SCROLL) ==================== */}
         <section className="py-16 lg:py-20 bg-slate-50 border-b border-slate-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-10 gap-4">
@@ -597,13 +660,13 @@ export default function HomePage() {
               </Link>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6 overflow-x-auto sm:overflow-visible snap-x snap-mandatory pb-4 sm:pb-0 -mx-4 px-4 sm:mx-0 sm:px-0">
               {isDbLoading && topAchievements.length === 0
                 ? [0, 1, 2, 3].map((i) => <TopperCardSkeleton key={i} />)
                 : topAchievements.map((topper) => (
                 <div
                   key={topper.id}
-                  className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs cga-card-hover flex flex-col"
+                  className="min-w-[80vw] sm:min-w-0 snap-center shrink-0 bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs cga-card-hover flex flex-col"
                 >
                   <div className="p-5 flex items-center gap-3.5 border-b border-slate-100">
                     <img
@@ -913,23 +976,6 @@ export default function HomePage() {
                 </p>
               </div>
             </div>
-          </div>
-        </section>
-
-        {/* ==================== 7. ALL COURSES, MOCK TEST SERIES & STUDY MATERIALS (VIEW-ONLY PUBLIC SHOWCASE) ==================== */}
-        <section id="portal-offerings" className="py-14 lg:py-18 bg-white border-t border-slate-200">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <Suspense
-              fallback={
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {[0, 1, 2].map((i) => (
-                    <CourseCardSkeleton key={i} />
-                  ))}
-                </div>
-              }
-            >
-              <PublicOfferingsCatalog showHeaderTitle={true} />
-            </Suspense>
           </div>
         </section>
 

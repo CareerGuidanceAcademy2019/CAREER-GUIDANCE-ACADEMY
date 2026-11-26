@@ -165,7 +165,7 @@ export function CourseCard({
           <p className="text-[10px] font-bold uppercase tracking-widest text-white/65 mb-0.5">
             {course.category} {course.board ? `• ${course.board}` : ''}
           </p>
-          <h3 className={`${compact ? 'text-base' : 'text-lg'} font-black text-white leading-snug line-clamp-2`}>
+          <h3 className={`${compact ? 'text-lg sm:text-xl' : 'text-xl sm:text-2xl'} font-black text-white leading-snug line-clamp-2`}>
             {course.name}
           </h3>
         </div>

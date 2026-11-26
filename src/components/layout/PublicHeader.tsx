@@ -84,7 +84,25 @@ export function PublicHeader({ variant = 'default' }: PublicHeaderProps) {
             </a>
           </div>
 
-          <div className="flex items-center gap-3 ml-auto shrink-0">
+          <div className="flex items-center gap-2 ml-auto shrink-0">
+            <a
+              href={db.siteContent.whatsappGroupUrl || 'https://chat.whatsapp.com/'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-[#25D366] hover:bg-[#1ebe5b] text-slate-950 font-black text-[11px] transition-all"
+              title="Join Official C.G.A WhatsApp Group"
+            >
+              <span>WhatsApp Group</span>
+            </a>
+            <a
+              href={db.siteContent.facebookProfileUrl || 'https://www.facebook.com/'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-[#1877F2] hover:bg-blue-600 text-white font-black text-[11px] transition-all"
+              title="Visit Official C.G.A Facebook Profile"
+            >
+              <span>Facebook Profile</span>
+            </a>
             <span className="hidden lg:inline-block px-2.5 py-0.5 rounded bg-white/10 border border-white/15 text-[11px] font-medium text-amber-200 tracking-wide">
               {db.siteContent.heroBadge}
             </span>

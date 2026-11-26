@@ -17,7 +17,7 @@ import {
   EyeOff,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
-import { CampusGalleryImage, SiteContent, UrgentPopupAnnouncement } from '@/data/initialSeedData';
+import { CampusGalleryImage, SiteContent, UrgentPopupAnnouncement, DailyCaMcqBanner } from '@/data/initialSeedData';
 import { compressCampusPhoto, MAX_CAMPUS_IMAGES, type CompressionResult } from '@/lib/imageCompressor';
 
 export default function AdminSiteContentCmsPage() {
@@ -38,6 +38,83 @@ export default function AdminSiteContentCmsPage() {
   const [popupLinkUrl, setPopupLinkUrl] = useState('');
   const [popupLinkLabel, setPopupLinkLabel] = useState('');
   const [popupIsActive, setPopupIsActive] = useState(true);
+
+  // Daily Current Affair MCQ Banner Manager State (Admin Only)
+  const [caBannerTitle, setCaBannerTitle] = useState('');
+  const [caBannerDate, setCaBannerDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [caBannerCompressed, setCaBannerCompressed] = useState<CompressionResult | null>(null);
+  const [isCompressingCaBanner, setIsCompressingCaBanner] = useState(false);
+  const caBannerFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleCaBannerFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsCompressingCaBanner(true);
+    try {
+      const res = await compressCampusPhoto(file);
+      setCaBannerCompressed(res);
+      if (!caBannerTitle) {
+        setCaBannerTitle(file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' '));
+      }
+      showToast(
+        'Banner Image Compressed',
+        `Optimized from ${res.originalSizeKb}KB to ${res.compressedSizeKb}KB (${res.savingsPercent}% saved).`,
+        'success'
+      );
+    } catch (err: any) {
+      showToast('Compression Error', err.message || 'Could not compress banner image.', 'error');
+    } finally {
+      setIsCompressingCaBanner(false);
+    }
+  };
+
+  const handlePublishCaBanner = async () => {
+    if (!caBannerCompressed) {
+      showToast('Select Banner Image', 'Please choose a banner image file first.', 'error');
+      return;
+    }
+    const chosenDate = caBannerDate || new Date().toISOString().split('T')[0];
+    const newBanner: DailyCaMcqBanner = {
+      id: `ca-mcq-banner-${Date.now()}`,
+      imageUrl: caBannerCompressed.dataUrl,
+      title: caBannerTitle.trim() || `Daily Current Affair Quiz (${chosenDate})`,
+      date: chosenDate,
+      uploadedAt: new Date().toISOString(),
+    };
+    const existingList = Array.isArray(form.dailyCaMcqBanners) ? form.dailyCaMcqBanners : [];
+    const updatedList = [newBanner, ...existingList];
+    const updatedForm: SiteContent = {
+      ...form,
+      dailyCaMcqBanners: updatedList,
+    };
+    setForm(updatedForm);
+    setCaBannerCompressed(null);
+    setCaBannerTitle('');
+    setIsSaving(true);
+    const ok = await updateSiteContent(updatedForm);
+    setIsSaving(false);
+    if (ok) {
+      showToast(
+        'Daily Current Affair Banner Published',
+        `Banner dated ${chosenDate} is now live on the Daily Current Affair Quiz page.`,
+        'success'
+      );
+    }
+  };
+
+  const handleDeleteCaBanner = async (id: string) => {
+    const existingList = Array.isArray(form.dailyCaMcqBanners) ? form.dailyCaMcqBanners : [];
+    const updatedList = existingList.filter((b) => b.id !== id);
+    const updatedForm: SiteContent = {
+      ...form,
+      dailyCaMcqBanners: updatedList,
+    };
+    setForm(updatedForm);
+    setIsSaving(true);
+    await updateSiteContent(updatedForm);
+    setIsSaving(false);
+    showToast('Banner Deleted', 'Daily Current Affair MCQ banner has been removed.', 'info');
+  };
 
   useEffect(() => {
     setForm(db.siteContent);
@@ -482,6 +559,143 @@ export default function AdminSiteContentCmsPage() {
           )}
         </div>
 
+        {/* 0B. Daily Current Affair MCQs Banner Manager (Admin Only) */}
+        <div className="bg-white rounded-2xl border-2 border-[#ea580c]/35 p-6 shadow-xs space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+            <div>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-orange-50 text-[#ea580c] border border-orange-200 text-[11px] font-bold uppercase tracking-wide mb-1.5">
+                <Camera className="w-3.5 h-3.5" /> Daily Current Affair Quiz Banner Manager
+              </span>
+              <h2 className="text-base font-bold text-[#0a0e2a]">
+                Daily Current Affair MCQs &amp; Quiz Banners (With Upload Date)
+              </h2>
+              <p className="text-xs text-slate-600 mt-0.5">
+                Upload or delete Daily Current Affair MCQ banners with their date here. Visitors clicking &quot;Click here for daily current affair quizs&quot; on the front page will see these posted banners and dates in view-only mode.
+              </p>
+            </div>
+            <div className="px-3 py-1.5 bg-orange-50 border border-orange-200 text-[#ea580c] text-xs font-extrabold shrink-0 self-start">
+              {(form.dailyCaMcqBanners || []).length} Posted Banner(s)
+            </div>
+          </div>
+
+          {/* Upload New Daily Current Affair Banner Form */}
+          <div className="p-4 sm:p-5 bg-slate-50 border border-slate-200 space-y-4">
+            <input
+              ref={caBannerFileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={handleCaBannerFileSelect}
+              className="hidden"
+            />
+
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3.5 items-end">
+              <div className="sm:col-span-5">
+                <label className="font-bold text-slate-700 block mb-1">
+                  Banner Heading / Title (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={caBannerTitle}
+                  onChange={(e) => setCaBannerTitle(e.target.value)}
+                  placeholder="e.g. Daily Current Affairs MCQs — Tripura & National"
+                  className="w-full px-3.5 py-2 border border-slate-200 bg-white text-xs"
+                />
+              </div>
+
+              <div className="sm:col-span-3">
+                <label className="font-bold text-slate-700 block mb-1">
+                  Upload Date *
+                </label>
+                <input
+                  type="date"
+                  value={caBannerDate}
+                  onChange={(e) => setCaBannerDate(e.target.value)}
+                  className="w-full px-3.5 py-2 border border-slate-200 bg-white text-xs font-bold"
+                />
+              </div>
+
+              <div className="sm:col-span-4">
+                <button
+                  type="button"
+                  onClick={() => caBannerFileInputRef.current?.click()}
+                  className="w-full px-4 py-2 border-2 border-dashed border-[#ea580c] bg-white hover:bg-orange-50 text-[#ea580c] font-bold text-xs inline-flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Upload className="w-4 h-4" />
+                  <span>{isCompressingCaBanner ? 'Compressing…' : 'Choose Quiz Banner Image'}</span>
+                </button>
+              </div>
+            </div>
+
+            {caBannerCompressed && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <img
+                    src={caBannerCompressed.dataUrl}
+                    alt="CA Banner Preview"
+                    className="w-20 h-14 object-cover border border-emerald-300 shrink-0"
+                  />
+                  <div>
+                    <span className="text-emerald-900 font-bold text-xs flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Ready to Publish ({caBannerCompressed.compressedSizeKb} KB)
+                    </span>
+                    <span className="text-[11px] text-slate-600">
+                      Date: <strong>{caBannerDate}</strong>
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={handlePublishCaBanner}
+                  className="px-4 py-2 bg-[#ea580c] hover:bg-orange-600 text-white font-black text-xs cursor-pointer shadow-xs"
+                >
+                  {isSaving ? 'Publishing…' : 'Upload & Publish Banner Now'}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Existing Daily Current Affair Banners List */}
+          {(form.dailyCaMcqBanners || []).length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {(form.dailyCaMcqBanners || []).map((banner) => (
+                <div
+                  key={banner.id}
+                  className="p-3 border border-slate-200 bg-white flex flex-col justify-between gap-3 shadow-2xs"
+                >
+                  <div className="space-y-2">
+                    <img
+                      src={banner.imageUrl}
+                      alt={banner.title || 'Daily Current Affair Banner'}
+                      className="w-full h-36 object-cover border border-slate-200 bg-slate-900"
+                    />
+                    <div>
+                      <span className="inline-block px-2 py-0.5 bg-amber-100 text-amber-900 text-[10px] font-extrabold">
+                        Date: {banner.date}
+                      </span>
+                      <p className="text-xs font-bold text-slate-900 mt-1 truncate">
+                        {banner.title || 'Daily Current Affair MCQs'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteCaBanner(banner.id)}
+                    className="w-full py-1.5 px-3 bg-red-50 hover:bg-red-100 text-[#dc2626] border border-red-200 font-bold text-xs inline-flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Banner</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-4 bg-slate-50 border border-dashed border-slate-200 text-center text-xs text-slate-500">
+              No Daily Current Affair MCQ banners uploaded yet. Choose an image and date above to publish.
+            </div>
+          )}
+        </div>
+
         {/* 1. Homepage Hero & Branding */}
         <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-2xs space-y-4">
           <h2 className="text-base font-extrabold text-[#0a0e2a] border-b border-slate-100 pb-2">
@@ -601,6 +815,30 @@ export default function AdminSiteContentCmsPage() {
                 onChange={(e) =>
                   setForm({ ...form, contact: { ...form.contact, email: e.target.value } })
                 }
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-200"
+              />
+            </div>
+            <div>
+              <label className="font-bold text-emerald-700 block mb-1">
+                WhatsApp Group Invite Link (Redirect Button URL)
+              </label>
+              <input
+                type="url"
+                value={form.whatsappGroupUrl || ''}
+                onChange={(e) => setForm({ ...form, whatsappGroupUrl: e.target.value })}
+                placeholder="https://chat.whatsapp.com/..."
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-200"
+              />
+            </div>
+            <div>
+              <label className="font-bold text-[#0056b3] block mb-1">
+                Facebook Profile / Page Link (Redirect Button URL)
+              </label>
+              <input
+                type="url"
+                value={form.facebookProfileUrl || ''}
+                onChange={(e) => setForm({ ...form, facebookProfileUrl: e.target.value })}
+                placeholder="https://www.facebook.com/..."
                 className="w-full px-3.5 py-2 rounded-xl border border-slate-200"
               />
             </div>

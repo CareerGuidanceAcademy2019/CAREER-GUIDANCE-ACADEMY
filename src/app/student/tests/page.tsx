@@ -1589,20 +1589,21 @@ export default function StudentMockTestsPage() {
                 <div className="absolute top-0 right-0 w-32 h-32 bg-amber-400/10 rounded-full blur-2xl pointer-events-none" />
                 <div className="space-y-3 relative z-10">
                   <div className="flex items-center justify-between gap-2">
-                    <span
-                      className={`px-2.5 py-0.5 rounded-full font-black text-[10px] uppercase tracking-wider ${
-                        isNewLaunch
-                          ? 'bg-emerald-400 text-slate-950'
-                          : 'bg-amber-400 text-slate-950'
-                      }`}
-                    >
-                      {isNewLaunch ? `New Launch • ${series.batchLabel || 'Live'}` : 'Festival Offer!'}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-2.5 py-0.5 bg-white/15 border border-white/25 text-white text-[10px] font-bold">
+                        English + বাংলা
+                      </span>
+                      {isNewLaunch && (
+                        <span className="px-2.5 py-0.5 rounded-full font-black text-[10px] uppercase tracking-wider bg-emerald-400 text-slate-950">
+                          {series.batchLabel || '2026 Batch'}
+                        </span>
+                      )}
+                    </div>
                     <span className="text-xs font-bold text-blue-200 truncate">
                       {series.classRange || 'All Target Exams'}
                     </span>
                   </div>
-                  <h3 className="text-lg font-black leading-snug">{series.name}</h3>
+                  <h3 className="text-xl sm:text-2xl font-black leading-snug">{series.name}</h3>
                   <p className="text-xs text-blue-100 line-clamp-2">
                     {series.description || 'Daily Online Mock Tests Series with Complete Exam-Pattern Practice'}
                   </p>
@@ -2014,7 +2015,7 @@ export default function StudentMockTestsPage() {
                               )}
                             </div>
 
-                            <h3 className="text-base font-extrabold text-[#0a0e2a] leading-snug">
+                            <h3 className="text-lg sm:text-xl font-extrabold text-[#0a0e2a] leading-snug">
                               {test.title}
                             </h3>
                             <p className="text-xs text-slate-500">

@@ -1966,6 +1966,21 @@ export const cgaService = {
           }
           return INITIAL_SEED_DATA.siteContent.urgentPopupAnnouncements || [];
         })(),
+        dailyCaMcqBanners: (() => {
+          const dbContent = site.data?.content as SiteContent | undefined;
+          if (dbContent && Array.isArray(dbContent.dailyCaMcqBanners)) {
+            return dbContent.dailyCaMcqBanners;
+          }
+          return INITIAL_SEED_DATA.siteContent.dailyCaMcqBanners || [];
+        })(),
+        whatsappGroupUrl:
+          (site.data?.content as SiteContent | undefined)?.whatsappGroupUrl ||
+          INITIAL_SEED_DATA.siteContent.whatsappGroupUrl ||
+          'https://chat.whatsapp.com/',
+        facebookProfileUrl:
+          (site.data?.content as SiteContent | undefined)?.facebookProfileUrl ||
+          INITIAL_SEED_DATA.siteContent.facebookProfileUrl ||
+          'https://www.facebook.com/',
       },
       courses: courseList.length > 0 ? courseList : INITIAL_SEED_DATA.courses,
       faculty: facultyList.length > 0 ? facultyList : INITIAL_SEED_DATA.faculty,

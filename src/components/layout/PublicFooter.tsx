@@ -57,16 +57,25 @@ export function PublicFooter({ variant = 'default' }: PublicFooterProps) {
               {db.siteContent.tagline}. Empowering students across Gomati District and Tripura in
               Teaching Recruitment, Civil Services, Banking, SSC, Railways & Board Examinations.
             </p>
-            <div className="flex items-center gap-2 pt-1">
-              <span className="px-2.5 py-1 rounded-md bg-white/10 text-xs font-semibold text-white">
-                TET / STGT / STPGT
-              </span>
-              <span className="px-2.5 py-1 rounded-md bg-white/10 text-xs font-semibold text-white">
-                TPSC & JRBT
-              </span>
-              <span className="px-2.5 py-1 rounded-md bg-white/10 text-xs font-semibold text-white">
-                TBSE & CBSE
-              </span>
+            <div className="flex flex-wrap items-center gap-2 pt-2">
+              <a
+                href={db.siteContent.whatsappGroupUrl || 'https://chat.whatsapp.com/'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 bg-[#25D366] hover:bg-[#1ebe5b] text-slate-950 text-xs font-black inline-flex items-center gap-1.5 transition-all"
+              >
+                <span>Join WhatsApp Group</span>
+                <ArrowUpRight className="w-3.5 h-3.5" />
+              </a>
+              <a
+                href={db.siteContent.facebookProfileUrl || 'https://www.facebook.com/'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 bg-[#1877F2] hover:bg-blue-600 text-white text-xs font-black inline-flex items-center gap-1.5 transition-all"
+              >
+                <span>Facebook Profile</span>
+                <ArrowUpRight className="w-3.5 h-3.5" />
+              </a>
             </div>
           </div>
 

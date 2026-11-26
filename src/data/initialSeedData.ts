@@ -348,6 +348,17 @@ export interface SiteContent {
   standalonePackages?: StandalonePackage[];
   campusImages?: CampusGalleryImage[];
   urgentPopupAnnouncements?: UrgentPopupAnnouncement[];
+  dailyCaMcqBanners?: DailyCaMcqBanner[];
+  whatsappGroupUrl?: string;
+  facebookProfileUrl?: string;
+}
+
+export interface DailyCaMcqBanner {
+  id: string;
+  imageUrl: string;
+  title?: string;
+  date: string;
+  uploadedAt?: string;
 }
 
 export interface UrgentPopupAnnouncement {
@@ -451,6 +462,9 @@ export const INITIAL_SEED_DATA: CgaDatabase = {
       mapEmbedUrl:
         'https://www.google.com/maps?q=Chanban+Youth+Club+Rd+Udaipur+Tripura+799120&output=embed',
     },
+    whatsappGroupUrl: 'https://chat.whatsapp.com/',
+    facebookProfileUrl: 'https://www.facebook.com/',
+    dailyCaMcqBanners: [],
         standalonePackages: [
       {
         id: 'pkg-ttet-paper1-2026',

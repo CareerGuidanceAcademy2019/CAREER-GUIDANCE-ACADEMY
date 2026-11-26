@@ -440,9 +440,14 @@ export function PublicOfferingsCatalog({
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="flex md:grid md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6 overflow-x-auto md:overflow-visible snap-x snap-mandatory pb-4 md:pb-0 -mx-4 px-4 md:mx-0 md:px-0">
               {filteredCourses.map((course, idx) => (
-                <CourseCard key={course.id} course={course} compact={true} index={idx} />
+                <div
+                  key={course.id}
+                  className="min-w-[85vw] sm:min-w-[350px] md:min-w-0 snap-center shrink-0 flex flex-col"
+                >
+                  <CourseCard course={course} compact={true} index={idx} />
+                </div>
               ))}
             </div>
           )}
@@ -468,9 +473,9 @@ export function PublicOfferingsCatalog({
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="flex md:grid md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6 overflow-x-auto md:overflow-visible snap-x snap-mandatory pb-4 md:pb-0 -mx-4 px-4 md:mx-0 md:px-0">
               {filteredMockSeries.map((series, idx) => {
-                const isFlagship = FLAGSHIP_SERIES_IDS.includes(series.id);
+                const isNewLaunch = !FLAGSHIP_SERIES_IDS.includes(series.id);
                 const gradient = MOCK_CARD_GRADIENTS[idx % MOCK_CARD_GRADIENTS.length];
                 const testCount = getSeriesTestCount(series.id);
                 const mrpPrice = Math.max(series.price + 200, Math.round(series.price * 1.6));
@@ -488,35 +493,31 @@ export function PublicOfferingsCatalog({
                 return (
                   <div
                     key={series.id}
-                    className={`bg-gradient-to-br ${gradient} p-5 text-white shadow-xl border border-white/15 cga-card-hover flex flex-col justify-between relative overflow-hidden`}
+                    className={`min-w-[85vw] sm:min-w-[350px] md:min-w-0 snap-center shrink-0 bg-gradient-to-br ${gradient} p-5 text-white shadow-xl border border-white/15 cga-card-hover flex flex-col justify-between relative overflow-hidden`}
                   >
                     <div className="absolute top-0 right-0 w-28 h-28 bg-amber-400/10 rounded-full blur-2xl pointer-events-none" />
 
                     <div className="space-y-3 relative z-10">
-                      {/* Top Badges (Referencing Image 1 & Image 3) */}
+                      {/* Top Badges (Without Festival Offer tag) */}
                       <div className="flex items-center justify-between gap-2 flex-wrap">
                         <div className="flex items-center gap-1.5">
-                          <span
-                            className={`px-2.5 py-0.5 font-black text-[10px] uppercase tracking-wider ${
-                              isFlagship
-                                ? 'bg-amber-400 text-slate-950'
-                                : 'bg-emerald-400 text-slate-950'
-                            }`}
-                          >
-                            {isFlagship ? 'FESTIVAL OFFER!' : `LIVE SERIES • ${series.batchLabel || '2026'}`}
-                          </span>
-                          <span className="px-2 py-0.5 bg-white/15 border border-white/25 text-white text-[10px] font-bold">
+                          <span className="px-2.5 py-0.5 bg-white/15 border border-white/25 text-white text-[10px] font-bold">
                             English + বাংলা
                           </span>
+                          {isNewLaunch && (
+                            <span className="px-2.5 py-0.5 font-black text-[10px] uppercase tracking-wider bg-emerald-400 text-slate-950">
+                              {series.batchLabel || '2026 Batch'}
+                            </span>
+                          )}
                         </div>
 
-                        <span className="text-[11px] font-bold text-blue-200 truncate max-w-[140px]">
+                        <span className="text-[11px] font-bold text-blue-200 truncate max-w-[160px]">
                           {series.classRange}
                         </span>
                       </div>
 
-                      {/* Series Title */}
-                      <h3 className="text-base font-black leading-snug text-white line-clamp-2">
+                      {/* Series Title (Increased Font Size) */}
+                      <h3 className="text-lg sm:text-xl font-black leading-snug text-white line-clamp-2">
                         {series.name}
                       </h3>
 
@@ -613,7 +614,7 @@ export function PublicOfferingsCatalog({
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="flex md:grid md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6 overflow-x-auto md:overflow-visible snap-x snap-mandatory pb-4 md:pb-0 -mx-4 px-4 md:mx-0 md:px-0">
               {filteredMaterials.map((mat) => {
                 const isCa = mat.type === 'Current Affairs';
                 const isMockPdf = mat.type === 'Mock Test PDF';
@@ -632,7 +633,7 @@ export function PublicOfferingsCatalog({
                 return (
                   <div
                     key={mat.id}
-                    className="bg-gradient-to-br from-[#1e1b4b] via-[#31102f] to-[#0f172a] p-5 text-white shadow-xl border border-white/15 cga-card-hover flex flex-col justify-between relative overflow-hidden"
+                    className="min-w-[85vw] sm:min-w-[350px] md:min-w-0 snap-center shrink-0 bg-gradient-to-br from-[#1e1b4b] via-[#31102f] to-[#0f172a] p-5 text-white shadow-xl border border-white/15 cga-card-hover flex flex-col justify-between relative overflow-hidden"
                   >
                     <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#ea580c] via-amber-400 to-pink-500" />
 
@@ -661,7 +662,7 @@ export function PublicOfferingsCatalog({
                         <p className="text-[10px] font-bold uppercase tracking-wider text-orange-300 truncate">
                           {mat.subject || mat.courseName || 'All Competitive Exams'}
                         </p>
-                        <h3 className="text-base font-black text-white leading-snug line-clamp-2 mt-0.5">
+                        <h3 className="text-lg sm:text-xl font-black text-white leading-snug line-clamp-2 mt-0.5">
                           {mat.title}
                         </h3>
                       </div>
