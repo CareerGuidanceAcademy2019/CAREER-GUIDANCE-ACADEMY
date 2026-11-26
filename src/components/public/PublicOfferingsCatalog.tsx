@@ -440,14 +440,9 @@ export function PublicOfferingsCatalog({
               </button>
             </div>
           ) : (
-            <div className="flex md:grid md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6 overflow-x-auto md:overflow-visible snap-x snap-mandatory pb-4 md:pb-0 -mx-4 px-4 md:mx-0 md:px-0">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredCourses.map((course, idx) => (
-                <div
-                  key={course.id}
-                  className="min-w-[85vw] sm:min-w-[350px] md:min-w-0 snap-center shrink-0 flex flex-col"
-                >
-                  <CourseCard course={course} compact={true} index={idx} />
-                </div>
+                <CourseCard key={course.id} course={course} compact={true} index={idx} />
               ))}
             </div>
           )}
@@ -473,7 +468,7 @@ export function PublicOfferingsCatalog({
               </button>
             </div>
           ) : (
-            <div className="flex md:grid md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6 overflow-x-auto md:overflow-visible snap-x snap-mandatory pb-4 md:pb-0 -mx-4 px-4 md:mx-0 md:px-0">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredMockSeries.map((series, idx) => {
                 const isNewLaunch = !FLAGSHIP_SERIES_IDS.includes(series.id);
                 const gradient = MOCK_CARD_GRADIENTS[idx % MOCK_CARD_GRADIENTS.length];
@@ -493,7 +488,7 @@ export function PublicOfferingsCatalog({
                 return (
                   <div
                     key={series.id}
-                    className={`min-w-[85vw] sm:min-w-[350px] md:min-w-0 snap-center shrink-0 bg-gradient-to-br ${gradient} p-5 text-white shadow-xl border border-white/15 cga-card-hover flex flex-col justify-between relative overflow-hidden`}
+                    className={`bg-gradient-to-br ${gradient} p-5 text-white shadow-xl border border-white/15 cga-card-hover flex flex-col justify-between relative overflow-hidden`}
                   >
                     <div className="absolute top-0 right-0 w-28 h-28 bg-amber-400/10 rounded-full blur-2xl pointer-events-none" />
 
@@ -614,7 +609,7 @@ export function PublicOfferingsCatalog({
               </button>
             </div>
           ) : (
-            <div className="flex md:grid md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6 overflow-x-auto md:overflow-visible snap-x snap-mandatory pb-4 md:pb-0 -mx-4 px-4 md:mx-0 md:px-0">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredMaterials.map((mat) => {
                 const isCa = mat.type === 'Current Affairs';
                 const isMockPdf = mat.type === 'Mock Test PDF';
@@ -633,7 +628,7 @@ export function PublicOfferingsCatalog({
                 return (
                   <div
                     key={mat.id}
-                    className="min-w-[85vw] sm:min-w-[350px] md:min-w-0 snap-center shrink-0 bg-gradient-to-br from-[#1e1b4b] via-[#31102f] to-[#0f172a] p-5 text-white shadow-xl border border-white/15 cga-card-hover flex flex-col justify-between relative overflow-hidden"
+                    className="bg-gradient-to-br from-[#1e1b4b] via-[#31102f] to-[#0f172a] p-5 text-white shadow-xl border border-white/15 cga-card-hover flex flex-col justify-between relative overflow-hidden"
                   >
                     <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#ea580c] via-amber-400 to-pink-500" />
 

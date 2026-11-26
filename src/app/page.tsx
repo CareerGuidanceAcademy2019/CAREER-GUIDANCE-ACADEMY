@@ -660,13 +660,13 @@ export default function HomePage() {
               </Link>
             </div>
 
-            <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6 overflow-x-auto sm:overflow-visible snap-x snap-mandatory pb-4 sm:pb-0 -mx-4 px-4 sm:mx-0 sm:px-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {isDbLoading && topAchievements.length === 0
                 ? [0, 1, 2, 3].map((i) => <TopperCardSkeleton key={i} />)
                 : topAchievements.map((topper) => (
                 <div
                   key={topper.id}
-                  className="min-w-[80vw] sm:min-w-0 snap-center shrink-0 bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs cga-card-hover flex flex-col"
+                  className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs cga-card-hover flex flex-col"
                 >
                   <div className="p-5 flex items-center gap-3.5 border-b border-slate-100">
                     <img
