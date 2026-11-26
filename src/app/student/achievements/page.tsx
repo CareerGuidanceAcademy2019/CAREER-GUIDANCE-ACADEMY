@@ -29,7 +29,7 @@ export default function StudentAchievementsPage() {
               <img
                 src={item.photo}
                 alt={item.name}
-                className="w-28 h-28 rounded-full object-cover mx-auto ring-4 ring-[#ea580c]/30 shadow-md"
+                className="w-36 h-36 sm:w-40 sm:h-40 rounded-full object-cover object-top mx-auto ring-4 ring-[#ea580c]/30 shadow-lg"
               />
               <span className="inline-block px-2.5 py-0.5 rounded-full bg-amber-50 text-[#ea580c] border border-amber-200 text-[11px] font-extrabold">
                 {item.rank} ({item.year})

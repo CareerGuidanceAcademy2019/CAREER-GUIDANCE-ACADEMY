@@ -112,9 +112,9 @@ export default function AchievementsPage() {
                       <img
                         src={item.photo}
                         alt={`Photograph of student ${item.name}, ${item.rank} in ${item.exam}`}
-                        className="w-32 h-32 rounded-full object-cover mx-auto ring-4 ring-amber-200 shadow-lg"
+                        className="w-40 h-40 sm:w-44 sm:h-44 rounded-full object-cover object-top mx-auto ring-4 ring-amber-200 shadow-lg"
                       />
-                      <span className="absolute -bottom-1 -right-1 bg-[#ea580c] text-white text-xs font-extrabold px-2.5 py-0.5 rounded-full shadow whitespace-nowrap">
+                      <span className="absolute bottom-1 right-1 bg-[#ea580c] text-white text-xs font-extrabold px-2.5 py-0.5 rounded-full shadow whitespace-nowrap">
                         {item.year}
                       </span>
                     </div>

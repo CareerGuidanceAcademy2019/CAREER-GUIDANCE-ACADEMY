@@ -673,7 +673,7 @@ export default function HomePage() {
                       alt={`Photograph of student ${topper.name}, ${topper.rank} in ${topper.exam}`}
                       loading="lazy"
                       decoding="async"
-                      className="w-24 h-24 rounded-full object-cover ring-4 ring-[#ea580c]/30 shadow-md shrink-0"
+                      className="w-36 h-36 sm:w-40 sm:h-40 rounded-full object-cover object-top ring-4 ring-[#ea580c]/30 shadow-lg shrink-0"
                     />
                     <div className="mt-3 space-y-1">
                       <span className="inline-block px-2.5 py-0.5 rounded bg-amber-50 text-[#ea580c] border border-amber-200 text-xs font-extrabold">
