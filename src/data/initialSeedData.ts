@@ -36,6 +36,28 @@ export interface StandalonePackage {
   isPublished: boolean;
 }
 
+export interface OnlineClassUpdate {
+  courseId: string;
+  link?: string;
+  details?: string;
+  timing?: string;
+  updatedAt: string;
+  updatedBy?: string;
+}
+
+export interface StudentDuesOverride {
+  studentId: string;
+  courseId: string;
+  registrationTotalFee: number;
+  registrationPaidAmount: number;
+  registrationDueAmount: number;
+  monthlyFeeRate: number;
+  unpaidMonthsCount: number;
+  monthlyFeeDueAmount: number;
+  monthlyFeePaidAmount: number;
+  updatedAt: string;
+}
+
 export interface Course {
   id: string;
   name: string;
@@ -64,6 +86,7 @@ export interface Course {
   linkedMaterialIds: string[];
   materialDelivery?: string; // e.g. 'Printed Physical Copies + View-Only Softcopy' | 'View-Only Softcopy'
   onlineClassLink?: string; // Meeting link for online classes (Google Meet, Zoom, etc.)
+  onlineClassUpdate?: OnlineClassUpdate; // Live class update with optional link, class timing, and text details
   bundledMaterialIds?: string[]; // IDs of study materials bundled in this course package
   bundledTestIds?: string[]; // IDs of mock tests or series bundled in this course package
   isPackageBundle?: boolean; // True if this batch is a combined package
@@ -258,6 +281,13 @@ export interface StudentEnrollment {
   totalFee: number;
   paidAmount: number;
   dueAmount: number;
+  registrationFeeTotal?: number;
+  registrationFeePaid?: number;
+  registrationFeeDue?: number;
+  monthlyFeeRate?: number;
+  unpaidMonthsCount?: number;
+  monthlyFeeDue?: number;
+  monthlyFeePaid?: number;
   nextDueDate?: string;
   accessValidUntil?: string;
 }
@@ -349,6 +379,8 @@ export interface SiteContent {
   campusImages?: CampusGalleryImage[];
   urgentPopupAnnouncements?: UrgentPopupAnnouncement[];
   dailyCaMcqBanners?: DailyCaMcqBanner[];
+  onlineClassUpdates?: Record<string, OnlineClassUpdate>;
+  studentDuesOverrides?: Record<string, StudentDuesOverride>;
   whatsappGroupUrl?: string;
   facebookProfileUrl?: string;
 }

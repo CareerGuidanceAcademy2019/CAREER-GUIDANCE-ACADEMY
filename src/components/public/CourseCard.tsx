@@ -97,11 +97,11 @@ export function CourseCard({
     Array.isArray(course.syllabusHighlights) && course.syllabusHighlights.length > 0
       ? course.syllabusHighlights.slice(0, compact ? 3 : 4)
       : [
-          'Complete Official Syllabus Coverage',
-          'Weekly OMR & Online CBT Mock Tests',
-          'Printed & View-Only Digital Study Notes',
-          'Personal Mentorship & Doubt Clearing',
-        ].slice(0, compact ? 3 : 4);
+        'Complete Official Syllabus Coverage',
+        'Weekly OMR & Online CBT Mock Tests',
+        'Printed & View-Only Digital Study Notes',
+        'Personal Mentorship & Doubt Clearing',
+      ].slice(0, compact ? 3 : 4);
 
   const targetEnrollPath = `/student/courses?enrol=${encodeURIComponent(course.id)}`;
   const buyHref = session
@@ -110,9 +110,8 @@ export function CourseCard({
 
   return (
     <div
-      className={`bg-gradient-to-br ${gradient} text-white shadow-xl border border-white/15 cga-card-hover flex flex-col justify-between overflow-hidden relative ${
-        compact ? 'p-5' : 'p-6'
-      }`}
+      className={`bg-gradient-to-br ${gradient} text-white shadow-xl border border-white/15 cga-card-hover flex flex-col justify-between overflow-hidden relative ${compact ? 'p-5' : 'p-6'
+        }`}
     >
       {/* Top decorative glow & accent bar */}
       <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-400 via-emerald-400 to-cyan-400" />
@@ -123,27 +122,25 @@ export function CourseCard({
         <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span
-              className={`px-2.5 py-0.5 font-black text-[10px] uppercase tracking-wider ${
-                isNewLaunch
+              className={`px-2.5 py-0.5 font-black text-[10px] uppercase tracking-wider ${isNewLaunch
                   ? 'bg-lime-400 text-slate-950'
                   : isOpen
-                  ? 'bg-amber-400 text-slate-950'
-                  : 'bg-red-500/90 text-white'
-              }`}
+                    ? 'bg-amber-400 text-slate-950'
+                    : 'bg-red-500/90 text-white'
+                }`}
             >
               {isNewLaunch
                 ? 'NEW COURSE LAUNCH!'
                 : isOpen
-                ? 'ADMISSIONS OPEN!'
-                : 'BATCH CLOSED'}
+                  ? 'ADMISSIONS OPEN!'
+                  : 'BATCH CLOSED'}
             </span>
 
             <span
-              className={`px-2.5 py-0.5 font-extrabold text-[10px] uppercase tracking-wider border ${
-                course.mode === 'Online'
+              className={`px-2.5 py-0.5 font-extrabold text-[10px] uppercase tracking-wider border ${course.mode === 'Online'
                   ? 'bg-cyan-400/20 text-cyan-200 border-cyan-400/40'
                   : 'bg-white/15 text-amber-200 border-white/25'
-              }`}
+                }`}
             >
               {course.mode === 'Online' ? 'Online Live' : 'Offline Classroom'}
             </span>
@@ -251,13 +248,12 @@ export function CourseCard({
             </div>
             <div className="w-full h-1.5 bg-white/15 overflow-hidden">
               <div
-                className={`h-full transition-all duration-300 ${
-                  !isOpen
+                className={`h-full transition-all duration-300 ${!isOpen
                     ? 'bg-red-500'
                     : course.seatsAvailable <= 6
-                    ? 'bg-amber-400'
-                    : 'bg-emerald-400'
-                }`}
+                      ? 'bg-amber-400'
+                      : 'bg-emerald-400'
+                  }`}
                 style={{ width: `${fillPercent}%` }}
               />
             </div>

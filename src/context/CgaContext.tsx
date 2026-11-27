@@ -20,6 +20,8 @@ import {
   SeriesQuestion,
   MockSeries,
   MockSubjectPost,
+  OnlineClassUpdate,
+  StudentDuesOverride,
 } from '@/data/initialSeedData';
 import {
   cgaService,
@@ -114,6 +116,8 @@ interface CgaContextType {
   saveCourse: (course: Course, isNew: boolean) => Promise<boolean>;
   deleteCourse: (courseId: string) => Promise<boolean>;
   updateOnlineClassLink: (courseId: string, link: string) => Promise<boolean>;
+  saveOnlineClassUpdate: (courseId: string, update: { link?: string; details?: string; timing?: string } | null) => Promise<boolean>;
+  saveStudentDuesOverride: (override: StudentDuesOverride) => Promise<boolean>;
   updateBatchStatus: (
     courseId: string,
     updates: {
@@ -988,6 +992,135 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
     },
     [refresh, showToast]
   );
+
+  const saveOnlineClassUpdate = useCallback(
+    async (courseId: string, update: { link?: string; details?: string; timing?: string } | null) => {
+      const cleanLink = update?.link?.trim() || '';
+      const cleanDetails = update?.details?.trim() || '';
+      const cleanTiming = update?.timing?.trim() || '';
+      const isClearing = !update || (!cleanLink && !cleanDetails && !cleanTiming);
+
+      const nextUpdatesMap: Record<string, OnlineClassUpdate> = {
+        ...(db.siteContent?.onlineClassUpdates || {}),
+      };
+
+      if (isClearing) {
+        delete nextUpdatesMap[courseId];
+      } else {
+        nextUpdatesMap[courseId] = {
+          courseId,
+          link: cleanLink || undefined,
+          details: cleanDetails || undefined,
+          timing: cleanTiming || undefined,
+          updatedAt: new Date().toISOString(),
+          updatedBy: sessionRef.current?.name || 'CGA Administrator',
+        };
+      }
+
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('cga_online_class_updates', JSON.stringify(nextUpdatesMap));
+        } catch {}
+      }
+
+      const nextSiteContent: SiteContent = {
+        ...db.siteContent,
+        onlineClassUpdates: nextUpdatesMap,
+      };
+
+      setDb((prev) => ({
+        ...prev,
+        siteContent: nextSiteContent,
+        courses: prev.courses.map((c) =>
+          c.id === courseId
+            ? {
+                ...c,
+                onlineClassLink: cleanLink || undefined,
+                onlineClassUpdate: nextUpdatesMap[courseId],
+              }
+            : c
+        ),
+      }));
+
+      await Promise.all([
+        cgaService.updateOnlineClassLink(courseId, cleanLink),
+        cgaService.saveSiteContent(nextSiteContent),
+      ]);
+
+      showToast(
+        isClearing
+          ? 'Live Class Update Cleared'
+          : cleanLink
+          ? 'Live Class Link & Update Published!'
+          : 'Class Timing & Update Posted (No Link Yet)',
+        isClearing
+          ? 'Students will see "No links or update yet".'
+          : cleanLink
+          ? 'Enrolled students can now click "Join Live Class".'
+          : 'Students can view class timing & details. "Join Live Class" remains disabled until a link is posted.',
+        'success'
+      );
+      return true;
+    },
+    [db.siteContent, showToast]
+  );
+
+  const saveStudentDuesOverride = useCallback(
+    async (override: StudentDuesOverride) => {
+      const key = `${override.studentId}::${override.courseId}`;
+      const nextOverridesMap: Record<string, StudentDuesOverride> = {
+        ...(db.siteContent?.studentDuesOverrides || {}),
+        [key]: override,
+      };
+
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('cga_student_dues_overrides', JSON.stringify(nextOverridesMap));
+        } catch {}
+      }
+
+      const nextSiteContent: SiteContent = {
+        ...db.siteContent,
+        studentDuesOverrides: nextOverridesMap,
+      };
+
+      const totalCombinedDue = Math.max(0, override.registrationDueAmount + override.monthlyFeeDueAmount);
+      const totalCombinedPaid = Math.max(0, override.registrationPaidAmount + override.monthlyFeePaidAmount);
+      const totalCombinedFee = totalCombinedPaid + totalCombinedDue;
+
+      setDb((prev) => ({
+        ...prev,
+        siteContent: nextSiteContent,
+        students: prev.students.map((stu) => {
+          if (stu.id !== override.studentId) return stu;
+          return {
+            ...stu,
+            enrollments: stu.enrollments.map((enr) =>
+              enr.courseId === override.courseId
+                ? {
+                    ...enr,
+                    totalFee: totalCombinedFee,
+                    paidAmount: totalCombinedPaid,
+                    dueAmount: totalCombinedDue,
+                    registrationFeeTotal: override.registrationTotalFee,
+                    registrationFeePaid: override.registrationPaidAmount,
+                    registrationFeeDue: override.registrationDueAmount,
+                    monthlyFeeRate: override.monthlyFeeRate,
+                    unpaidMonthsCount: override.unpaidMonthsCount,
+                    monthlyFeeDue: override.monthlyFeeDueAmount,
+                    monthlyFeePaid: override.monthlyFeePaidAmount,
+                  }
+                : enr
+            ),
+          };
+        }),
+      }));
+
+      await cgaService.saveSiteContent(nextSiteContent);
+      return true;
+    },
+    [db.siteContent]
+  );
   const updateBatchStatus = useCallback<CgaContextType['updateBatchStatus']>(
     async (courseId, updates) => {
       await run(cgaService.updateBatch(courseId, updates), {
@@ -1704,6 +1837,8 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         saveCourse,
         deleteCourse,
         updateOnlineClassLink,
+        saveOnlineClassUpdate,
+        saveStudentDuesOverride,
         updateBatchStatus,
         updateBatchDuration,
         extendBatchDuration,

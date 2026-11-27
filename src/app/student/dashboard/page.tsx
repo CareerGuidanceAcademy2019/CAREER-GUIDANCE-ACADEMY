@@ -16,6 +16,7 @@ import {
   Calendar,
   RefreshCw,
   LogOut,
+  Video,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
 import { PortalContentSkeleton } from '@/components/ui/PageSkeleton';
@@ -271,12 +272,22 @@ export default function StudentDashboardPage() {
                     </div>
 
                     <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
-                      <Link
-                        href="/student/materials"
-                        className="font-bold text-[#0056b3] hover:underline inline-flex items-center gap-1 whitespace-nowrap"
-                      >
-                        <FileText className="w-3.5 h-3.5 shrink-0" /> Open Study Materials
-                      </Link>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <Link
+                          href="/student/materials"
+                          className="font-bold text-[#0056b3] hover:underline inline-flex items-center gap-1 whitespace-nowrap"
+                        >
+                          <FileText className="w-3.5 h-3.5 shrink-0" /> Open Study Materials
+                        </Link>
+                        {db.courses.find((c) => c.id === enr.courseId)?.mode === 'Online' && (
+                          <Link
+                            href={`/student/live-class/${enr.courseId}`}
+                            className="font-extrabold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2.5 py-1 rounded-lg inline-flex items-center gap-1 whitespace-nowrap"
+                          >
+                            <Video className="w-3.5 h-3.5 shrink-0" /> Check Live Class Updates
+                          </Link>
+                        )}
+                      </div>
                       {enr.dueAmount > 0 ? (
                         <Link
                           href="/student/fees"

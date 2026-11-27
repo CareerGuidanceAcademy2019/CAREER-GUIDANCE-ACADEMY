@@ -31,7 +31,7 @@ interface CounterEnrollmentModalProps {
 }
 
 export function CounterEnrollmentModal({ onClose, onSuccess }: CounterEnrollmentModalProps) {
-  const { db, saveStudent, session, showToast, refresh } = useCga();
+  const { db, saveStudent, saveStudentDuesOverride, session, showToast, refresh } = useCga();
 
   // Mode: Existing Student vs New Walk-In Candidate
   const [studentMode, setStudentMode] = useState<'existing' | 'new'>('new');
@@ -86,6 +86,9 @@ export function CounterEnrollmentModal({ onClose, onSuccess }: CounterEnrollment
   // Payment Details
   const [customAmount, setCustomAmount] = useState<string>('');
   const [paymentMode, setPaymentMode] = useState<string>('Cash at Counter');
+  const [counterUtrRef, setCounterUtrRef] = useState<string>('');
+  const [unpaidMonthsCount, setUnpaidMonthsCount] = useState<number>(1);
+  const [monthlyFeeCollectedNow, setMonthlyFeeCollectedNow] = useState<string>('0');
   const [adminRemarks, setAdminRemarks] = useState('Physical admission at Udaipur center. Printed notes issued.');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -141,7 +144,7 @@ export function CounterEnrollmentModal({ onClose, onSuccess }: CounterEnrollment
     return 0;
   }, [sectionType, activeCourse, coursePlan, activeSeries, activeMaterial]);
 
-  // Total Item Fee
+  // Total Item Fee (Registration / Admission Fee)
   const totalItemFee = useMemo(() => {
     if (sectionType === 'course') return activeCourse?.price || 0;
     if (sectionType === 'mock_series') return activeSeries?.price || 499;
@@ -149,11 +152,18 @@ export function CounterEnrollmentModal({ onClose, onSuccess }: CounterEnrollment
     return 0;
   }, [sectionType, activeCourse, activeSeries, activeMaterial]);
 
-  // Payable Amount (custom or standard)
-  const payableAmount = customAmount !== '' ? parseFloat(customAmount) || 0 : standardFee;
+  // Payable Registration Amount (custom or standard)
+  const registrationPaidNow = customAmount !== '' ? Math.max(0, parseFloat(customAmount) || 0) : standardFee;
+  const registrationDueAmount = Math.max(0, totalItemFee - registrationPaidNow);
 
-  // Due Amount
-  const dueAmount = Math.max(0, totalItemFee - payableAmount);
+  // Course Monthly Fee Breakdown
+  const courseMonthlyRate = sectionType === 'course' ? (activeCourse?.monthlyFee || 800) : 0;
+  const monthlyPaidNow = sectionType === 'course' ? Math.max(0, parseFloat(monthlyFeeCollectedNow) || 0) : 0;
+  const monthlyDueAmount = sectionType === 'course' ? Math.max(0, unpaidMonthsCount * courseMonthlyRate) : 0;
+
+  // Total Combined Payable & Total Combined Outstanding Dues
+  const payableAmount = registrationPaidNow + monthlyPaidNow;
+  const dueAmount = registrationDueAmount + monthlyDueAmount;
 
   // Auto-fill suggested email based on phone if empty
   const handlePhoneChange = (val: string) => {
@@ -230,6 +240,7 @@ export function CounterEnrollmentModal({ onClose, onSuccess }: CounterEnrollment
       // Generate Official Receipt Sequence Number
       const receiptNo = `${PAYMENT_SETTINGS.receiptPrefix}${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
       const issueDate = new Date().toISOString().split('T')[0];
+      const effectiveUtr = counterUtrRef.trim() || (paymentMode.includes('Cash') ? `CASH-${receiptNo}` : receiptNo);
 
       let itemTitle = '';
       let batchName = '';
@@ -258,6 +269,14 @@ export function CounterEnrollmentModal({ onClose, onSuccess }: CounterEnrollment
           ? (activeSeries?.id || selectedSeriesId)
           : selectedMaterialId;
 
+      const breakdownRemark =
+        sectionType === 'course'
+          ? `Reg Paid: ₹${registrationPaidNow}, Reg Due: ₹${registrationDueAmount} | Monthly Due: ₹${monthlyDueAmount} (${unpaidMonthsCount} mo @ ₹${courseMonthlyRate}/mo)`
+          : '';
+      const combinedRemarks = [adminRemarks || 'Offline Registration & Payment at Udaipur Office.', breakdownRemark]
+        .filter(Boolean)
+        .join(' • ');
+
       const newFeePayment: FeePayment = {
         id: `pay-${Date.now()}`,
         receiptNo,
@@ -267,13 +286,32 @@ export function CounterEnrollmentModal({ onClose, onSuccess }: CounterEnrollment
         courseName: itemTitle,
         amount: payableAmount,
         paymentMode: paymentMode as any,
-        paymentType: sectionType === 'course' ? (coursePlan as any) : 'Full Payment',
+        paymentType: sectionType === 'course' ? (registrationDueAmount > 0 ? 'Instalment 1' : 'Full Payment') : 'Full Payment',
         date: issueDate,
-        remarks: adminRemarks || 'Physical Counter Cash Admission at Udaipur Office.',
+        remarks: combinedRemarks,
         status: 'Verified',
+        utr: effectiveUtr,
         reviewedBy: session?.name || 'Administrator (Admissions Desk)',
         reviewedAt: new Date().toISOString(),
+        itemType: sectionType,
+        itemId: targetCourseId,
       };
+
+      // Save full Registration vs. Monthly Fee breakdown for Outstanding Dues tracker
+      if (sectionType === 'course') {
+        await saveStudentDuesOverride({
+          studentId: candidateId,
+          courseId: selectedCourseId,
+          registrationTotalFee: totalItemFee,
+          registrationPaidAmount: registrationPaidNow,
+          registrationDueAmount,
+          monthlyFeeRate: courseMonthlyRate,
+          unpaidMonthsCount,
+          monthlyFeeDueAmount: monthlyDueAmount,
+          monthlyFeePaidAmount: monthlyPaidNow,
+          updatedAt: new Date().toISOString(),
+        });
+      }
 
       try {
         await cgaService.submitPaymentVerification({
@@ -287,8 +325,8 @@ export function CounterEnrollmentModal({ onClose, onSuccess }: CounterEnrollment
             : paymentMode.includes('Cash')
             ? 'Cash at Counter'
             : 'Debit/Credit Card',
-          paymentType: sectionType === 'course' ? (coursePlan === 'Full Payment' ? 'Full Payment' : 'Instalment 1') : 'Full Payment',
-          utr: receiptNo,
+          paymentType: sectionType === 'course' ? (registrationDueAmount === 0 ? 'Full Payment' : 'Instalment 1') : 'Full Payment',
+          utr: effectiveUtr,
           remarks: newFeePayment.remarks,
         });
       } catch {}
@@ -311,14 +349,14 @@ export function CounterEnrollmentModal({ onClose, onSuccess }: CounterEnrollment
           studentCode: candidateCode,
           studentPhone: candidatePhone,
           itemType: sectionType,
-          itemId: sectionType === 'course' ? selectedCourseId : sectionType === 'mock_series' ? 'ttet-2026' : selectedMaterialId,
-          paymentType: sectionType === 'course' ? (coursePlan === 'Full Payment' ? 'full' : 'instalment_1') : 'full',
-          expectedAmount: totalItemFee,
+          itemId: targetCourseId,
+          paymentType: sectionType === 'course' ? (registrationDueAmount === 0 ? 'full' : 'instalment_1') : 'full',
+          expectedAmount: totalItemFee + monthlyDueAmount + monthlyPaidNow,
           amountReceived: payableAmount,
           referenceCode: receiptNo,
           paymentChannel: 'bank_transfer',
           paymentMethod: 'cash_counter',
-          utr: 'CASH-COUNTER',
+          utr: effectiveUtr,
           status: 'approved',
           reviewedBy: session?.name || 'Administrator',
           reviewedAt: new Date().toISOString(),
@@ -1025,13 +1063,13 @@ export function CounterEnrollmentModal({ onClose, onSuccess }: CounterEnrollment
             {/* Step 3: Cash & Payment Collection */}
             <div className="space-y-4">
               <h3 className="text-sm font-extrabold text-[#0a0e2a] flex items-center gap-2 pb-2 border-b border-slate-100">
-                <Receipt className="w-4 h-4 text-emerald-600" /> 3. Payment Collection & Counter Receipt
+                <Receipt className="w-4 h-4 text-emerald-600" /> 3. Offline Payment Collection & Outstanding Dues Breakdown
               </h3>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700 block">
-                    Total Applicable Fee:
+                    Total Registration / Admission Fee:
                   </label>
                   <div className="px-3 py-2 rounded-xl bg-slate-100 font-black text-sm text-slate-800">
                     ₹{totalItemFee.toLocaleString('en-IN')}.00
@@ -1040,20 +1078,61 @@ export function CounterEnrollmentModal({ onClose, onSuccess }: CounterEnrollment
 
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700 block">
-                    Amount Collected Now (INR) *
+                    Registration Amount Paid Now (INR) *
                   </label>
                   <input
                     type="number"
-                    required
+                    min={0}
                     placeholder={String(standardFee)}
                     value={customAmount}
                     onChange={(e) => setCustomAmount(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-emerald-300 bg-emerald-50/30 text-sm font-black text-emerald-950 focus:outline-none focus:border-emerald-600"
                   />
-                  <span className="text-[10px] text-slate-400">
-                    Leave blank to collect standard fee of ₹{standardFee.toLocaleString('en-IN')}
+                  <span className="text-[10px] text-slate-500">
+                    Remaining Registration Due: <strong className="text-rose-600">₹{registrationDueAmount.toLocaleString('en-IN')}</strong> (e.g. if ₹2,000 paid out of ₹{totalItemFee.toLocaleString('en-IN')})
                   </span>
                 </div>
+
+                {sectionType === 'course' && (
+                  <>
+                    <div className="space-y-1">
+                      <label className="font-bold text-slate-700 block">
+                        Monthly Fee Rate & Unpaid Months:
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <span className="px-3 py-2 rounded-xl bg-blue-50 border border-blue-200 font-extrabold text-[#0056b3] whitespace-nowrap">
+                          ₹{courseMonthlyRate.toLocaleString('en-IN')}/mo
+                        </span>
+                        <select
+                          value={unpaidMonthsCount}
+                          onChange={(e) => setUnpaidMonthsCount(Number(e.target.value))}
+                          className="flex-1 px-3 py-2 rounded-xl border border-slate-200 bg-white font-bold text-slate-900"
+                        >
+                          <option value={0}>0 Months Pending (₹0)</option>
+                          <option value={1}>1 Month Unpaid (₹{(courseMonthlyRate * 1).toLocaleString('en-IN')})</option>
+                          <option value={2}>2 Months Unpaid (₹{(courseMonthlyRate * 2).toLocaleString('en-IN')})</option>
+                          <option value={3}>3 Months Unpaid (₹{(courseMonthlyRate * 3).toLocaleString('en-IN')})</option>
+                          <option value={4}>4 Months Unpaid (₹{(courseMonthlyRate * 4).toLocaleString('en-IN')})</option>
+                          <option value={6}>6 Months Unpaid (₹{(courseMonthlyRate * 6).toLocaleString('en-IN')})</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="font-bold text-slate-700 block">
+                        Monthly Fee Paid Now (Optional, INR):
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={monthlyFeeCollectedNow}
+                        onChange={(e) => setMonthlyFeeCollectedNow(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 font-bold text-slate-900"
+                        placeholder="0"
+                      />
+                    </div>
+                  </>
+                )}
 
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700 block">Payment Mode Collected *</label>
@@ -1070,11 +1149,49 @@ export function CounterEnrollmentModal({ onClose, onSuccess }: CounterEnrollment
                 </div>
 
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-700 block">Balance Dues Left:</label>
-                  <div className={`px-3 py-2 rounded-xl font-black text-sm ${
-                    dueAmount > 0 ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-slate-100 text-slate-500'
-                  }`}>
-                    {dueAmount > 0 ? `₹${dueAmount.toLocaleString('en-IN')} (Due in 30 days)` : '₹0 (NIL - Fully Cleared)'}
+                  <label className="font-bold text-slate-700 block">UTR / Reference No. (Optional for Cash)</label>
+                  <input
+                    type="text"
+                    placeholder="Enter 12-digit UPI UTR or Receipt Ref"
+                    value={counterUtrRef}
+                    onChange={(e) => setCounterUtrRef(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono font-bold text-slate-900"
+                  />
+                </div>
+
+                <div className="sm:col-span-2 p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <span className="font-extrabold text-[#0a0e2a] uppercase tracking-wider">
+                      Full Outstanding Dues Breakdown (Admin View)
+                    </span>
+                    <span className="font-black text-emerald-700">
+                      Total Collected Today: ₹{payableAmount.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                    <div className="p-2.5 rounded-xl bg-white border border-slate-200">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase block">Remaining Registration Due</span>
+                      <span className="text-sm font-black text-rose-600">
+                        ₹{registrationDueAmount.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-white border border-slate-200">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase block">Unpaid Monthly Fees</span>
+                      <span className="text-sm font-black text-amber-700">
+                        ₹{monthlyDueAmount.toLocaleString('en-IN')}{' '}
+                        {sectionType === 'course' && unpaidMonthsCount > 0 && (
+                          <span className="text-[10px] font-bold text-slate-500">
+                            ({unpaidMonthsCount} × ₹{courseMonthlyRate})
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200">
+                      <span className="text-[10px] font-bold text-rose-700 uppercase block">Total Outstanding Dues</span>
+                      <span className="text-sm font-black text-rose-700">
+                        ₹{dueAmount.toLocaleString('en-IN')}
+                      </span>
+                    </div>
                   </div>
                 </div>
 

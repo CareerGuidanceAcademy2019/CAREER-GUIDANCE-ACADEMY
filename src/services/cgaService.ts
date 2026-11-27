@@ -21,6 +21,8 @@ import {
   SeriesQuestion,
   SeriesAttempt,
   MockSubjectPost,
+  OnlineClassUpdate,
+  StudentDuesOverride,
 } from '@/data/initialSeedData';
 import { getSupabase } from '@/lib/supabase/client';
 import { parseIdentifier, getFacultyAvatarUrl, normalizePhone, isEmail } from '@/lib/names';
@@ -1618,13 +1620,43 @@ export const cgaService = {
     localDeletedMaterialIds.forEach((id) => mergedMaterialsMap.delete(id));
     const finalStudyMaterials = Array.from(mergedMaterialsMap.values());
 
-    const courseList = courses.map((c: Row) =>
-      toCourse(
+    const dbSiteContentObj = (site.data?.content as SiteContent) ?? {};
+    let localClassUpdatesMap: Record<string, OnlineClassUpdate> = {};
+    let localDuesOverridesMap: Record<string, StudentDuesOverride> = {};
+    if (typeof window !== 'undefined') {
+      try {
+        const rawCu = localStorage.getItem('cga_online_class_updates');
+        if (rawCu) localClassUpdatesMap = JSON.parse(rawCu);
+      } catch {}
+      try {
+        const rawDo = localStorage.getItem('cga_student_dues_overrides');
+        if (rawDo) localDuesOverridesMap = JSON.parse(rawDo);
+      } catch {}
+    }
+    const mergedClassUpdates: Record<string, OnlineClassUpdate> = {
+      ...(dbSiteContentObj.onlineClassUpdates || {}),
+      ...localClassUpdatesMap,
+    };
+    const mergedDuesOverrides: Record<string, StudentDuesOverride> = {
+      ...(dbSiteContentObj.studentDuesOverrides || {}),
+      ...localDuesOverridesMap,
+    };
+
+    const courseList = courses.map((c: Row) => {
+      const mapped = toCourse(
         c,
         facultyName(c.faculty_id),
         finalStudyMaterials.filter((m) => m.courseId === c.id).map((m) => m.id)
-      )
-    );
+      );
+      const cu = mergedClassUpdates[mapped.id];
+      if (cu) {
+        mapped.onlineClassUpdate = cu;
+        if (cu.link !== undefined) {
+          mapped.onlineClassLink = cu.link || undefined;
+        }
+      }
+      return mapped;
+    });
 
     const testListMaster = tests.map((t) => toTest(t, courseName(t.course_id || t.series_id), false, true));
     const baseMasterTests = testListMaster.length > 0 ? testListMaster : INITIAL_SEED_DATA.mockTests;
@@ -1736,6 +1768,8 @@ export const cgaService = {
           const cId = pay.course_id || pay.item_id;
           if (cId && !String(cId).startsWith('series-') && !enr.some((x) => x.courseId === cId)) {
             const c = courseList.find((x) => x.id === cId);
+            const totalFee = Number(c?.price || pay.amount || 0);
+            const paidAmount = Number(pay.amount || 0);
             enr.push({
               id: `enr-pay-${pay.id}`,
               courseId: cId,
@@ -1744,13 +1778,54 @@ export const cgaService = {
               facultyName: c?.facultyName ?? 'Faculty',
               enrolledDate: pay.date || new Date().toISOString().slice(0, 10),
               progress: 0,
-              totalFee: Number(pay.amount || c?.price || 0),
-              paidAmount: Number(pay.amount || 0),
-              dueAmount: 0,
+              totalFee,
+              paidAmount,
+              dueAmount: Math.max(0, totalFee - paidAmount),
               accessValidUntil: new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString(),
             });
           }
         }
+      });
+
+      // Apply any registration vs. monthly fee breakdown overrides
+      enr = enr.map((eItem) => {
+        const c = courseList.find((x) => x.id === eItem.courseId);
+        const overrideKey = `${p.id}::${eItem.courseId}`;
+        const ov = mergedDuesOverrides[overrideKey];
+        if (ov) {
+          const totalDue = Math.max(0, ov.registrationDueAmount + ov.monthlyFeeDueAmount);
+          const totalPaid = Math.max(0, ov.registrationPaidAmount + ov.monthlyFeePaidAmount);
+          return {
+            ...eItem,
+            totalFee: totalPaid + totalDue,
+            paidAmount: totalPaid,
+            dueAmount: totalDue,
+            registrationFeeTotal: ov.registrationTotalFee,
+            registrationFeePaid: ov.registrationPaidAmount,
+            registrationFeeDue: ov.registrationDueAmount,
+            monthlyFeeRate: ov.monthlyFeeRate,
+            unpaidMonthsCount: ov.unpaidMonthsCount,
+            monthlyFeeDue: ov.monthlyFeeDueAmount,
+            monthlyFeePaid: ov.monthlyFeePaidAmount,
+          };
+        }
+        const regTotal = c?.price || eItem.totalFee || 0;
+        const regPaid = Math.min(regTotal, eItem.paidAmount || 0);
+        const regDue = Math.max(0, regTotal - regPaid);
+        const moRate = c?.monthlyFee || 0;
+        const extraDue = Math.max(0, (eItem.dueAmount || 0) - regDue);
+        const moDue = extraDue;
+        const unpaidMoCount = moRate > 0 && moDue > 0 ? Math.max(1, Math.round(moDue / moRate)) : 0;
+        return {
+          ...eItem,
+          registrationFeeTotal: regTotal,
+          registrationFeePaid: regPaid,
+          registrationFeeDue: regDue,
+          monthlyFeeRate: moRate,
+          unpaidMonthsCount: unpaidMoCount,
+          monthlyFeeDue: moDue,
+          monthlyFeePaid: Math.max(0, (eItem.paidAmount || 0) - regPaid),
+        };
       });
 
       if (p.email === 'angatsaha825@gmail.com' && enr.length === 0) {
@@ -1972,6 +2047,34 @@ export const cgaService = {
             return dbContent.dailyCaMcqBanners;
           }
           return INITIAL_SEED_DATA.siteContent.dailyCaMcqBanners || [];
+        })(),
+        onlineClassUpdates: (() => {
+          const dbContent = site.data?.content as SiteContent | undefined;
+          let localUpdates: Record<string, OnlineClassUpdate> = {};
+          if (typeof window !== 'undefined') {
+            try {
+              const raw = localStorage.getItem('cga_online_class_updates');
+              if (raw) localUpdates = JSON.parse(raw);
+            } catch {}
+          }
+          return {
+            ...(dbContent?.onlineClassUpdates || {}),
+            ...localUpdates,
+          };
+        })(),
+        studentDuesOverrides: (() => {
+          const dbContent = site.data?.content as SiteContent | undefined;
+          let localOverrides: Record<string, StudentDuesOverride> = {};
+          if (typeof window !== 'undefined') {
+            try {
+              const raw = localStorage.getItem('cga_student_dues_overrides');
+              if (raw) localOverrides = JSON.parse(raw);
+            } catch {}
+          }
+          return {
+            ...(dbContent?.studentDuesOverrides || {}),
+            ...localOverrides,
+          };
         })(),
         whatsappGroupUrl:
           (site.data?.content as SiteContent | undefined)?.whatsappGroupUrl ||

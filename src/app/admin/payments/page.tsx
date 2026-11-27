@@ -107,46 +107,148 @@ function buildInitialRequests(feePayments: FeePayment[], students: any[]): Payme
 }
 
 export default function AdminPaymentsPage() {
-  const { db, session, showToast, approvePayment, rejectPayment, payCourseDue } = useCga();
+  const { db, session, showToast, approvePayment, rejectPayment, payCourseDue, saveStudentDuesOverride, submitPaymentVerification } = useCga();
 
   // Combined Section View Mode
   const [sectionView, setSectionView] = useState<'unified' | 'verifications' | 'defaulters' | 'receipts'>('unified');
 
-  // Fee & Defaulters Tracker State
+  // Fee & Outstanding Dues Tracker State
   const [selectedCourseFilter, setSelectedCourseFilter] = useState('All');
   const [onlyDefaulters, setOnlyDefaulters] = useState(false);
+  const [duesSearchQuery, setDuesSearchQuery] = useState('');
   const [recordTarget, setRecordTarget] = useState<{
     studentId: string;
     studentName: string;
+    studentCode: string;
     courseId: string;
     courseName: string;
+    registrationTotalFee: number;
+    registrationPaidAmount: number;
+    registrationDueAmount: number;
+    monthlyFeeRate: number;
+    unpaidMonthsCount: number;
+    monthlyFeeDueAmount: number;
+    monthlyFeePaidAmount: number;
     dueAmount: number;
   } | null>(null);
   const [payAmount, setPayAmount] = useState(0);
   const [paymentMode, setPaymentMode] = useState<FeePayment['paymentMode']>('Cash at Counter');
+  const [recordPaymentTargetType, setRecordPaymentTargetType] = useState<'registration' | 'monthly' | 'both'>('both');
+  const [recordUtrNo, setRecordUtrNo] = useState('');
+  const [recordAdjustUnpaidMonths, setRecordAdjustUnpaidMonths] = useState(0);
 
-  const allFeeRows = useMemo(
-    () =>
-      (db.students || []).flatMap((stu) =>
-        (stu.enrollments || []).map((enr) => ({
+  // View All Past Transactions Modal State (Admin Only)
+  const [historyStudentTarget, setHistoryStudentTarget] = useState<{
+    studentId: string;
+    studentName: string;
+    studentCode: string;
+    phone: string;
+    courseId?: string;
+    courseName?: string;
+  } | null>(null);
+
+  const allFeeRows = useMemo(() => {
+    const overridesMap = db.siteContent?.studentDuesOverrides || {};
+    return (db.students || []).flatMap((stu) =>
+      (stu.enrollments || []).map((enr) => {
+        const courseObj = db.courses.find((c) => c.id === enr.courseId);
+        const overrideKey = `${stu.id}::${enr.courseId}`;
+        const ov = overridesMap[overrideKey];
+
+        const regTotal = ov?.registrationTotalFee ?? enr.registrationFeeTotal ?? courseObj?.price ?? enr.totalFee ?? 0;
+        const regPaid = ov?.registrationPaidAmount ?? enr.registrationFeePaid ?? Math.min(regTotal, enr.paidAmount || 0);
+        const regDue = ov?.registrationDueAmount ?? enr.registrationFeeDue ?? Math.max(0, regTotal - regPaid);
+
+        const moRate = ov?.monthlyFeeRate ?? enr.monthlyFeeRate ?? courseObj?.monthlyFee ?? 800;
+        const unpaidMo =
+          ov?.unpaidMonthsCount ??
+          enr.unpaidMonthsCount ??
+          (moRate > 0 && Math.max(0, (enr.dueAmount || 0) - regDue) > 0
+            ? Math.max(1, Math.round(Math.max(0, (enr.dueAmount || 0) - regDue) / moRate))
+            : 0);
+        const moDue = ov?.monthlyFeeDueAmount ?? enr.monthlyFeeDue ?? Math.max(0, unpaidMo * moRate);
+        const moPaid = ov?.monthlyFeePaidAmount ?? enr.monthlyFeePaid ?? Math.max(0, (enr.paidAmount || 0) - regPaid);
+
+        const totalDue = regDue + moDue;
+        const totalPaid = regPaid + moPaid;
+        const totalCombinedFee = totalPaid + totalDue;
+
+        // Gather all transactions for this student (sorted newest first)
+        const studentTransactions = (db.feePayments || [])
+          .filter(
+            (p) =>
+              p.studentId === stu.id &&
+              (!p.courseId || p.courseId === enr.courseId || p.itemId === enr.courseId || p.courseName === enr.courseName)
+          )
+          .sort((a, b) => {
+            const da = a.reviewedAt || a.date || '';
+            const dbDate = b.reviewedAt || b.date || '';
+            return dbDate.localeCompare(da);
+          });
+
+        const allStudentTransactions = (db.feePayments || [])
+          .filter((p) => p.studentId === stu.id)
+          .sort((a, b) => {
+            const da = a.reviewedAt || a.date || '';
+            const dbDate = b.reviewedAt || b.date || '';
+            return dbDate.localeCompare(da);
+          });
+
+        const lastTx = studentTransactions[0] || allStudentTransactions[0] || null;
+
+        return {
           studentId: stu.id,
           studentCode: stu.studentCode,
           studentName: stu.name,
           phone: stu.phone,
+          email: stu.email,
+          guardianName: stu.guardianName,
+          address: stu.address,
           ...enr,
-        }))
-      ),
-    [db.students]
-  );
+          totalFee: totalCombinedFee,
+          paidAmount: totalPaid,
+          dueAmount: totalDue,
+          registrationTotalFee: regTotal,
+          registrationPaidAmount: regPaid,
+          registrationDueAmount: regDue,
+          monthlyFeeRate: moRate,
+          unpaidMonthsCount: unpaidMo,
+          monthlyFeeDueAmount: moDue,
+          monthlyFeePaidAmount: moPaid,
+          lastPayment: lastTx
+            ? {
+                id: lastTx.id,
+                date: lastTx.date,
+                amount: lastTx.amount,
+                utr: lastTx.utr || lastTx.receiptNo || 'CASH-COUNTER',
+                receiptNo: lastTx.receiptNo,
+                paymentMode: lastTx.paymentMode,
+                status: lastTx.status || 'Verified',
+                raw: lastTx,
+              }
+            : null,
+          transactionCount: allStudentTransactions.length,
+        };
+      })
+    );
+  }, [db.students, db.courses, db.feePayments, db.siteContent?.studentDuesOverrides]);
 
   const filteredFeeRows = useMemo(
     () =>
       allFeeRows.filter((row) => {
         const matchCourse = selectedCourseFilter === 'All' || row.courseId === selectedCourseFilter;
         const matchDefaulter = !onlyDefaulters || row.dueAmount > 0;
-        return matchCourse && matchDefaulter;
+        const q = duesSearchQuery.trim().toLowerCase();
+        const matchSearch =
+          !q ||
+          row.studentName.toLowerCase().includes(q) ||
+          row.studentCode.toLowerCase().includes(q) ||
+          (row.phone && row.phone.toLowerCase().includes(q)) ||
+          (row.lastPayment?.utr && row.lastPayment.utr.toLowerCase().includes(q)) ||
+          row.courseName.toLowerCase().includes(q);
+        return matchCourse && matchDefaulter && matchSearch;
       }),
-    [allFeeRows, selectedCourseFilter, onlyDefaulters]
+    [allFeeRows, selectedCourseFilter, onlyDefaulters, duesSearchQuery]
   );
 
   const defaultersCount = useMemo(
@@ -157,21 +259,124 @@ export default function AdminPaymentsPage() {
     () => allFeeRows.reduce((acc, r) => acc + (r.dueAmount || 0), 0),
     [allFeeRows]
   );
+  const totalPendingRegistrationDues = useMemo(
+    () => allFeeRows.reduce((acc, r) => acc + (r.registrationDueAmount || 0), 0),
+    [allFeeRows]
+  );
+  const totalPendingMonthlyDues = useMemo(
+    () => allFeeRows.reduce((acc, r) => acc + (r.monthlyFeeDueAmount || 0), 0),
+    [allFeeRows]
+  );
 
   const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!recordTarget || payAmount <= 0) return;
-    const res = await payCourseDue({
+    if (!recordTarget || payAmount < 0) return;
+
+    const cleanUtr =
+      recordUtrNo.trim() ||
+      `${PAYMENT_SETTINGS.receiptPrefix}${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    let nextRegPaid = recordTarget.registrationPaidAmount;
+    let nextRegDue = recordTarget.registrationDueAmount;
+    let nextMoPaid = recordTarget.monthlyFeePaidAmount;
+    let nextUnpaidMonths = recordAdjustUnpaidMonths;
+    let nextMoDue = Math.max(0, nextUnpaidMonths * recordTarget.monthlyFeeRate);
+
+    if (payAmount > 0) {
+      if (recordPaymentTargetType === 'registration') {
+        const appliedToReg = Math.min(nextRegDue, payAmount);
+        nextRegPaid += appliedToReg;
+        nextRegDue = Math.max(0, nextRegDue - appliedToReg);
+        const leftover = payAmount - appliedToReg;
+        if (leftover > 0) {
+          nextMoPaid += leftover;
+          nextMoDue = Math.max(0, nextMoDue - leftover);
+          nextUnpaidMonths =
+            recordTarget.monthlyFeeRate > 0 ? Math.ceil(nextMoDue / recordTarget.monthlyFeeRate) : 0;
+        }
+      } else if (recordPaymentTargetType === 'monthly') {
+        const appliedToMo = Math.min(nextMoDue, payAmount);
+        nextMoPaid += appliedToMo;
+        nextMoDue = Math.max(0, nextMoDue - appliedToMo);
+        nextUnpaidMonths =
+          recordTarget.monthlyFeeRate > 0 ? Math.ceil(nextMoDue / recordTarget.monthlyFeeRate) : 0;
+        const leftover = payAmount - appliedToMo;
+        if (leftover > 0) {
+          nextRegPaid += leftover;
+          nextRegDue = Math.max(0, nextRegDue - leftover);
+        }
+      } else {
+        // Both: clear Registration Due first, then Monthly Fee Due
+        const appliedToReg = Math.min(nextRegDue, payAmount);
+        nextRegPaid += appliedToReg;
+        nextRegDue = Math.max(0, nextRegDue - appliedToReg);
+        const leftover = payAmount - appliedToReg;
+        if (leftover > 0) {
+          nextMoPaid += leftover;
+          nextMoDue = Math.max(0, nextMoDue - leftover);
+          nextUnpaidMonths =
+            recordTarget.monthlyFeeRate > 0 ? Math.ceil(nextMoDue / recordTarget.monthlyFeeRate) : 0;
+        }
+      }
+    }
+
+    await saveStudentDuesOverride({
       studentId: recordTarget.studentId,
       courseId: recordTarget.courseId,
-      amount: payAmount,
-      paymentMode,
-      remarks: 'Recorded by C.G.A Administrator at Udaipur Office.',
+      registrationTotalFee: recordTarget.registrationTotalFee,
+      registrationPaidAmount: nextRegPaid,
+      registrationDueAmount: nextRegDue,
+      monthlyFeeRate: recordTarget.monthlyFeeRate,
+      unpaidMonthsCount: nextUnpaidMonths,
+      monthlyFeeDueAmount: nextMoDue,
+      monthlyFeePaidAmount: nextMoPaid,
+      updatedAt: new Date().toISOString(),
     });
-    if (res.success && res.receipt) {
+
+    if (payAmount > 0) {
+      const receiptNo = `${PAYMENT_SETTINGS.receiptPrefix}${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
+      const todayIso = new Date().toISOString().split('T')[0];
+      const newReceipt: FeePayment = {
+        id: `pay-${Date.now()}`,
+        receiptNo,
+        studentId: recordTarget.studentId,
+        studentName: recordTarget.studentName,
+        courseId: recordTarget.courseId,
+        courseName: recordTarget.courseName,
+        amount: payAmount,
+        paymentMode,
+        paymentType: nextRegDue + nextMoDue === 0 ? 'Balance Clearance' : 'Instalment 2',
+        date: todayIso,
+        utr: cleanUtr,
+        status: 'Verified',
+        reviewedBy: session?.name || 'C.G.A Administrator',
+        reviewedAt: new Date().toISOString(),
+        remarks: `Dues Payment (${recordPaymentTargetType.toUpperCase()}) • UTR: ${cleanUtr} • Reg Due Left: ₹${nextRegDue}, Monthly Due Left: ₹${nextMoDue}`,
+      };
+
+      try {
+        if (typeof window !== 'undefined') {
+          const stored = localStorage.getItem('cga_custom_payments');
+          const list: FeePayment[] = stored ? JSON.parse(stored) : [];
+          list.unshift(newReceipt);
+          localStorage.setItem('cga_custom_payments', JSON.stringify(list));
+        }
+      } catch {}
+
+      await payCourseDue({
+        studentId: recordTarget.studentId,
+        courseId: recordTarget.courseId,
+        amount: payAmount,
+        paymentMode,
+        remarks: newReceipt.remarks,
+      }).catch(() => null);
+
       setRecordTarget(null);
-      setViewingReceipt(res.receipt);
+      setViewingReceipt(newReceipt);
       void fetchRequests();
+    } else {
+      showToast('Dues Breakdown Updated', `Updated pending dues for ${recordTarget.studentName}.`, 'success');
+      setRecordTarget(null);
     }
   };
 
@@ -810,8 +1015,8 @@ export default function AdminPaymentsPage() {
       <div className="bg-white rounded-2xl border border-slate-200 p-2 flex flex-wrap items-center gap-2 shadow-2xs">
         {[
           { key: 'unified', label: 'All Sections Combined' },
+          { key: 'defaulters', label: `Outstanding Dues & Offline Registration (${defaultersCount} Due)` },
           { key: 'verifications', label: `Payment Verifications (${stats.pending} Pending)` },
-          { key: 'defaulters', label: `Fee Ledger & Defaulters (${defaultersCount} Due)` },
           { key: 'receipts', label: `Official Fee Receipts (${db.feePayments.length})` },
         ].map((view) => (
           <button
@@ -1174,77 +1379,151 @@ export default function AdminPaymentsPage() {
         </div>
       )}
 
-      {/* ==================== COURSE FEE LEDGER & DEFAULTERS TRACKER ==================== */}
+      {/* ==================== OUTSTANDING DUES SECTION & OFFLINE REGISTRATION (ADMIN ONLY) ==================== */}
       {(sectionView === 'unified' || sectionView === 'defaulters') && (
         <div className="space-y-4">
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-wrap items-center justify-between gap-4 shadow-2xs">
-            <div className="flex flex-wrap items-center gap-3">
+          {/* Outstanding Dues Breakdown Header & KPI Summary */}
+          <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 space-y-5 shadow-2xs">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
               <div>
-                <h2 className="text-base font-extrabold text-[#0a0e2a]">
-                  Student Course Fee Ledger &amp; Defaulter Tracker
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[11px] font-extrabold mb-1.5">
+                  <Lock className="w-3 h-3" /> Admin-Only Financial Ledger
+                </div>
+                <h2 className="text-lg sm:text-xl font-extrabold text-[#0a0e2a]">
+                  Outstanding Dues Breakdown &amp; Offline Student Registration
                 </h2>
-                <p className="text-[11px] text-slate-500">
-                  Filter by course/batch, identify fee defaulters with pending dues, and record installment payments.
+                <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+                  Track each student&apos;s remaining Registration / Admission Fee balance and unpaid Monthly Fees separately, inspect their latest payment Date, Amount &amp; UTR inline, view all past transactions on demand, or perform offline registration for new &amp; existing students.
                 </p>
               </div>
-              <span className="text-xs font-bold text-slate-500 flex items-center gap-1 ml-0 sm:ml-4">
-                <Filter className="w-3.5 h-3.5 text-[#0056b3]" /> Filter by Course / Batch:
-              </span>
-              <select
-                value={selectedCourseFilter}
-                onChange={(e) => setSelectedCourseFilter(e.target.value)}
-                className="px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-bold bg-white"
-              >
-                <option value="All">All Courses &amp; Batches</option>
-                {db.courses.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.batchName})
-                  </option>
-                ))}
-              </select>
+
+              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowCounterModal(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold shadow-xs cursor-pointer transition-all"
+                >
+                  <Coins className="w-4 h-4 text-emerald-100" />
+                  <span>+ Offline Registration &amp; Payment (New / Existing Student)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setOnlyDefaulters(!onlyDefaulters)}
+                  className={`px-4 py-2.5 rounded-xl text-xs font-extrabold inline-flex items-center gap-1.5 border cursor-pointer transition-all ${
+                    onlyDefaulters
+                      ? 'bg-[#dc2626] text-white border-[#dc2626]'
+                      : 'bg-red-50 text-[#dc2626] border-red-200 hover:bg-red-100'
+                  }`}
+                >
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  {onlyDefaulters ? 'Showing Outstanding Dues Only (Show All)' : `Filter Students with Dues (${defaultersCount})`}
+                </button>
+              </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setOnlyDefaulters(!onlyDefaulters)}
-              className={`px-4 py-2 rounded-xl text-xs font-extrabold inline-flex items-center gap-1.5 border cursor-pointer transition-all ${
-                onlyDefaulters
-                  ? 'bg-[#dc2626] text-white border-[#dc2626]'
-                  : 'bg-red-50 text-[#dc2626] border-red-200 hover:bg-red-100'
-              }`}
-            >
-              <AlertCircle className="w-3.5 h-3.5" />
-              {onlyDefaulters ? 'Showing Fee Defaulters Only (Click for All)' : `Filter Fee Defaulters (${defaultersCount})`}
-            </button>
+            {/* 3-Card Dues Breakdown KPIs */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-4 rounded-2xl bg-rose-50/70 border border-rose-200">
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-rose-700 block">
+                  Remaining Registration / Admission Dues
+                </span>
+                <p className="text-xl font-black text-rose-700 mt-1">
+                  ₹{totalPendingRegistrationDues.toLocaleString('en-IN')}
+                </p>
+                <span className="text-[11px] text-rose-600/90">
+                  Unpaid balance from course registration / admission fee
+                </span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200">
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-800 block">
+                  Unpaid Monthly Fees
+                </span>
+                <p className="text-xl font-black text-amber-800 mt-1">
+                  ₹{totalPendingMonthlyDues.toLocaleString('en-IN')}
+                </p>
+                <span className="text-[11px] text-amber-700/90">
+                  Separate monthly tuition fee dues across enrolled students
+                </span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-slate-900 text-white">
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-300 block">
+                  Total Combined Outstanding Dues
+                </span>
+                <p className="text-xl font-black text-white mt-1">
+                  ₹{totalPendingDues.toLocaleString('en-IN')}
+                </p>
+                <span className="text-[11px] text-slate-300">
+                  Across {defaultersCount} active student enrollment(s) with balance due
+                </span>
+              </div>
+            </div>
+
+            {/* Filter & Search Bar for Outstanding Dues */}
+            <div className="flex flex-col sm:flex-row items-center gap-3 pt-1">
+              <div className="relative flex-1 w-full">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={duesSearchQuery}
+                  onChange={(e) => setDuesSearchQuery(e.target.value)}
+                  placeholder="Search student by name, code, mobile, course, or last UTR number..."
+                  className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0056b3]/20 focus:border-[#0056b3]"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <Filter className="w-3.5 h-3.5 text-[#0056b3]" />
+                <select
+                  value={selectedCourseFilter}
+                  onChange={(e) => setSelectedCourseFilter(e.target.value)}
+                  className="px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold bg-white cursor-pointer"
+                >
+                  <option value="All">All Courses &amp; Batches</option>
+                  {db.courses.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.batchName})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
 
+          {/* Outstanding Dues Breakdown Table */}
           <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-2xs">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
-                    <th className="py-3.5 px-4">Student</th>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-[11px] font-extrabold">
+                    <th className="py-3.5 px-4">Student Details</th>
                     <th className="py-3.5 px-4">Course &amp; Batch</th>
-                    <th className="py-3.5 px-4">Total Fee</th>
-                    <th className="py-3.5 px-4">Paid Amount</th>
-                    <th className="py-3.5 px-4">Due Balance</th>
-                    <th className="py-3.5 px-4 text-right">Action</th>
+                    <th className="py-3.5 px-4">Registration Fee Breakdown</th>
+                    <th className="py-3.5 px-4">Monthly Fee Breakdown</th>
+                    <th className="py-3.5 px-4">Total Outstanding Due</th>
+                    <th className="py-3.5 px-4">Last Payment (Date • Amount • UTR)</th>
+                    <th className="py-3.5 px-4 text-right">Actions &amp; All Transactions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredFeeRows.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-slate-400">
-                        No student course fee records match the selected filter.
+                      <td colSpan={7} className="py-10 text-center text-slate-400">
+                        No student fee or outstanding due records match your current filter.
                       </td>
                     </tr>
                   ) : (
                     filteredFeeRows.map((row) => (
-                      <tr key={`${row.studentId}-${row.courseId}`} className="hover:bg-slate-50">
-                        <td className="py-3.5 px-4">
+                      <tr key={`${row.studentId}-${row.courseId}`} className="hover:bg-slate-50/90 transition-colors">
+                        {/* Student Details */}
+                        <td className="py-4 px-4 align-top">
                           <p className="font-extrabold text-slate-900">{row.studentName}</p>
-                          <div className="text-[11px] text-slate-500 flex items-center gap-1">
-                            <span>{row.studentCode} •</span>
+                          <div className="text-[11px] font-mono font-bold text-[#0056b3] mt-0.5">
+                            {row.studentCode}
+                          </div>
+                          <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
                             <MaskedData
                               value={row.phone}
                               type="phone"
@@ -1252,53 +1531,168 @@ export default function AdminPaymentsPage() {
                               className="text-[11px] text-slate-500"
                             />
                           </div>
+                          {row.guardianName && (
+                            <div className="text-[10px] text-slate-400 mt-0.5">
+                              Guardian: {row.guardianName}
+                            </div>
+                          )}
                         </td>
-                        <td className="py-3.5 px-4">
-                          <p className="font-bold text-slate-800">{row.courseName}</p>
-                          <span className="text-[11px] text-[#0056b3] font-semibold">
+
+                        {/* Course & Batch */}
+                        <td className="py-4 px-4 align-top max-w-xs">
+                          <p className="font-extrabold text-slate-800 line-clamp-2">{row.courseName}</p>
+                          <span className="text-[11px] text-[#0056b3] font-semibold block mt-0.5">
                             {row.batchName}
                           </span>
+                          <span className="text-[10px] text-slate-400 block mt-0.5">
+                            Enrolled: {row.enrolledDate}
+                          </span>
                         </td>
-                        <td className="py-3.5 px-4 font-bold whitespace-nowrap">
-                          ₹{row.totalFee.toLocaleString('en-IN')}
+
+                        {/* Registration Fee Breakdown */}
+                        <td className="py-4 px-4 align-top whitespace-nowrap">
+                          <div className="text-[11px] text-slate-500">
+                            Total Reg: <strong className="text-slate-800">₹{row.registrationTotalFee.toLocaleString('en-IN')}</strong>
+                          </div>
+                          <div className="text-[11px] text-emerald-700 font-bold mt-0.5">
+                            Paid: ₹{row.registrationPaidAmount.toLocaleString('en-IN')}
+                          </div>
+                          <div className="mt-1">
+                            {row.registrationDueAmount > 0 ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200 font-extrabold text-[11px]">
+                                Rest Reg Due: ₹{row.registrationDueAmount.toLocaleString('en-IN')}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-bold text-[10px]">
+                                Reg Cleared
+                              </span>
+                            )}
+                          </div>
                         </td>
-                        <td className="py-3.5 px-4 font-extrabold text-emerald-700 whitespace-nowrap">
-                          ₹{row.paidAmount.toLocaleString('en-IN')}
+
+                        {/* Monthly Fee Breakdown */}
+                        <td className="py-4 px-4 align-top whitespace-nowrap">
+                          <div className="text-[11px] text-slate-500">
+                            Rate: <strong className="text-slate-800">₹{row.monthlyFeeRate.toLocaleString('en-IN')}/mo</strong>
+                          </div>
+                          {row.monthlyFeePaidAmount > 0 && (
+                            <div className="text-[11px] text-emerald-700 font-bold mt-0.5">
+                              Paid: ₹{row.monthlyFeePaidAmount.toLocaleString('en-IN')}
+                            </div>
+                          )}
+                          <div className="mt-1">
+                            {row.monthlyFeeDueAmount > 0 ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-300 font-extrabold text-[11px]">
+                                Monthly Due: ₹{row.monthlyFeeDueAmount.toLocaleString('en-IN')} ({row.unpaidMonthsCount} mo)
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-bold text-[10px]">
+                                ₹0 Monthly Due
+                              </span>
+                            )}
+                          </div>
                         </td>
-                        <td className="py-3.5 px-4 whitespace-nowrap">
+
+                        {/* Total Outstanding Due */}
+                        <td className="py-4 px-4 align-top whitespace-nowrap">
                           {row.dueAmount > 0 ? (
-                            <span className="px-2.5 py-1 rounded-full bg-red-50 text-[#dc2626] border border-red-200 font-extrabold whitespace-nowrap">
-                              Due: ₹{row.dueAmount.toLocaleString('en-IN')}
-                            </span>
+                            <div className="space-y-1">
+                              <span className="px-3 py-1 rounded-full bg-red-50 text-[#dc2626] border border-red-200 font-black text-xs inline-block">
+                                Total Due: ₹{row.dueAmount.toLocaleString('en-IN')}
+                              </span>
+                              <div className="text-[10px] text-slate-500 font-semibold">
+                                Reg ₹{row.registrationDueAmount.toLocaleString('en-IN')} + Mo ₹{row.monthlyFeeDueAmount.toLocaleString('en-IN')}
+                              </div>
+                            </div>
                           ) : (
-                            <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold whitespace-nowrap">
-                              Cleared
+                            <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold whitespace-nowrap inline-flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" /> All Dues Cleared
                             </span>
                           )}
                         </td>
-                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                          {row.dueAmount > 0 ? (
+
+                        {/* Last Payment Details Only (Date, Amount, UTR) */}
+                        <td className="py-4 px-4 align-top whitespace-nowrap">
+                          {row.lastPayment ? (
+                            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/90 space-y-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs font-black text-emerald-700">
+                                  ₹{row.lastPayment.amount.toLocaleString('en-IN')}
+                                </span>
+                                <span className="text-[10px] font-bold text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                                  {row.lastPayment.date}
+                                </span>
+                              </div>
+                              <div className="text-[11px] font-mono font-bold text-slate-800 flex items-center gap-1">
+                                <span>UTR: {row.lastPayment.utr}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => copyToClipboard(row.lastPayment!.utr)}
+                                  className="text-slate-400 hover:text-slate-700 cursor-pointer"
+                                  title="Copy UTR"
+                                >
+                                  <Copy className="w-3 h-3" />
+                                </button>
+                              </div>
+                              <div className="text-[10px] text-slate-400">
+                                Mode: {row.lastPayment.paymentMode}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-slate-400 italic">No transaction recorded</span>
+                          )}
+                        </td>
+
+                        {/* Actions & View All Transactions */}
+                        <td className="py-4 px-4 align-top text-right whitespace-nowrap">
+                          <div className="flex flex-col items-end gap-1.5">
                             <button
                               type="button"
                               onClick={() => {
                                 setRecordTarget({
                                   studentId: row.studentId,
                                   studentName: row.studentName,
+                                  studentCode: row.studentCode,
                                   courseId: row.courseId,
                                   courseName: row.courseName,
+                                  registrationTotalFee: row.registrationTotalFee,
+                                  registrationPaidAmount: row.registrationPaidAmount,
+                                  registrationDueAmount: row.registrationDueAmount,
+                                  monthlyFeeRate: row.monthlyFeeRate,
+                                  unpaidMonthsCount: row.unpaidMonthsCount,
+                                  monthlyFeeDueAmount: row.monthlyFeeDueAmount,
+                                  monthlyFeePaidAmount: row.monthlyFeePaidAmount,
                                   dueAmount: row.dueAmount,
                                 });
-                                setPayAmount(row.dueAmount);
+                                setRecordAdjustUnpaidMonths(row.unpaidMonthsCount);
+                                setPayAmount(row.dueAmount > 0 ? row.dueAmount : 0);
+                                setRecordPaymentTargetType('both');
+                                setRecordUtrNo('');
                               }}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white font-bold cursor-pointer whitespace-nowrap"
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white font-bold text-[11px] cursor-pointer whitespace-nowrap shadow-2xs"
                             >
-                              <PlusCircle className="w-3.5 h-3.5" /> Record Payment
+                              <PlusCircle className="w-3.5 h-3.5" />
+                              <span>{row.dueAmount > 0 ? 'Record Payment / Edit Dues' : 'Manage Monthly Dues'}</span>
                             </button>
-                          ) : (
-                            <span className="text-slate-400 font-semibold whitespace-nowrap">
-                              Paid in Full
-                            </span>
-                          )}
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setHistoryStudentTarget({
+                                  studentId: row.studentId,
+                                  studentName: row.studentName,
+                                  studentCode: row.studentCode,
+                                  phone: row.phone,
+                                  courseId: row.courseId,
+                                  courseName: row.courseName,
+                                })
+                              }
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] cursor-pointer transition-colors"
+                            >
+                              <History className="w-3 h-3 text-[#0056b3]" />
+                              <span>View All Transactions ({row.transactionCount})</span>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -1386,50 +1780,147 @@ export default function AdminPaymentsPage() {
         </div>
       )}
 
-      {/* ==================== RECORD DUE PAYMENT MODAL ==================== */}
+      {/* ==================== RECORD DUE PAYMENT / MANAGE DUES BREAKDOWN MODAL ==================== */}
       {recordTarget && (
         <div
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/65 p-4"
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/65 p-4 overflow-y-auto"
           role="dialog"
           aria-modal="true"
         >
           <form
             onSubmit={handleRecordPayment}
-            className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-200 text-xs"
+            className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-slate-200 text-xs my-6"
           >
-            <h3 className="text-base font-extrabold text-[#0a0e2a]">
-              Record Fee Payment &amp; Generate Receipt
-            </h3>
-            <p className="text-slate-600">
-              Student: <strong>{recordTarget.studentName}</strong> • {recordTarget.courseName}
-            </p>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-base font-extrabold text-[#0a0e2a]">
+                  Record Payment &amp; Manage Outstanding Dues Breakdown
+                </h3>
+                <p className="text-slate-500 mt-0.5">
+                  Student: <strong>{recordTarget.studentName}</strong> ({recordTarget.studentCode}) • {recordTarget.courseName}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRecordTarget(null)}
+                className="text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Current Breakdown Summary */}
+            <div className="grid grid-cols-3 gap-2.5 p-3 rounded-2xl bg-slate-50 border border-slate-200">
+              <div className="p-2 rounded-xl bg-white border border-slate-200">
+                <span className="text-[10px] font-bold text-slate-500 uppercase block">Rest Registration Due</span>
+                <span className="text-sm font-black text-rose-600">
+                  ₹{recordTarget.registrationDueAmount.toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className="p-2 rounded-xl bg-white border border-slate-200">
+                <span className="text-[10px] font-bold text-slate-500 uppercase block">Monthly Fee Due</span>
+                <span className="text-sm font-black text-amber-700">
+                  ₹{(recordAdjustUnpaidMonths * recordTarget.monthlyFeeRate).toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className="p-2 rounded-xl bg-rose-50 border border-rose-200">
+                <span className="text-[10px] font-bold text-rose-700 uppercase block">Combined Total Due</span>
+                <span className="text-sm font-black text-rose-700">
+                  ₹{(recordTarget.registrationDueAmount + recordAdjustUnpaidMonths * recordTarget.monthlyFeeRate).toLocaleString('en-IN')}
+                </span>
+              </div>
+            </div>
+
+            {/* Adjust Unpaid Monthly Fee Cycles */}
             <div>
               <label className="font-bold text-slate-700 block mb-1">
-                Amount Received (₹) — Max Due: ₹{recordTarget.dueAmount}
+                Unpaid Monthly Fee Months (@ ₹{recordTarget.monthlyFeeRate.toLocaleString('en-IN')}/month)
               </label>
-              <input
-                type="number"
-                min={100}
-                max={recordTarget.dueAmount}
-                value={payAmount}
-                onChange={(e) => setPayAmount(Number(e.target.value))}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 font-bold"
-              />
-            </div>
-            <div>
-              <label className="font-bold text-slate-700 block mb-1">Payment Mode</label>
               <select
-                value={paymentMode}
-                onChange={(e) => setPaymentMode(e.target.value as FeePayment['paymentMode'])}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-white font-bold"
+                value={recordAdjustUnpaidMonths}
+                onChange={(e) => {
+                  const nextMo = Number(e.target.value);
+                  setRecordAdjustUnpaidMonths(nextMo);
+                }}
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-white font-bold text-slate-900"
               >
-                <option value="Cash at Counter">Cash at Counter (Udaipur Office)</option>
-                <option value="UPI">UPI</option>
-                <option value="Debit/Credit Card">Debit/Credit Card</option>
-                <option value="Net Banking">Net Banking</option>
+                <option value={0}>0 Months Pending (₹0 Monthly Due)</option>
+                <option value={1}>1 Month Unpaid (₹{(recordTarget.monthlyFeeRate * 1).toLocaleString('en-IN')})</option>
+                <option value={2}>2 Months Unpaid (₹{(recordTarget.monthlyFeeRate * 2).toLocaleString('en-IN')})</option>
+                <option value={3}>3 Months Unpaid (₹{(recordTarget.monthlyFeeRate * 3).toLocaleString('en-IN')})</option>
+                <option value={4}>4 Months Unpaid (₹{(recordTarget.monthlyFeeRate * 4).toLocaleString('en-IN')})</option>
+                <option value={6}>6 Months Unpaid (₹{(recordTarget.monthlyFeeRate * 6).toLocaleString('en-IN')})</option>
               </select>
             </div>
-            <div className="flex justify-end gap-2 pt-2">
+
+            {/* Apply Payment Towards */}
+            <div>
+              <label className="font-bold text-slate-700 block mb-1">Apply Payment Towards</label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { key: 'both', label: 'Combined Dues' },
+                  { key: 'registration', label: 'Registration Due' },
+                  { key: 'monthly', label: 'Monthly Fee Due' },
+                ].map((opt) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => setRecordPaymentTargetType(opt.key as any)}
+                    className={`py-2 px-2.5 rounded-xl border font-bold text-center cursor-pointer transition-all ${
+                      recordPaymentTargetType === opt.key
+                        ? 'bg-[#0056b3] text-white border-[#0056b3]'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">
+                  Amount Received Now (₹) (0 to only update dues)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={payAmount}
+                  onChange={(e) => setPayAmount(Number(e.target.value))}
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 font-black text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Payment Mode</label>
+                <select
+                  value={paymentMode}
+                  onChange={(e) => setPaymentMode(e.target.value as FeePayment['paymentMode'])}
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-white font-bold"
+                >
+                  <option value="Cash at Counter">Cash at Counter (Udaipur Office)</option>
+                  <option value="UPI">UPI</option>
+                  <option value="Debit/Credit Card">Debit/Credit Card</option>
+                  <option value="Net Banking">Net Banking</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="font-bold text-slate-700 block mb-1">
+                UTR No. / Transaction Reference (Entered by User / Admin)
+              </label>
+              <input
+                type="text"
+                placeholder="Enter 12-digit UTR number or receipt reference"
+                value={recordUtrNo}
+                onChange={(e) => setRecordUtrNo(e.target.value)}
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 font-mono font-bold text-slate-900"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 type="button"
                 onClick={() => setRecordTarget(null)}
@@ -1439,12 +1930,145 @@ export default function AdminPaymentsPage() {
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 rounded-xl bg-[#0056b3] text-white font-bold cursor-pointer"
+                className="px-5 py-2 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white font-bold cursor-pointer"
               >
-                Record &amp; Generate Receipt
+                {payAmount > 0 ? 'Record Payment & Update Dues' : 'Save Dues Breakdown'}
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* ==================== VIEW ALL PAST TRANSACTIONS MODAL (ADMIN ONLY) ==================== */}
+      {historyStudentTarget && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/65 p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="p-5 bg-[#0a0e2a] text-white flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-amber-300 block">
+                  Admin-Only Full Transaction Ledger
+                </span>
+                <h3 className="text-base sm:text-lg font-extrabold text-white">
+                  All Past Transactions — {historyStudentTarget.studentName} ({historyStudentTarget.studentCode})
+                </h3>
+                {historyStudentTarget.courseName && (
+                  <p className="text-xs text-slate-300 mt-0.5">
+                    Enrolled Course: {historyStudentTarget.courseName}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setHistoryStudentTarget(null)}
+                className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 flex-1 overflow-y-auto space-y-4 text-xs">
+              {(() => {
+                const studentTxs = (db.feePayments || [])
+                  .filter((p) => p.studentId === historyStudentTarget.studentId)
+                  .sort((a, b) => {
+                    const da = a.reviewedAt || a.date || '';
+                    const dbDate = b.reviewedAt || b.date || '';
+                    return dbDate.localeCompare(da);
+                  });
+
+                if (studentTxs.length === 0) {
+                  return (
+                    <div className="py-10 text-center text-slate-400 space-y-2">
+                      <History className="w-8 h-8 mx-auto text-slate-300" />
+                      <p className="font-bold text-slate-600">No Transactions Found</p>
+                      <p className="text-xs text-slate-400">
+                        No past payment transactions have been recorded for this student yet.
+                      </p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-[11px] font-extrabold">
+                          <th className="py-3 px-3.5">Date</th>
+                          <th className="py-3 px-3.5">Receipt / Ref</th>
+                          <th className="py-3 px-3.5">UTR Number</th>
+                          <th className="py-3 px-3.5">Course / Item</th>
+                          <th className="py-3 px-3.5">Mode &amp; Type</th>
+                          <th className="py-3 px-3.5">Amount</th>
+                          <th className="py-3 px-3.5">Status</th>
+                          <th className="py-3 px-3.5 text-right">Receipt</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {studentTxs.map((tx, idx) => (
+                          <tr key={tx.id} className={idx === 0 ? 'bg-emerald-50/40' : 'hover:bg-slate-50'}>
+                            <td className="py-3 px-3.5 whitespace-nowrap font-bold text-slate-800">
+                              {tx.date}
+                              {idx === 0 && (
+                                <span className="ml-1.5 px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[9px] font-black uppercase">
+                                  Latest
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-3.5 font-mono font-bold text-[#0056b3] whitespace-nowrap">
+                              {tx.receiptNo}
+                            </td>
+                            <td className="py-3 px-3.5 font-mono font-bold text-slate-800 whitespace-nowrap">
+                              {tx.utr || tx.receiptNo || 'CASH-COUNTER'}
+                            </td>
+                            <td className="py-3 px-3.5 text-slate-700 font-semibold">
+                              {tx.courseName}
+                            </td>
+                            <td className="py-3 px-3.5 text-slate-500 whitespace-nowrap">
+                              {tx.paymentMode} • {tx.paymentType}
+                            </td>
+                            <td className="py-3 px-3.5 font-black text-emerald-700 whitespace-nowrap">
+                              ₹{tx.amount.toLocaleString('en-IN')}
+                            </td>
+                            <td className="py-3 px-3.5 whitespace-nowrap">
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[10px]">
+                                {tx.status || 'Verified'}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3.5 text-right whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={() => setViewingReceipt(tx)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-[#0056b3] font-bold hover:bg-blue-100 cursor-pointer"
+                              >
+                                <Eye className="w-3.5 h-3.5" /> Receipt
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs">
+              <span className="text-slate-500">
+                Only the latest payment is shown inline in the Outstanding Dues table; full history is visible here to Admin only.
+              </span>
+              <button
+                type="button"
+                onClick={() => setHistoryStudentTarget(null)}
+                className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold cursor-pointer"
+              >
+                Close History
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
