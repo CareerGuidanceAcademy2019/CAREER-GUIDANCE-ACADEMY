@@ -279,14 +279,21 @@ export default function StudentDashboardPage() {
                         >
                           <FileText className="w-3.5 h-3.5 shrink-0" /> Open Study Materials
                         </Link>
-                        {db.courses.find((c) => c.id === enr.courseId)?.mode === 'Online' && (
-                          <Link
-                            href={`/student/live-class/${enr.courseId}`}
-                            className="font-extrabold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2.5 py-1 rounded-lg inline-flex items-center gap-1 whitespace-nowrap"
-                          >
-                            <Video className="w-3.5 h-3.5 shrink-0" /> Check Live Class Updates
-                          </Link>
-                        )}
+                        {(() => {
+                          const crs = db.courses.find((c) => c.id === enr.courseId);
+                          const isExpired = Boolean(
+                            enr.accessValidUntil && new Date(enr.accessValidUntil).getTime() < Date.now()
+                          );
+                          if (crs?.mode !== 'Online' || isExpired) return null;
+                          return (
+                            <Link
+                              href={`/student/live-class/${enr.courseId}`}
+                              className="font-extrabold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2.5 py-1 rounded-lg inline-flex items-center gap-1 whitespace-nowrap"
+                            >
+                              <Video className="w-3.5 h-3.5 shrink-0" /> Check Live Class Updates
+                            </Link>
+                          );
+                        })()}
                       </div>
                       {enr.dueAmount > 0 ? (
                         <Link

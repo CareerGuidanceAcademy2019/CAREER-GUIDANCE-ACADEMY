@@ -813,7 +813,7 @@ export default function StudentMyLearningPage() {
                         {isOnline ? (
                           <div className="space-y-2.5">
                             <div className="flex flex-wrap items-center justify-between gap-2">
-                              {fullCourse?.onlineClassLink ? (
+                              {fullCourse?.hasOnlineClassLink || fullCourse?.onlineClassLink || fullCourse?.onlineClassUpdate?.hasLink ? (
                                 <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100/70 px-2.5 py-0.5 rounded-md inline-flex items-center gap-1">
                                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                                   Live Class Link Available
@@ -832,18 +832,31 @@ export default function StudentMyLearningPage() {
                             </div>
 
                             <p className="text-xs text-slate-700 leading-relaxed">
-                              Check the latest live class timing, faculty announcements, and Google Meet / Zoom joining link on the dedicated updates page:
+                              {isExpired
+                                ? 'Your batch access has expired. Contact C.G.A administration to renew access to live online classes.'
+                                : 'Enter your enrolled online course room to check live class timings, updates, and join the live class when enabled:'}
                             </p>
 
                             <div className="flex flex-wrap items-center gap-2 pt-1">
-                              <Link
-                                href={`/student/live-class/${enr.courseId}`}
-                                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold shadow-xs cursor-pointer transition-all"
-                              >
-                                <Video className="w-3.5 h-3.5" />
-                                <span>Check Live Class Updates</span>
-                                <ExternalLink className="w-3 h-3 ml-0.5" />
-                              </Link>
+                              {isExpired ? (
+                                <button
+                                  type="button"
+                                  disabled
+                                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-200 text-slate-500 text-xs font-extrabold cursor-not-allowed"
+                                >
+                                  <Lock className="w-3.5 h-3.5" />
+                                  <span>Live Class Access Expired</span>
+                                </button>
+                              ) : (
+                                <Link
+                                  href={`/student/live-class/${enr.courseId}`}
+                                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold shadow-xs cursor-pointer transition-all"
+                                >
+                                  <Video className="w-3.5 h-3.5" />
+                                  <span>Check Live Class Updates</span>
+                                  <ExternalLink className="w-3 h-3 ml-0.5" />
+                                </Link>
+                              )}
                             </div>
                           </div>
                         ) : (

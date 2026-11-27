@@ -2,6 +2,32 @@ import { NextResponse } from 'next/server';
 import { createAdminSupabase, requireAdmin } from '@/lib/supabase/server';
 import { checkRateLimit, createRateLimitResponse, getClientIp, RATE_LIMIT_RULES } from '@/lib/rateLimit';
 
+export async function GET(request: Request) {
+  const adminId = await requireAdmin(request);
+  if (!adminId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
+  const url = new URL(request.url);
+  const id = (url.searchParams.get('id') || '').trim();
+  if (!id) return NextResponse.json({ error: 'Course ID is required' }, { status: 400 });
+
+  const admin = createAdminSupabase();
+  const [{ data: course }, { data: siteRow }] = await Promise.all([
+    admin.from('courses').select('id, online_class_link').eq('id', id).maybeSingle(),
+    admin.from('site_content').select('content').eq('id', 1).maybeSingle(),
+  ]);
+
+  const liveUpdate = (siteRow?.content as any)?.onlineClassUpdates?.[id] || null;
+  return NextResponse.json(
+    {
+      success: true,
+      courseId: id,
+      onlineClassLink: course?.online_class_link || liveUpdate?.link || '',
+      onlineClassUpdate: liveUpdate,
+    },
+    { headers: { 'Cache-Control': 'private, no-store' } }
+  );
+}
+
 export async function DELETE(request: Request) {
   const adminId = await requireAdmin(request);
   if (!adminId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

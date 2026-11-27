@@ -52,15 +52,41 @@ export default function AdminCourseLiveClassPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // Load admin-only raw meeting link directly from authenticated admin endpoint (since public bootstrap strips raw URLs)
+  useEffect(() => {
+    let active = true;
+    if (!courseId) return;
+    (async () => {
+      try {
+        const res = await fetch(`/api/admin/courses?id=${encodeURIComponent(courseId)}`, {
+          cache: 'no-store',
+        });
+        if (!res.ok || !active) return;
+        const json = await res.json();
+        if (!active || !json?.success) return;
+        if (json.onlineClassLink) {
+          setClassLink(json.onlineClassLink);
+        }
+        if (json.onlineClassUpdate?.timing) {
+          setClassTiming(json.onlineClassUpdate.timing);
+        }
+        if (json.onlineClassUpdate?.details) {
+          setClassDetails(json.onlineClassUpdate.details);
+        }
+      } catch {}
+    })();
+    return () => {
+      active = false;
+    };
+  }, [courseId]);
+
   useEffect(() => {
     if (existingUpdate) {
-      setClassLink(existingUpdate.link || '');
+      if (existingUpdate.link) setClassLink(existingUpdate.link);
       setClassTiming(existingUpdate.timing || course?.schedule || '');
       setClassDetails(existingUpdate.details || '');
     } else if (course) {
-      setClassLink('');
       setClassTiming(course.schedule || '');
-      setClassDetails('');
     }
   }, [existingUpdate, course]);
 
@@ -124,10 +150,10 @@ export default function AdminCourseLiveClassPage() {
     );
   }
 
+  const hasActiveLink = Boolean(existingUpdate?.hasLink || existingUpdate?.link?.trim() || classLink.trim());
   const hasActivePost = Boolean(
-    existingUpdate && (existingUpdate.link || existingUpdate.details || existingUpdate.timing)
+    hasActiveLink || (existingUpdate && (existingUpdate.details || existingUpdate.timing))
   );
-  const hasActiveLink = Boolean(existingUpdate?.link?.trim());
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">

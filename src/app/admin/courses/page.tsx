@@ -315,7 +315,7 @@ export default function AdminCoursesAndBatchesPage() {
                           <Link
                             href={`/admin/courses/${course.id}/live-class`}
                             className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold transition-colors ${
-                              course.onlineClassLink
+                              course.hasOnlineClassLink || course.onlineClassLink || course.onlineClassUpdate?.hasLink
                                 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
                                 : course.onlineClassUpdate?.details || course.onlineClassUpdate?.timing
                                 ? 'bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100'
@@ -323,9 +323,9 @@ export default function AdminCoursesAndBatchesPage() {
                             }`}
                             title="Open dedicated Live Class Link & Timing Publisher page for this online course"
                           >
-                            <Video className={`w-3 h-3 ${course.onlineClassLink ? 'text-emerald-600 animate-pulse' : 'text-indigo-600'}`} />
+                            <Video className={`w-3 h-3 ${course.hasOnlineClassLink || course.onlineClassLink || course.onlineClassUpdate?.hasLink ? 'text-emerald-600 animate-pulse' : 'text-indigo-600'}`} />
                             <span>
-                              {course.onlineClassLink
+                              {course.hasOnlineClassLink || course.onlineClassLink || course.onlineClassUpdate?.hasLink
                                 ? 'Share Class Link (Link Active)'
                                 : course.onlineClassUpdate?.details || course.onlineClassUpdate?.timing
                                 ? 'Share Class Link (Timing Posted)'
@@ -998,15 +998,15 @@ export default function AdminCoursesAndBatchesPage() {
               )}
 
               <div>
-                <label className="font-bold text-slate-700 block mb-1">Admission Fee (₹)</label>
+                <label className="font-bold text-slate-700 block mb-1">Admission / Registration Fee (₹)</label>
                 <input
                   type="number"
+                  min={0}
                   value={editingCourse.price}
                   onChange={(e) =>
                     setEditingCourse({
                       ...editingCourse,
                       price: Number(e.target.value),
-                      firstInstalment: Math.round(Number(e.target.value) * 0.6),
                     })
                   }
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 font-bold"
@@ -1017,7 +1017,8 @@ export default function AdminCoursesAndBatchesPage() {
                 <label className="font-bold text-slate-700 block mb-1">Monthly Fee (₹)</label>
                 <input
                   type="number"
-                  value={editingCourse.monthlyFee ?? 1000}
+                  min={0}
+                  value={editingCourse.monthlyFee ?? 0}
                   onChange={(e) =>
                     setEditingCourse({
                       ...editingCourse,
@@ -1029,6 +1030,39 @@ export default function AdminCoursesAndBatchesPage() {
               </div>
 
               <div>
+                <label className="font-bold text-slate-700 block mb-1">1st Instalment Fee (₹)</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={editingCourse.firstInstalment ?? 0}
+                  onChange={(e) =>
+                    setEditingCourse({
+                      ...editingCourse,
+                      firstInstalment: Number(e.target.value),
+                    })
+                  }
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 font-bold"
+                />
+              </div>
+
+              <div className="flex items-end pb-2">
+                <label className="inline-flex items-center gap-2 font-bold text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(editingCourse.instalmentAvailable)}
+                    onChange={(e) =>
+                      setEditingCourse({
+                        ...editingCourse,
+                        instalmentAvailable: e.target.checked,
+                      })
+                    }
+                    className="w-4 h-4 rounded text-[#0056b3]"
+                  />
+                  <span>Allow Instalment Payment Plan</span>
+                </label>
+              </div>
+
+              <div>
                 <label className="font-bold text-slate-700 block mb-1">Batch Name</label>
                 <input
                   type="text"
@@ -1036,6 +1070,19 @@ export default function AdminCoursesAndBatchesPage() {
                   onChange={(e) =>
                     setEditingCourse({ ...editingCourse, batchName: e.target.value })
                   }
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Class Schedule / Timings</label>
+                <input
+                  type="text"
+                  value={editingCourse.schedule || ''}
+                  onChange={(e) =>
+                    setEditingCourse({ ...editingCourse, schedule: e.target.value })
+                  }
+                  placeholder="e.g. Mon to Fri — 10:00 AM to 1:00 PM"
                   className="w-full px-3 py-2 rounded-xl border border-slate-200"
                 />
               </div>

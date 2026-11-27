@@ -210,6 +210,7 @@ const toCourse = (r: Row, facultyName: string, materialIds: string[]): Course =>
   linkedMaterialIds: materialIds,
   materialDelivery: r.material_delivery ?? (r.mode === 'Online' ? 'View-Only Softcopy' : 'Printed Physical Copies + View-Only Softcopy'),
   onlineClassLink: r.online_class_link ?? undefined,
+  hasOnlineClassLink: Boolean(r.has_online_class_link || (r.online_class_link && String(r.online_class_link).trim().length > 0)),
   bundledMaterialIds: r.bundled_material_ids ?? [],
   bundledTestIds: r.bundled_test_ids ?? [],
   isPackageBundle: Boolean(r.is_package_bundle),
@@ -470,10 +471,10 @@ const toSeriesAttempt = (r: Row, studentName: string, studentCode: string, stude
   rank: r.rank ?? null,
 });
 
-// High-Speed Multi-Tier Cache (In-Memory + SessionStorage + LocalStorage)
-const CACHE_TTL_MS = 20 * 60 * 1000; // 20 minutes for user session DB snapshot
-const PUBLIC_BOOTSTRAP_CACHE_KEY = 'cga_public_bootstrap_v4';
-const PUBLIC_BOOTSTRAP_TTL_MS = 30 * 60 * 1000; // 30 minutes on-device public catalog cache
+// Fast Short-TTL Cache (15s) so Admin course edits, fee updates, deletions, and live class updates reflect immediately for students
+const CACHE_TTL_MS = 15 * 1000;
+const PUBLIC_BOOTSTRAP_CACHE_KEY = 'cga_public_bootstrap_v5';
+const PUBLIC_BOOTSTRAP_TTL_MS = 15 * 1000;
 let dbCache: { data: CgaDatabase; timestamp: number; sessionKey: string } | null = null;
 let pendingLoadPromise: Promise<CgaDatabase> | null = null;
 
@@ -1651,9 +1652,15 @@ export const cgaService = {
       const cu = mergedClassUpdates[mapped.id];
       if (cu) {
         mapped.onlineClassUpdate = cu;
-        if (cu.link !== undefined) {
+        if (cu.hasLink || (cu.link && cu.link.trim().length > 0)) {
+          mapped.hasOnlineClassLink = true;
+        }
+        if (session?.role === 'ADMIN' && cu.link !== undefined) {
           mapped.onlineClassLink = cu.link || undefined;
         }
+      }
+      if (session?.role !== 'ADMIN') {
+        mapped.onlineClassLink = undefined;
       }
       return mapped;
     });

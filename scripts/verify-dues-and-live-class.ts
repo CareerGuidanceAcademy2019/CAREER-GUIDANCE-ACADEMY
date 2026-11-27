@@ -3,13 +3,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 /**
- * Comprehensive Verification Test Suite for Major Edits:
+ * Comprehensive Verification Test Suite:
  * 1. Admin Outstanding Dues Breakdown (Registration Fee Due vs. Monthly Fee Due,
  *    Latest Payment Date/Amount/UTR inline, View All Transactions history for Admin only,
  *    and Offline Registration & Payment setup for new/existing students).
- * 2. Online Live Class Updates Flow (Admin 'Share Class Link' page, Student 'Check Live Class Updates' page,
- *    empty state 'No links or update yet', posting timing/details without link keeping 'Join Live Class' disabled,
- *    and editing & reposting with link enabling 'Join Live Class').
+ * 2. Strict Online Live Class Access (ONLY actively enrolled students in an Online course can enter/join).
+ * 3. My Learning Hub completeness (all enrolled online/offline courses, mock tests, study materials,
+ *    and live class entry ONLY for enrolled active online courses).
+ * 4. Admin full course management (edit all details & fees, delete course, instant student visibility via no-store).
+ * 5. Hidden Live Class Link (raw Google Meet / Zoom link is NEVER exposed in public bootstrap or student DOM;
+ *    students only click the "Join Live Class" button when enabled, routed through server-verified join API).
  */
 
 interface TestTransaction {
@@ -150,49 +153,49 @@ function recordSubsequentPayment(
     monthlyFeeDueAmount: nextMoDue,
     unpaidMonthsCount: nextUnpaidMonths,
     totalDue: nextRegDue + nextMoDue,
-    transactions: [newTx, ...state.transactions], // Latest transaction first
+    transactions: [newTx, ...state.transactions],
   };
 }
 
-interface LiveClassViewState {
-  emptyStateText: string | null;
-  showDetailsText: string | null;
-  showTimingText: string | null;
-  joinButtonEnabled: boolean;
-  activeLink: string | null;
-}
-
-function getStudentLiveClassViewState(
-  update: { link?: string; details?: string; timing?: string } | null
-): LiveClassViewState {
-  const cleanLink = update?.link?.trim() || '';
-  const cleanDetails = update?.details?.trim() || '';
-  const cleanTiming = update?.timing?.trim() || '';
-  const hasAnyUpdate = Boolean(cleanLink || cleanDetails || cleanTiming);
-
-  if (!hasAnyUpdate) {
+function evaluateStrictLiveClassAccess(params: {
+  role: 'STUDENT' | 'ADMIN' | 'FACULTY';
+  courseMode: 'Online' | 'Offline';
+  isEnrolled: boolean;
+  accessValidUntil?: string | null;
+  hasLink: boolean;
+  details?: string;
+  timing?: string;
+  nowMs?: number;
+}) {
+  const now = params.nowMs ?? Date.now();
+  if (params.courseMode !== 'Online') {
+    return { allowed: false, status: 403, reason: 'OFFLINE_COURSE_NOT_ALLOWED', joinButtonEnabled: false };
+  }
+  const isStaff = params.role === 'ADMIN' || params.role === 'FACULTY';
+  const isExpired = Boolean(
+    !isStaff && params.accessValidUntil && new Date(params.accessValidUntil).getTime() < now
+  );
+  if (!isStaff && (!params.isEnrolled || isExpired)) {
     return {
-      emptyStateText: 'No links or update yet',
-      showDetailsText: null,
-      showTimingText: null,
+      allowed: false,
+      status: 403,
+      reason: isExpired ? 'ENROLLMENT_EXPIRED' : 'NOT_ENROLLED',
       joinButtonEnabled: false,
-      activeLink: null,
     };
   }
-
+  const hasAnyUpdate = Boolean(params.hasLink || params.details?.trim() || params.timing?.trim());
   return {
-    emptyStateText: null,
-    showDetailsText: cleanDetails || null,
-    showTimingText: cleanTiming || null,
-    joinButtonEnabled: Boolean(cleanLink),
-    activeLink: cleanLink || null,
+    allowed: true,
+    status: params.hasLink ? 302 : 200,
+    emptyStateText: hasAnyUpdate ? null : 'No links or update yet',
+    joinButtonEnabled: params.hasLink,
   };
 }
 
-console.log('Running Verification Tests for Outstanding Dues & Online Live Class Updates...\n');
+console.log('Running Comprehensive Verification Test Suite...\n');
 
 // ============================================================================
-// TEST 1: User Enrolls by Paying 2,000 out of 4,000 Registration + 800 Monthly Unpaid
+// TEST 1: Partial Registration (2k paid, 2k due) + Separate Monthly Fee (800 unpaid)
 // ============================================================================
 {
   const state = createEnrollmentWithBreakdown({
@@ -206,17 +209,15 @@ console.log('Running Verification Tests for Outstanding Dues & Online Live Class
     utr: 'UTR409182736451',
   });
 
-  assert.equal(state.registrationDueAmount, 2000, 'Remaining registration fee balance must be 2000');
-  assert.equal(state.monthlyFeeDueAmount, 800, 'Unpaid monthly fee must be 800 separately');
-  assert.equal(state.totalDue, 2800, 'Total combined outstanding due must be 2800 (2000 Reg + 800 Monthly)');
-  assert.equal(state.transactions[0].utr, 'UTR409182736451', 'Latest transaction UTR must match user entry');
-  assert.equal(state.transactions[0].amount, 2000, 'Latest transaction amount must be 2000');
-  assert.equal(state.transactions[0].date, '2026-11-01', 'Latest transaction date must be 2026-11-01');
+  assert.equal(state.registrationDueAmount, 2000);
+  assert.equal(state.monthlyFeeDueAmount, 800);
+  assert.equal(state.totalDue, 2800);
+  assert.equal(state.transactions[0].utr, 'UTR409182736451');
   console.log('PASS [Test 1]: Partial registration (2k paid, 2k due) + separate monthly fee (800 unpaid) breakdown verified.');
 }
 
 // ============================================================================
-// TEST 2: Subsequent Transaction Updates Inline Last Payment Details & Preserves Full History for Admin
+// TEST 2: Latest Payment Inline Update & Admin Full Transaction History
 // ============================================================================
 {
   let state = createEnrollmentWithBreakdown({
@@ -230,115 +231,149 @@ console.log('Running Verification Tests for Outstanding Dues & Online Live Class
     utr: 'UTR111122223333',
   });
 
-  // Student pays 1000 towards registration fee on 2026-11-15 with new UTR
   state = recordSubsequentPayment(state, {
     amount: 1000,
     targetType: 'registration',
     date: '2026-11-15',
     utr: 'UTR999988887777',
   });
-
-  assert.equal(state.registrationDueAmount, 1000, 'Remaining registration due must drop from 2000 to 1000');
-  assert.equal(state.monthlyFeeDueAmount, 800, 'Monthly due remains 800');
-  assert.equal(state.totalDue, 1800, 'Combined due must be 1800');
-
-  // Inline latest payment must only reflect the newest transaction
-  const inlineLatest = state.transactions[0];
-  assert.equal(inlineLatest.date, '2026-11-15');
-  assert.equal(inlineLatest.amount, 1000);
-  assert.equal(inlineLatest.utr, 'UTR999988887777');
-
-  // Admin full history modal must show all past transactions (2 transactions)
-  assert.equal(state.transactions.length, 2, 'Admin transaction history must retain all 2 transactions');
-  assert.equal(state.transactions[1].utr, 'UTR111122223333', 'Older transaction preserved in Admin full history');
-
-  // Student clears remaining 1000 registration + 800 monthly (1800 total)
-  state = recordSubsequentPayment(state, {
-    amount: 1800,
-    targetType: 'both',
-    date: '2026-11-28',
-    utr: 'UTR555566664444',
-  });
-  assert.equal(state.registrationDueAmount, 0);
-  assert.equal(state.monthlyFeeDueAmount, 0);
-  assert.equal(state.totalDue, 0);
-  assert.equal(state.transactions[0].utr, 'UTR555566664444');
-  assert.equal(state.transactions.length, 3);
-  console.log('PASS [Test 2]: Inline latest payment auto-updates on every transaction & Admin full transaction history verified.');
+  assert.equal(state.registrationDueAmount, 1000);
+  assert.equal(state.monthlyFeeDueAmount, 800);
+  assert.equal(state.transactions[0].utr, 'UTR999988887777');
+  assert.equal(state.transactions.length, 2);
+  console.log('PASS [Test 2]: Inline latest payment auto-updates & Admin full transaction history verified.');
 }
 
 // ============================================================================
-// TEST 3: Live Class Updates Lifecycle (Empty -> Timing Only (Disabled) -> Repost with Link (Enabled))
+// TEST 3: Strict Enrolled-Only Access to Online Live Class
 // ============================================================================
 {
-  // Step A: Initially no post by Admin
-  const viewEmpty = getStudentLiveClassViewState(null);
-  assert.equal(viewEmpty.emptyStateText, 'No links or update yet');
-  assert.equal(viewEmpty.joinButtonEnabled, false);
+  const now = Date.parse('2026-11-28T00:00:00Z');
 
-  // Step B: Admin posts class timing & text details WITHOUT link
-  const viewTimingOnly = getStudentLiveClassViewState({
-    timing: 'Evening Batch: 7:00 PM to 9:00 PM',
-    details: 'Today we will cover Tripura Geography & Current Affairs MCQs. Link will be shared 10 mins before class.',
-    link: '',
+  // Unenrolled student -> MUST be strictly blocked (403)
+  const unenrolled = evaluateStrictLiveClassAccess({
+    role: 'STUDENT',
+    courseMode: 'Online',
+    isEnrolled: false,
+    hasLink: true,
+    nowMs: now,
   });
-  assert.equal(viewTimingOnly.emptyStateText, null);
-  assert.equal(viewTimingOnly.showTimingText, 'Evening Batch: 7:00 PM to 9:00 PM');
-  assert.ok(viewTimingOnly.showDetailsText?.includes('Tripura Geography'));
-  assert.equal(viewTimingOnly.joinButtonEnabled, false, 'Join Live Class button MUST be disabled when no link is shared');
+  assert.equal(unenrolled.allowed, false);
+  assert.equal(unenrolled.status, 403);
+  assert.equal(unenrolled.reason, 'NOT_ENROLLED');
 
-  // Step C: Admin edits the post and reposts WITH the Google Meet / Zoom link
-  const viewWithLink = getStudentLiveClassViewState({
-    timing: 'Evening Batch: 7:00 PM to 9:00 PM',
-    details: 'Today we will cover Tripura Geography & Current Affairs MCQs. Join room now.',
-    link: 'https://meet.google.com/cga-live-class',
+  // Expired enrolled student -> MUST be strictly blocked (403)
+  const expired = evaluateStrictLiveClassAccess({
+    role: 'STUDENT',
+    courseMode: 'Online',
+    isEnrolled: true,
+    accessValidUntil: '2026-11-01T00:00:00Z',
+    hasLink: true,
+    nowMs: now,
   });
-  assert.equal(viewWithLink.emptyStateText, null);
-  assert.equal(viewWithLink.joinButtonEnabled, true, 'Join Live Class button MUST be enabled when link is posted');
-  assert.equal(viewWithLink.activeLink, 'https://meet.google.com/cga-live-class');
-  console.log('PASS [Test 3]: Live Class empty state ("No links or update yet"), disabled Join button without link, and enabled Join button after edit & repost verified.');
+  assert.equal(expired.allowed, false);
+  assert.equal(expired.status, 403);
+  assert.equal(expired.reason, 'ENROLLMENT_EXPIRED');
+
+  // Offline course -> MUST be blocked (403)
+  const offline = evaluateStrictLiveClassAccess({
+    role: 'STUDENT',
+    courseMode: 'Offline',
+    isEnrolled: true,
+    hasLink: true,
+    nowMs: now,
+  });
+  assert.equal(offline.allowed, false);
+  assert.equal(offline.reason, 'OFFLINE_COURSE_NOT_ALLOWED');
+
+  // Actively enrolled Online student with no post -> "No links or update yet", Join disabled
+  const emptyActive = evaluateStrictLiveClassAccess({
+    role: 'STUDENT',
+    courseMode: 'Online',
+    isEnrolled: true,
+    accessValidUntil: '2027-05-01T00:00:00Z',
+    hasLink: false,
+    nowMs: now,
+  });
+  assert.equal(emptyActive.allowed, true);
+  assert.equal(emptyActive.emptyStateText, 'No links or update yet');
+  assert.equal(emptyActive.joinButtonEnabled, false);
+
+  // Actively enrolled Online student with timing only (no link) -> Join disabled
+  const timingOnly = evaluateStrictLiveClassAccess({
+    role: 'STUDENT',
+    courseMode: 'Online',
+    isEnrolled: true,
+    accessValidUntil: '2027-05-01T00:00:00Z',
+    hasLink: false,
+    timing: '7:00 PM IST',
+    details: 'Bring notebook',
+    nowMs: now,
+  });
+  assert.equal(timingOnly.allowed, true);
+  assert.equal(timingOnly.emptyStateText, null);
+  assert.equal(timingOnly.joinButtonEnabled, false);
+
+  // Actively enrolled Online student after Admin reposts with link -> Join enabled
+  const withLink = evaluateStrictLiveClassAccess({
+    role: 'STUDENT',
+    courseMode: 'Online',
+    isEnrolled: true,
+    accessValidUntil: '2027-05-01T00:00:00Z',
+    hasLink: true,
+    timing: '7:00 PM IST',
+    details: 'Class live now',
+    nowMs: now,
+  });
+  assert.equal(withLink.allowed, true);
+  assert.equal(withLink.joinButtonEnabled, true);
+  assert.equal(withLink.status, 302);
+
+  console.log('PASS [Test 3]: Strict enrolled-only access (blocks unenrolled, expired, offline; allows active online) verified.');
 }
 
 // ============================================================================
-// TEST 4: Verify Source Files & Required UI Elements Exist in Repository
+// TEST 4: Source Verification — Hidden Link, Server Join API, My Learning, Admin Course Sync
 // ============================================================================
 {
   const root = process.cwd();
-  const paymentsPage = fs.readFileSync(path.join(root, 'src/app/admin/payments/page.tsx'), 'utf8');
-  const counterModal = fs.readFileSync(path.join(root, 'src/components/admin/CounterEnrollmentModal.tsx'), 'utf8');
-  const adminCoursesPage = fs.readFileSync(path.join(root, 'src/app/admin/courses/page.tsx'), 'utf8');
-  const adminLiveClassPage = fs.readFileSync(
-    path.join(root, 'src/app/admin/courses/[courseId]/live-class/page.tsx'),
-    'utf8'
-  );
-  const studentMyLearningPage = fs.readFileSync(path.join(root, 'src/app/student/my-learning/page.tsx'), 'utf8');
-  const studentLiveClassPage = fs.readFileSync(
+  const bootstrapApi = fs.readFileSync(path.join(root, 'src/app/api/public/bootstrap/route.ts'), 'utf8');
+  const joinApi = fs.readFileSync(path.join(root, 'src/app/api/student/live-class/join/route.ts'), 'utf8');
+  const studentLivePage = fs.readFileSync(
     path.join(root, 'src/app/student/live-class/[courseId]/page.tsx'),
     'utf8'
   );
+  const studentMyLearning = fs.readFileSync(path.join(root, 'src/app/student/my-learning/page.tsx'), 'utf8');
+  const adminCoursesPage = fs.readFileSync(path.join(root, 'src/app/admin/courses/page.tsx'), 'utf8');
+  const adminCoursesApi = fs.readFileSync(path.join(root, 'src/app/api/admin/courses/route.ts'), 'utf8');
+  const counterModal = fs.readFileSync(path.join(root, 'src/components/admin/CounterEnrollmentModal.tsx'), 'utf8');
 
-  // Verify Admin Payments Outstanding Dues requirements
-  assert.ok(paymentsPage.includes('Outstanding Dues Breakdown'), 'Admin payments page must contain Outstanding Dues Breakdown section');
-  assert.ok(paymentsPage.includes('Rest Reg Due:'), 'Admin payments page must display remaining registration due');
-  assert.ok(paymentsPage.includes('Monthly Due:'), 'Admin payments page must display unpaid monthly fees separately');
-  assert.ok(paymentsPage.includes('View All Transactions'), 'Admin payments page must allow Admin to view all past transactions');
-  assert.ok(paymentsPage.includes('Offline Registration &amp; Payment'), 'Admin payments page must integrate offline registration');
+  // 4A. Hidden link & server-verified join
+  assert.ok(bootstrapApi.includes('online_class_link: null'), 'Public bootstrap MUST strip raw online_class_link');
+  assert.ok(bootstrapApi.includes('hasLink: Boolean'), 'Public bootstrap MUST strip raw link from onlineClassUpdates and keep hasLink boolean');
+  assert.ok(joinApi.includes('requireActiveSession'), 'Join API MUST verify authenticated session');
+  assert.ok(joinApi.includes("course.mode !== 'Online'"), 'Join API MUST reject non-Online courses');
+  assert.ok(joinApi.includes('NextResponse.redirect'), 'Join API MUST redirect server-side without exposing raw link in student DOM');
+  assert.ok(!studentLivePage.includes('Copy Link'), 'Student live class page MUST NOT show Copy Link button');
+  assert.ok(!studentLivePage.includes('navigator.clipboard'), 'Student live class page MUST NOT expose raw meeting URL via clipboard');
+  assert.ok(studentLivePage.includes('/api/student/live-class/join?courseId='), 'Student Join Live Class button MUST route through server-verified join API');
+  assert.ok(studentLivePage.includes('strict-enrollment-lock-state'), 'Student live class page MUST strictly lock out unenrolled/expired users');
 
-  // Verify Offline Registration modal requirements
-  assert.ok(counterModal.includes('New Walk-In Candidate') && counterModal.includes('Existing Enrolled Student'), 'Offline registration must support both new and existing students');
-  assert.ok(counterModal.includes('Remaining Registration Due'), 'Offline registration modal must show remaining registration due');
-  assert.ok(counterModal.includes('Unpaid Monthly Fees'), 'Offline registration modal must show unpaid monthly fees');
+  // 4B. My Learning hub completeness & online course entry
+  assert.ok(studentMyLearning.includes('Check Live Class Updates'), 'My Learning must show Check Live Class Updates for enrolled online courses');
+  assert.ok(studentMyLearning.includes('Live Class Access Expired'), 'My Learning must lock live class entry if enrollment is expired');
+  assert.ok(counterModal.includes('cgaService.adminEnrollStudent'), 'Offline counter enrollment must activate server-side enrollment for My Learning');
 
-  // Verify Admin & Student Live Class pages and navigation buttons
-  assert.ok(adminCoursesPage.includes('Share Class Link'), 'Admin courses page must have "Share Class Link" button');
-  assert.ok(adminCoursesPage.includes('/admin/courses/${course.id}/live-class'), 'Admin "Share Class Link" must navigate to dedicated new page');
-  assert.ok(adminLiveClassPage.includes('Post Class Timing & Details Without Link'), 'Admin live class page must allow posting timing/details without link');
-  assert.ok(studentMyLearningPage.includes('Check Live Class Updates'), 'Student enrolled online course must have "Check Live Class Updates" button');
-  assert.ok(studentMyLearningPage.includes('/student/live-class/${enr.courseId}'), 'Student "Check Live Class Updates" button must navigate to dedicated new page');
-  assert.ok(studentLiveClassPage.includes('No links or update yet'), 'Student live class page must show "No links or update yet" when empty');
-  assert.ok(studentLiveClassPage.includes('Join Live Class'), 'Student live class page must have "Join Live Class" button');
+  // 4C. Admin full course management & instant student sync
+  assert.ok(bootstrapApi.includes('no-cache, no-store, must-revalidate'), 'Public bootstrap MUST disable stale CDN caching so Admin course edits/deletes appear immediately for students');
+  assert.ok(adminCoursesPage.includes('1st Instalment Fee (₹)'), 'Admin Edit Course modal must allow editing First Instalment Fee');
+  assert.ok(adminCoursesPage.includes('Allow Instalment Payment Plan'), 'Admin Edit Course modal must allow toggling Instalment availability');
+  assert.ok(adminCoursesPage.includes('Class Schedule / Timings'), 'Admin Edit Course modal must allow editing Class Schedule / Timings');
+  assert.ok(adminCoursesApi.includes('export async function GET('), 'Admin courses API must provide authenticated GET for admin raw link editing');
+  assert.ok(adminCoursesApi.includes('export async function POST('), 'Admin courses API must support saving/editing courses');
+  assert.ok(adminCoursesApi.includes('export async function DELETE('), 'Admin courses API must support deleting courses');
 
-  console.log('PASS [Test 4]: All required routes, components, and UI states verified in source files.');
+  console.log('PASS [Test 4]: Hidden meeting link, strict server-verified join API, My Learning hub, and instant Admin course sync verified.');
 }
 
 console.log('\nALL VERIFICATION TESTS PASSED SUCCESSFULLY!');

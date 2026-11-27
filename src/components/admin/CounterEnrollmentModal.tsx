@@ -298,6 +298,7 @@ export function CounterEnrollmentModal({ onClose, onSuccess }: CounterEnrollment
       };
 
       // Save full Registration vs. Monthly Fee breakdown for Outstanding Dues tracker
+      // AND activate server-side enrollment so the student immediately sees the course in My Learning
       if (sectionType === 'course') {
         await saveStudentDuesOverride({
           studentId: candidateId,
@@ -311,6 +312,26 @@ export function CounterEnrollmentModal({ onClose, onSuccess }: CounterEnrollment
           monthlyFeePaidAmount: monthlyPaidNow,
           updatedAt: new Date().toISOString(),
         });
+
+        try {
+          await cgaService.adminEnrollStudent({
+            studentId: candidateId,
+            kind: 'course',
+            itemId: selectedCourseId,
+            accessValidMonths: 12,
+            reason: `Offline Counter Enrolment (${receiptNo})`,
+          });
+        } catch {}
+      } else if (sectionType === 'mock_series' && targetCourseId) {
+        try {
+          await cgaService.adminEnrollStudent({
+            studentId: candidateId,
+            kind: 'mock_series',
+            itemId: targetCourseId,
+            accessValidMonths: 6,
+            reason: `Offline Counter Enrolment (${receiptNo})`,
+          });
+        } catch {}
       }
 
       try {

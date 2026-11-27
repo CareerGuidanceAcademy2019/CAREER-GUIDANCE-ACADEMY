@@ -39,6 +39,7 @@ export interface StandalonePackage {
 export interface OnlineClassUpdate {
   courseId: string;
   link?: string;
+  hasLink?: boolean;
   details?: string;
   timing?: string;
   updatedAt: string;
@@ -85,7 +86,8 @@ export interface Course {
   featured?: boolean;
   linkedMaterialIds: string[];
   materialDelivery?: string; // e.g. 'Printed Physical Copies + View-Only Softcopy' | 'View-Only Softcopy'
-  onlineClassLink?: string; // Meeting link for online classes (Google Meet, Zoom, etc.)
+  onlineClassLink?: string; // Meeting link for online classes (Admin-only; stripped from public/student payloads)
+  hasOnlineClassLink?: boolean; // Safe boolean flag indicating a live class link is active without exposing raw URL
   onlineClassUpdate?: OnlineClassUpdate; // Live class update with optional link, class timing, and text details
   bundledMaterialIds?: string[]; // IDs of study materials bundled in this course package
   bundledTestIds?: string[]; // IDs of mock tests or series bundled in this course package

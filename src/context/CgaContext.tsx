@@ -1010,6 +1010,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
         nextUpdatesMap[courseId] = {
           courseId,
           link: cleanLink || undefined,
+          hasLink: Boolean(cleanLink),
           details: cleanDetails || undefined,
           timing: cleanTiming || undefined,
           updatedAt: new Date().toISOString(),
@@ -1036,6 +1037,7 @@ export function CgaProvider({ children }: { children: React.ReactNode }) {
             ? {
                 ...c,
                 onlineClassLink: cleanLink || undefined,
+                hasOnlineClassLink: Boolean(cleanLink),
                 onlineClassUpdate: nextUpdatesMap[courseId],
               }
             : c

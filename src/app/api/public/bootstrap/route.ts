@@ -58,16 +58,47 @@ export async function GET(request: Request) {
       safeList(sb.from('study_materials').select(STUDY_MATERIAL_PUBLIC_COLUMNS).order('uploaded_date', { ascending: false })),
     ]);
 
-    const cacheHeader = bust
-      ? 'private, no-cache, no-store, must-revalidate'
-      : 'public, max-age=180, s-maxage=600, stale-while-revalidate=3600';
+    const rawSiteContent = siteRes?.data?.content ?? null;
+    const sanitizedSiteContent = rawSiteContent
+      ? {
+          ...rawSiteContent,
+          onlineClassUpdates: rawSiteContent.onlineClassUpdates
+            ? Object.fromEntries(
+                Object.entries(rawSiteContent.onlineClassUpdates).map(([cId, upd]: [string, any]) => [
+                  cId,
+                  {
+                    courseId: upd?.courseId || cId,
+                    hasLink: Boolean(upd?.link && String(upd.link).trim().length > 0),
+                    details: upd?.details || undefined,
+                    timing: upd?.timing || undefined,
+                    updatedAt: upd?.updatedAt || undefined,
+                    updatedBy: upd?.updatedBy || undefined,
+                  },
+                ])
+              )
+            : undefined,
+        }
+      : null;
+
+    // Strip raw meeting links from public/student course rows so unenrolled users never see or inspect URLs
+    const sanitizedCourses = (courses || []).map((c: any) => ({
+      ...c,
+      has_online_class_link: Boolean(
+        (c.online_class_link && String(c.online_class_link).trim().length > 0) ||
+          sanitizedSiteContent?.onlineClassUpdates?.[c.id]?.hasLink
+      ),
+      online_class_link: null,
+    }));
+
+    // Always serve fresh catalog data so Admin course edits, fee updates, deletions, and live class updates appear immediately for students
+    const cacheHeader = 'private, no-cache, no-store, must-revalidate';
 
     return NextResponse.json(
       {
         success: true,
-        siteContent: siteRes?.data?.content ?? null,
+        siteContent: sanitizedSiteContent,
         faculty,
-        courses,
+        courses: sanitizedCourses,
         achievements,
         mockSeries: seriesRaw,
         mockSubjects: subjectsRaw,

@@ -8,42 +8,54 @@ import {
   ArrowLeft,
   Clock,
   ExternalLink,
-  Copy,
-  Check,
   AlertCircle,
   Calendar,
   BookOpen,
   User,
   Lock,
-  Sparkles,
+  ShieldCheck,
 } from 'lucide-react';
 import { useCga } from '@/context/CgaContext';
 
 export default function StudentLiveClassUpdatesPage() {
   const params = useParams();
   const courseId = typeof params?.courseId === 'string' ? params.courseId : '';
-  const { db, currentStudent, session, showToast } = useCga();
-  const [copied, setCopied] = useState(false);
+  const { db, currentStudent, session } = useCga();
+  const [currentTime] = useState(() => Date.now());
 
   const course = useMemo(
     () => db.courses.find((c) => c.id === courseId),
     [db.courses, courseId]
   );
 
-  const isEnrolledOrAdmin = useMemo(() => {
-    if (session?.role === 'ADMIN' || session?.role === 'FACULTY') return true;
-    if (!currentStudent) return false;
-    return currentStudent.enrollments.some((e) => e.courseId === courseId);
-  }, [session, currentStudent, courseId]);
+  const isAdminOrFaculty = session?.role === 'ADMIN' || session?.role === 'FACULTY';
+
+  // Strict active enrollment lookup for this exact online course
+  const studentEnrollment = useMemo(() => {
+    if (!currentStudent) return null;
+    return currentStudent.enrollments.find((e) => e.courseId === courseId) || null;
+  }, [currentStudent, courseId]);
+
+  const isEnrollmentExpired = Boolean(
+    !isAdminOrFaculty &&
+      studentEnrollment?.accessValidUntil &&
+      new Date(studentEnrollment.accessValidUntil).getTime() < currentTime
+  );
+
+  const isStrictlyAuthorized = Boolean(
+    isAdminOrFaculty || (studentEnrollment && !isEnrollmentExpired)
+  );
+
+  const isOnlineCourse = course?.mode === 'Online';
 
   const liveUpdate = useMemo(() => {
     const mapUpdate = db.siteContent?.onlineClassUpdates?.[courseId];
     if (mapUpdate) return mapUpdate;
     if (course?.onlineClassUpdate) return course.onlineClassUpdate;
-    if (course?.onlineClassLink) {
+    if (course?.hasOnlineClassLink || course?.onlineClassLink) {
       return {
         courseId,
-        link: course.onlineClassLink,
+        hasLink: true,
         timing: course.schedule || '',
         details: 'Faculty has shared the live lecture meeting room. Click Join Live Class below to attend.',
         updatedAt: new Date().toISOString(),
@@ -52,18 +64,22 @@ export default function StudentLiveClassUpdatesPage() {
     return null;
   }, [db.siteContent?.onlineClassUpdates, course, courseId]);
 
-  const hasAnyUpdate = Boolean(
-    liveUpdate && (liveUpdate.link?.trim() || liveUpdate.details?.trim() || liveUpdate.timing?.trim())
+  const isJoinEnabled = Boolean(
+    liveUpdate?.hasLink ||
+      (liveUpdate?.link && liveUpdate.link.trim().length > 0) ||
+      course?.hasOnlineClassLink ||
+      (course?.onlineClassLink && course.onlineClassLink.trim().length > 0)
   );
-  const activeLink = liveUpdate?.link?.trim() || '';
-  const isJoinEnabled = Boolean(activeLink);
 
-  const handleCopyLink = () => {
-    if (!activeLink) return;
-    navigator.clipboard.writeText(activeLink);
-    setCopied(true);
-    showToast('Link Copied!', 'Live class meeting URL copied to clipboard.', 'success');
-    setTimeout(() => setCopied(false), 2000);
+  const hasAnyUpdate = Boolean(
+    isJoinEnabled || liveUpdate?.details?.trim() || liveUpdate?.timing?.trim()
+  );
+
+  // Opens the server-verified join redirect endpoint — raw Google Meet / Zoom URL is NEVER exposed in the DOM
+  const handleJoinLiveClass = () => {
+    if (!isJoinEnabled || !isStrictlyAuthorized || !isOnlineCourse) return;
+    const joinUrl = `/api/student/live-class/join?courseId=${encodeURIComponent(courseId)}`;
+    window.open(joinUrl, '_blank', 'noopener,noreferrer');
   };
 
   if (!course) {
@@ -134,17 +150,47 @@ export default function StudentLiveClassUpdatesPage() {
         </div>
       </div>
 
-      {/* Access Guard or Live Class Updates Content */}
-      {!isEnrolledOrAdmin ? (
-        <div className="bg-white rounded-3xl border border-slate-200 p-10 text-center space-y-3 shadow-2xs">
+      {/* Strict Guards: 1) Must be Online Course, 2) Must be Actively Enrolled Student */}
+      {!isOnlineCourse ? (
+        <div
+          data-testid="offline-course-blocked-state"
+          className="bg-white rounded-3xl border border-slate-200 p-10 text-center space-y-3 shadow-2xs"
+        >
+          <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <h2 className="text-lg font-extrabold text-[#0a0e2a]">
+            Offline Classroom Batch — No Online Live Class Room
+          </h2>
+          <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+            <strong>{course.name}</strong> is an offline classroom batch conducted at the C.G.A Udaipur Center. Online live class rooms are only available for enrolled Online courses.
+          </p>
+          <div className="pt-2">
+            <Link
+              href="/student/my-learning"
+              className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-[#0056b3] hover:bg-[#1e3a8a] text-white text-xs font-extrabold shadow-xs"
+            >
+              Return to My Learning
+            </Link>
+          </div>
+        </div>
+      ) : !isStrictlyAuthorized ? (
+        <div
+          data-testid="strict-enrollment-lock-state"
+          className="bg-white rounded-3xl border border-rose-200 p-10 text-center space-y-3 shadow-2xs"
+        >
           <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
             <Lock className="w-6 h-6" />
           </div>
           <h2 className="text-lg font-extrabold text-[#0a0e2a]">
-            Enrolment Required to Access Live Class Links
+            {isEnrollmentExpired
+              ? 'Course Access Expired — Live Class Locked'
+              : 'Restricted: Enrolled Students Only'}
           </h2>
           <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-            Live class meeting links (Google Meet / Zoom) and batch timing updates are exclusively available to students enrolled in <strong>{course.name}</strong>.
+            {isEnrollmentExpired
+              ? `Your enrollment validity for ${course.name} has expired. Please contact Career Guidance Academy administration to renew your batch access.`
+              : `Strictly only students enrolled in ${course.name} can enter this online course room and join live classes.`}
           </p>
           <div className="pt-2">
             <Link
@@ -176,22 +222,23 @@ export default function StudentLiveClassUpdatesPage() {
             <button
               type="button"
               disabled
+              data-testid="join-live-class-btn-disabled"
               className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-slate-200 text-slate-500 text-xs sm:text-sm font-extrabold cursor-not-allowed opacity-75"
             >
               <Video className="w-4 h-4" />
-              <span>Join Live Class (Disabled)</span>
+              <span>Join Live Class</span>
             </button>
           </div>
         </div>
       ) : (
-        /* Active Live Class Update Card */
+        /* Active Live Class Update Card (Raw meeting link is NEVER shown in text or DOM) */
         <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-2xs space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
             <div className="flex items-center gap-2.5">
               {isJoinEnabled ? (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-extrabold">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  Live Class Link Active
+                  Live Class Ready to Join
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-xs font-extrabold">
@@ -236,55 +283,40 @@ export default function StudentLiveClassUpdatesPage() {
             </div>
           )}
 
-          {/* Join Live Class Action Area */}
+          {/* Join Live Class Action Area — Button Only, Raw URL Hidden */}
           <div className="p-5 rounded-2xl bg-indigo-50/60 border border-indigo-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-1">
-              <h3 className="text-sm font-extrabold text-indigo-950">
-                {isJoinEnabled
-                  ? 'Google Meet / Zoom Classroom is Ready'
-                  : 'Meeting Link Not Shared Yet'}
+              <h3 className="text-sm font-extrabold text-indigo-950 flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
+                <span>
+                  {isJoinEnabled
+                    ? 'Online Classroom Session is Active'
+                    : 'Waiting for Administrator to Enable Class Link'}
+                </span>
               </h3>
               <p className="text-xs text-indigo-900/80 leading-relaxed">
                 {isJoinEnabled
-                  ? 'Click the Join Live Class button to enter the online lecture room immediately.'
-                  : 'The administrator has posted the class timing/details above. The "Join Live Class" button will automatically enable once the meeting link is posted.'}
+                  ? 'Click the Join Live Class button to enter the live classroom securely. Direct meeting links are protected for enrolled students only.'
+                  : 'The administrator has posted the class timing/details above. The "Join Live Class" button will enable automatically once the link is shared.'}
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-              {isJoinEnabled ? (
-                <>
-                  <a
-                    href={activeLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    data-testid="join-live-class-btn-enabled"
-                    className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-extrabold shadow-md cursor-pointer transition-all"
-                  >
-                    <Video className="w-4 h-4" />
-                    <span>Join Live Class</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                  <button
-                    type="button"
-                    onClick={handleCopyLink}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-3 rounded-2xl bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-100 text-xs font-bold cursor-pointer"
-                  >
-                    {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                    <span>{copied ? 'Copied' : 'Copy Link'}</span>
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  disabled
-                  data-testid="join-live-class-btn-disabled"
-                  className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-slate-200 text-slate-500 border border-slate-300 text-xs sm:text-sm font-extrabold cursor-not-allowed opacity-80"
-                >
-                  <Video className="w-4 h-4" />
-                  <span>Join Live Class</span>
-                </button>
-              )}
+              <button
+                type="button"
+                disabled={!isJoinEnabled}
+                onClick={handleJoinLiveClass}
+                data-testid={isJoinEnabled ? 'join-live-class-btn-enabled' : 'join-live-class-btn-disabled'}
+                className={
+                  isJoinEnabled
+                    ? 'inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-extrabold shadow-md cursor-pointer transition-all'
+                    : 'inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-slate-200 text-slate-500 border border-slate-300 text-xs sm:text-sm font-extrabold cursor-not-allowed opacity-80'
+                }
+              >
+                <Video className="w-4 h-4" />
+                <span>Join Live Class</span>
+                {isJoinEnabled && <ExternalLink className="w-3.5 h-3.5" />}
+              </button>
             </div>
           </div>
         </div>
